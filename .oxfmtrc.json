@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "singleQuote": true,
+  "printWidth": 100,
+  "sortImports": {},
+  "sortTailwindcss": {
+    "stylesheet": "./apps/web/src/styles/tailwind.css",
+    "functions": ["cn", "clsx"]
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "pnpm-lock.yaml",
+    ".tmp/**",
+    "test-results/**",
+    "playwright-report/**",
+    "coverage/**",
+    "docs/.local/**"
+  ]
+}

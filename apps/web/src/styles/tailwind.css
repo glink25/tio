@@ -1,0 +1,58 @@
+@import '../../../../packages/ui/src/tokens.css';
+@import 'tailwindcss';
+@source '../../../../packages/ui/src';
+@source '../../../../packages/views/src';
+@source '../../../../packages/editor-blocknote/src';
+@custom-variant dark (&:where(.dark, .dark *));
+@theme {
+  --color-panel: #ffffff;
+  --color-on-accent: #ffffff;
+  --color-ink: #252525;
+  --color-secondary: #666666;
+  --color-muted: #808080;
+  --color-accent: #252525;
+  --color-accent-strong: #444444;
+  --color-sage: #777777;
+  --color-line: #e7e7e7;
+  --color-surface: #f7f7f5;
+  --color-surface-hover: #ebebeb;
+  --color-canvas: #ffffff;
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+}
+@layer base {
+  body {
+    @apply m-0 bg-panel font-sans text-ink antialiased;
+  }
+  button {
+    @apply cursor-pointer;
+  }
+  input:not([type='checkbox']):not([type='file']),
+  select {
+    @apply min-w-0 rounded-md border border-line bg-panel px-2.5 py-2 text-sm;
+  }
+  input[type='checkbox'] {
+    @apply size-4 justify-self-start accent-accent;
+  }
+  input:focus-visible,
+  select:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+  a {
+    @apply text-accent underline-offset-2;
+  }
+}
+
+.dark {
+  --color-panel: #191919;
+  --color-canvas: #191919;
+  --color-surface: #202020;
+  --color-surface-hover: #303030;
+  --color-line: #383838;
+  --color-ink: #eeeeee;
+  --color-secondary: #b5b5b5;
+  --color-muted: #999999;
+  --color-accent: #eeeeee;
+  --color-accent-strong: #cccccc;
+  --color-on-accent: #191919;
+  --color-sage: #aaaaaa;
+}

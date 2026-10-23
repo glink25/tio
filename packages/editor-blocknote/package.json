@@ -1,0 +1,23 @@
+{
+  "name": "@tio/editor-blocknote",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@blocknote/core": "0.56.0",
+    "@blocknote/react": "0.56.0",
+    "@blocknote/shadcn": "0.56.0",
+    "@tio/core": "workspace:*",
+    "@tio/i18n": "workspace:*",
+    "@tio/ui": "workspace:*",
+    "lucide-react": "1.61.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

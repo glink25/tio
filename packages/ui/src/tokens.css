@@ -1,0 +1,101 @@
+/* Shared semantic tokens for the shell and independently mounted editors. */
+:root,
+.tio-editor {
+  --background: #fff;
+  --foreground: #252525;
+  --card: #fff;
+  --card-foreground: #252525;
+  --popover: #fff;
+  --popover-foreground: #252525;
+  --primary: #252525;
+  --primary-foreground: #fff;
+  --secondary: #f7f7f5;
+  --secondary-foreground: #666;
+  --muted: #f7f7f5;
+  --muted-foreground: #808080;
+  --accent: #ebebeb;
+  --accent-foreground: #252525;
+  --destructive: #dc2626;
+  --border: #e7e7e7;
+  --input: #e7e7e7;
+  --ring: #808080;
+  --radius: 0.5rem;
+}
+.dark,
+.tio-editor.dark {
+  --background: #191919;
+  --foreground: #eee;
+  --card: #191919;
+  --card-foreground: #eee;
+  --popover: #202020;
+  --popover-foreground: #eee;
+  --primary: #eee;
+  --primary-foreground: #191919;
+  --secondary: #202020;
+  --secondary-foreground: #b5b5b5;
+  --muted: #202020;
+  --muted-foreground: #999;
+  --accent: #303030;
+  --accent-foreground: #eee;
+  --border: #383838;
+  --input: #383838;
+  --ring: #999;
+}
+[cmdk-list] {
+  max-height: 55dvh;
+  overflow: auto;
+}
+[cmdk-item] {
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+[cmdk-item][data-selected='true'] {
+  background: var(--color-surface-hover);
+}
+[cmdk-group-heading] {
+  padding: 10px;
+  font-size: 11px;
+  color: var(--color-muted);
+}
+[cmdk-input] {
+  width: 100%;
+}
+.tio-dialog:has(.page-preview) {
+  padding: 0;
+}
+.tio-dialog:has(.page-preview) > div:first-child {
+  position: absolute;
+  right: 16px;
+  top: 12px;
+  z-index: 1;
+  margin: 0;
+}
+.tio-dialog:has(.page-preview) > div:first-child h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+@media (max-width: 767px) {
+  .tio-button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .tio-menu [role='menuitem'],
+  .tio-popover button,
+  .tio-dialog button {
+    min-height: 44px;
+  }
+  .tio-popover {
+    max-height: 72dvh;
+    overflow: auto;
+  }
+  .tio-dialog {
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+  .tio-editor .bn-editor {
+    padding-inline: 0 !important;
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "@tio/serialization",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tio/core": "workspace:*",
+    "fflate": "^0.8.2"
+  }
+}

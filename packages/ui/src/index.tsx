@@ -1,0 +1,230 @@
+import * as Dialog from '@radix-ui/react-dialog';
+import { useT } from '@tio/i18n';
+import { clsx, type ClassValue } from 'clsx';
+import { X, Languages, FileText, Database, Leaf, NotebookPen } from 'lucide-react';
+import {
+  createContext,
+  useContext,
+  forwardRef,
+  useEffect,
+  type ButtonHTMLAttributes,
+  type ReactNode,
+} from 'react';
+export const PortalContext = createContext<HTMLElement | undefined>(undefined);
+import { twMerge } from 'tailwind-merge';
+export function cn(...values: ClassValue[]) {
+  return twMerge(clsx(values));
+}
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'ghost' | 'primary' | 'outline' }
+>(function Button({ className, variant = 'ghost', ...props }, ref) {
+  return (
+    <button
+      ref={ref}
+      className={cn(
+        'tio-button inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-40',
+        variant === 'primary'
+          ? 'bg-accent text-on-accent hover:bg-accent-strong'
+          : variant === 'outline'
+            ? 'border border-line bg-panel hover:bg-surface'
+            : 'text-secondary hover:bg-surface-hover',
+        className,
+      )}
+      {...props}
+    />
+  );
+});
+export const IconButton = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { label: string; children: ReactNode }
+>(function IconButton({ label, children, ...props }, ref) {
+  return (
+    <Button ref={ref} aria-label={label} title={label} {...props}>
+      {children}
+    </Button>
+  );
+});
+export function Modal({
+  title,
+  description,
+  close,
+  children,
+  wide = false,
+  sheet = false,
+}: {
+  wide?: boolean;
+  sheet?: boolean;
+  title: string;
+  description?: string;
+  close: () => void;
+  children: ReactNode;
+}) {
+  const t = useT();
+  useOverlayBack(close);
+  return (
+    <Dialog.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+    >
+      <Dialog.Portal container={useContext(PortalContext)}>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
+        <Dialog.Content
+          aria-describedby={description ? undefined : undefined}
+          className={cn(
+            'tio-dialog fixed z-50 overflow-y-auto border border-line bg-panel p-5 text-ink shadow-xl outline-none',
+            sheet
+              ? 'inset-y-0 left-0 w-[min(320px,90vw)]'
+              : wide
+                ? 'inset-0 md:inset-auto md:top-[6dvh] md:left-1/2 md:max-h-[88dvh] md:w-[min(1100px,92vw)] md:-translate-x-1/2 md:rounded-xl'
+                : 'bottom-0 left-0 max-h-[90dvh] w-full rounded-t-xl md:top-[12dvh] md:bottom-auto md:left-1/2 md:max-h-[76dvh] md:w-[min(550px,calc(100%-24px))] md:-translate-x-1/2 md:rounded-xl',
+          )}
+        >
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+            <Dialog.Close asChild>
+              <IconButton label={t('common.close')} className="p-1">
+                <X size={20} />
+              </IconButton>
+            </Dialog.Close>
+          </div>
+          {description && (
+            <Dialog.Description className="mb-5 text-sm text-muted">
+              {description}
+            </Dialog.Description>
+          )}
+          {children}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+export function Drawer({
+  title,
+  close,
+  children,
+  actions,
+}: {
+  title: string;
+  close: () => void;
+  children: ReactNode;
+  actions?: ReactNode;
+}) {
+  const t = useT();
+  useOverlayBack(close);
+  return (
+    <Dialog.Root
+      open
+      onOpenChange={(open) => {
+        if (!open) close();
+      }}
+    >
+      <Dialog.Portal container={useContext(PortalContext)}>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
+        <Dialog.Content
+          aria-describedby={undefined}
+          className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl overflow-y-auto bg-panel shadow-xl"
+        >
+          <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel px-6 py-3">
+            <Dialog.Title className="text-sm text-secondary">{title}</Dialog.Title>
+            <div className="flex items-center gap-2">
+              {actions}
+              <Dialog.Close asChild>
+                <IconButton label={t('database.closeRecord')} className="p-1">
+                  <X size={20} />
+                </IconButton>
+              </Dialog.Close>
+            </div>
+          </header>
+          {children}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+export function LanguageSwitcher({
+  value,
+  onChange,
+}: {
+  value: 'en' | 'zh';
+  onChange: (value: 'en' | 'zh') => void;
+}) {
+  const t = useT();
+
+  return (
+    <Button
+      aria-label={t('common.language')}
+      title={t('common.language')}
+      className="gap-1.5 px-2 text-xs"
+      onClick={() => onChange(value === 'zh' ? 'en' : 'zh')}
+    >
+      <Languages size={15} />
+      {value === 'zh' ? 'EN' : '中文'}
+    </Button>
+  );
+}
+export function ObjectIcon({
+  type,
+  icon,
+  size = 18,
+}: {
+  type: string;
+  icon?: string;
+  size?: number;
+}) {
+  const Component =
+    type === 'database' ? Database : icon === '🌿' ? Leaf : icon === '✍️' ? NotebookPen : FileText;
+  return <Component size={size} strokeWidth={1.7} aria-hidden />;
+}
+export function EmptyNotice({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-md border border-dashed border-line bg-surface p-4 text-sm text-muted">
+      {children}
+    </div>
+  );
+}
+
+export { useTheme, ThemeSwitcher, ThemeContext } from './theme';
+
+export {
+  Menu,
+  MenuItem,
+  MenuSeparator,
+  Popover,
+  Tooltip,
+  Command,
+  CommandInput,
+  CommandList,
+  CommandItem,
+  CommandEmpty,
+  CommandGroup,
+  Notifications,
+  NotificationContext,
+  useNotify,
+  toast,
+  useMobile,
+} from './overlays';
+// One stack per document: Back removes only surfaces above the destination entry.
+const overlays: { key: string; close: () => void }[] = [];
+function dismissOverlayHistory() {
+  const index = overlays.findIndex((entry) => entry.key === history.state?.tioOverlay);
+  for (const entry of overlays.slice(index + 1).reverse()) entry.close();
+}
+export function useOverlayBack(close: () => void) {
+  useEffect(() => {
+    const key = crypto.randomUUID();
+    if (!overlays.length) window.addEventListener('popstate', dismissOverlayHistory);
+    overlays.push({ key, close });
+    history.pushState({ ...history.state, tioOverlay: key }, '');
+    return () => {
+      const index = overlays.findIndex((entry) => entry.key === key);
+      if (index >= 0) overlays.splice(index, 1);
+      if (!overlays.length) window.removeEventListener('popstate', dismissOverlayHistory);
+      if (history.state?.tioOverlay === key) history.back();
+    };
+    // Overlay lifetime is independent of callback identity.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+}

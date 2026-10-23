@@ -1,0 +1,17 @@
+{
+  "name": "@tio/adapter-local-folder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tio/core": "workspace:*",
+    "@tio/provider-local-folder": "workspace:*",
+    "@tio/storage": "workspace:*"
+  }
+}

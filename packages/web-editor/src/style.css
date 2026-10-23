@@ -1,0 +1,140 @@
+@import '../../ui/src/tokens.css';
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css';
+@source './';
+@source '../../ui/src';
+@source '../../views/src';
+@source '../../editor-blocknote/src';
+@custom-variant dark (&:where(.dark, .dark *));
+@theme reference {
+  --color-panel: #ffffff;
+  --color-on-accent: #ffffff;
+  --color-ink: #252525;
+  --color-secondary: #666666;
+  --color-muted: #808080;
+  --color-accent: #252525;
+  --color-accent-strong: #444444;
+  --color-sage: #777777;
+  --color-line: #e7e7e7;
+  --color-surface: #f7f7f5;
+  --color-surface-hover: #ebebeb;
+  --color-canvas: #ffffff;
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+}
+/* Scoped preflight: the standalone bundle must not rely on a host CSS reset. */
+@layer base {
+  .tio-editor,
+  .tio-editor *,
+  .tio-editor *::before,
+  .tio-editor *::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: currentColor;
+  }
+  .tio-editor button,
+  .tio-editor input,
+  .tio-editor select,
+  .tio-editor textarea {
+    font: inherit;
+    color: inherit;
+    background-color: transparent;
+    border-radius: 0;
+    padding: 0;
+  }
+  .tio-editor h1,
+  .tio-editor h2,
+  .tio-editor h3,
+  .tio-editor p,
+  .tio-editor fieldset {
+    margin: 0;
+    padding: 0;
+  }
+  .tio-editor h1,
+  .tio-editor h2,
+  .tio-editor h3 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+}
+
+@layer base {
+  .tio-editor {
+    @apply m-0 bg-panel font-sans text-ink antialiased;
+  }
+  .tio-editor button {
+    @apply cursor-pointer;
+  }
+  .tio-editor input:not([type='checkbox']):not([type='file']),
+  .tio-editor select {
+    @apply min-w-0 rounded-md border border-line bg-panel px-2.5 py-2 text-sm;
+  }
+  .tio-editor input[type='checkbox'] {
+    @apply size-4 justify-self-start accent-accent;
+  }
+  .tio-editor input:focus-visible,
+  .tio-editor select:focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent;
+  }
+  .tio-editor a {
+    @apply text-accent underline-offset-2;
+  }
+}
+
+.tio-editor {
+  --color-panel: #ffffff;
+  --color-canvas: #ffffff;
+  --color-surface: #f7f7f5;
+  --color-surface-hover: #ebebeb;
+  --color-line: #e7e7e7;
+  --color-ink: #252525;
+  --color-secondary: #666;
+  --color-muted: #808080;
+  --color-accent: #252525;
+  --color-accent-strong: #444;
+  --color-on-accent: #fff;
+  --color-sage: #777;
+  min-width: 0;
+}
+
+.tio-editor.dark {
+  --color-panel: #191919;
+  --color-canvas: #191919;
+  --color-surface: #202020;
+  --color-surface-hover: #303030;
+  --color-line: #383838;
+  --color-ink: #eeeeee;
+  --color-secondary: #b5b5b5;
+  --color-muted: #999999;
+  --color-accent: #eeeeee;
+  --color-accent-strong: #cccccc;
+  --color-on-accent: #191919;
+  --color-sage: #aaaaaa;
+}
+/* Third-party DOM boundary only. Application layout uses Tailwind utilities. */
+.tio-editor .bn-root.bn-root[data-color-scheme] {
+  --bn-colors-editor-text: var(--color-ink);
+  --bn-colors-editor-background: var(--color-panel);
+  font-size: 14px;
+}
+.tio-editor .bn-editor {
+  padding-inline: 0 !important;
+  font-family: inherit !important;
+}
+.tio-editor .bn-block-content {
+  font-size: 14px;
+  line-height: 1.9;
+}
+.tio-editor .bn-block-content[data-content-type='heading'] {
+  margin-top: 16px;
+}
+.tio-editor .bn-block-content[data-content-type='heading'] h1 {
+  font-size: 23px !important;
+}
+.tio-editor .bn-block-content[data-content-type='heading'] h2 {
+  font-size: 20px !important;
+}
+.tio-editor .bn-block-content:has(.database-embed) {
+  display: block !important;
+  width: 100%;
+}

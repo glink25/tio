@@ -1,0 +1,25 @@
+{
+  "name": "@tio/views",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glideapps/glide-data-grid": "6.0.3",
+    "@tio/core": "workspace:*",
+    "@tio/database": "workspace:*",
+    "@tio/i18n": "workspace:*",
+    "@tio/ui": "workspace:*",
+    "lodash": "^4.17.21",
+    "lucide-react": "1.61.0",
+    "marked": "^4.3.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-responsive-carousel": "^3.2.23"
+  }
+}

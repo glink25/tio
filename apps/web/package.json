@@ -1,0 +1,44 @@
+{
+  "name": "@tio/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tio/adapter-local-folder": "workspace:*",
+    "@tio/assets": "workspace:*",
+    "@tio/core": "workspace:*",
+    "@tio/database": "workspace:*",
+    "@tio/editor-blocknote": "workspace:*",
+    "@tio/i18n": "workspace:*",
+    "@tio/local-store": "workspace:*",
+    "@tio/merge": "workspace:*",
+    "@tio/provider-local-folder": "workspace:*",
+    "@tio/provider-memory": "workspace:*",
+    "@tio/serialization": "workspace:*",
+    "@tio/storage": "workspace:*",
+    "@tio/sync": "workspace:*",
+    "@tio/ui": "workspace:*",
+    "@tio/views": "workspace:*",
+    "@tio/web-editor": "workspace:*",
+    "@tio/workspace": "workspace:*",
+    "lucide-react": "1.61.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "workbox-window": "^7.4.1",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@vitejs/plugin-react": "6.1.2",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.5",
+    "vite-plugin-pwa": "2.0.0",
+    "workbox-build": "^7.4.1"
+  }
+}

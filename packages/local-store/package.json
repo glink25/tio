@@ -1,0 +1,16 @@
+{
+  "name": "@tio/local-store",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tio/core": "workspace:*",
+    "idb": "^8.0.3"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "tio",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local-first document and database workspace with portable file synchronization.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "corepack pnpm --filter @tio/web dev",
+    "build": "corepack pnpm --filter @tio/web-editor build && corepack pnpm --filter @tio/web build && node scripts/check-editor-css.mjs",
+    "preview": "corepack pnpm --filter @tio/web preview",
+    "typecheck": "corepack pnpm -r typecheck",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "lint": "oxlint --type-aware --deny-warnings",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "check": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm check:boundaries && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:perf": "vitest run tests/performance.test.ts",
+    "lint:fix": "oxlint --type-aware --fix",
+    "check:boundaries": "node scripts/check-boundaries.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "latest",
+    "@types/node": "^24.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@types/wicg-file-system-access": "^2023.10.7",
+    "@vitest/coverage-v8": "5.0.5",
+    "fake-indexeddb": "^6.2.4",
+    "fflate": "0.8.3",
+    "oxfmt": "0.74.0",
+    "oxlint": "1.89.0",
+    "oxlint-tsgolint": "7.0.2004",
+    "postcss": "^8.5.31",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  },
+  "engines": {
+    "node": ">=24.0.0",
+    "pnpm": ">=12.0.0"
+  },
+  "packageManager": "pnpm@12.14.0"
+}
