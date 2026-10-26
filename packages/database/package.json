@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./repository": "./src/repository.ts",
+    "./search-browser": "./src/search-browser.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

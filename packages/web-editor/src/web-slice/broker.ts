@@ -8,7 +8,6 @@ import {
   type Field,
   type TioObject,
 } from '@tio/core';
-import { queryRecords } from '@tio/database';
 import type { EditorSession } from '@tio/workspace';
 
 import { SliceError, type WebSlicePermission } from './types';
@@ -346,7 +345,11 @@ export class SliceBroker {
       await this.commit([page], [db, view, next]);
       return this.output(db);
     }
-    const db = this.db(p.databaseId);
+    this.db(p.databaseId); // Scope authorization precedes any fetch.
+    await this.options.runtime.loadDatabase(p.databaseId);
+    if (typeof p.id === 'string' && method.startsWith('records.'))
+      await this.options.runtime.ensure([p.id]);
+    const db = this.db(p.databaseId); // Recheck grants and references after the asynchronous read.
     const readableDb = this.readable(db);
     if (method === 'databases.get') return this.output(db);
     const records = this.objects().filter(
@@ -364,30 +367,24 @@ export class SliceBroker {
       const view = p.viewId
         ? (views.find((v) => v.id === p.viewId) ?? fail('RESOURCE_REMOVED'))
         : { ...db, filters: [], sorts: [] };
-      const projected = records.map((r) => ({
-        ...r,
-        properties: (this.output(r) as { properties: Record<string, unknown> }).properties,
-      }));
-      const rows = queryRecords(projected, readableDb, {
-        ...view,
-        filters: p.filters ?? view.filters,
-        sorts: p.sorts ?? view.sorts,
-      });
-      const offset = p.cursor === undefined ? 0 : Number(p.cursor);
       const limit = p.limit ?? 100;
       if (
-        !Number.isSafeInteger(offset) ||
-        offset < 0 ||
         !Number.isSafeInteger(limit) ||
         limit < 1 ||
-        limit > 1000
+        limit > 1000 ||
+        (p.cursor !== undefined && typeof p.cursor !== 'string')
       )
         fail('INVALID_INPUT');
+      const page = await this.options.runtime.records({
+        databaseId: db.id,
+        view: { ...view, filters: p.filters ?? view.filters, sorts: p.sorts ?? view.sorts },
+        after: p.cursor,
+        limit,
+      });
+      this.db(db.id);
       return {
-        records: rows
-          .slice(offset, offset + limit)
-          .map((r) => this.output(records.find((o) => o.id === r.id)!)),
-        nextCursor: offset + limit < rows.length ? String(offset + limit) : null,
+        records: page.entries.map((e) => this.output(e.object)),
+        nextCursor: page.next ?? null,
       };
     }
     this.writable();

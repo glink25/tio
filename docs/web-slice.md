@@ -38,7 +38,7 @@ const unsubscribe = tio.subscribe((event) => {
 - `page.updateBlock(id, changes, version)`: patch `type`, `props`, `content`, or `children` of an ordinary block.
 - `page.removeBlock(id, version)`: remove an ordinary block. An ancestor containing a Slice is protected too.
 - `databases.list()` / `databases.get(id).get()`: database metadata. `databases.find(name)` returns a handle only if exactly one database matches.
-- `databases.create({name, fields}, {requestId}?)`: atomically create the database, default view and page reference; return metadata. Field definitions have stable `id`, `name`, and `type`.
+- `databases.create({name, fields}, {requestId}?)`: create the database, default view and page reference in one provider commit; file providers offer recoverable best-effort publication; return metadata. Field definitions have stable `id`, `name`, and `type`.
 - `table.records.query({limit?, cursor?, viewId?, filters?, sorts?})`: default 100, maximum 1000; returns `{records, nextCursor}`. Without `viewId`, all records are considered. Filters use `{fieldId, op: 'eq'|'contains'|'notEmpty', value?}`; sorts use `{fieldId, direction: 'asc'|'desc'}`. Pages are live, not a frozen multi-page snapshot.
 - `table.records.get(id)`: `{id, databaseId, properties, version}`; never the record body.
 - `table.records.create(properties, {requestId}?)`, `.update(id, properties, version, {requestId}?)`, `.delete(id, version, {requestId}?)`.
@@ -47,7 +47,7 @@ const unsubscribe = tio.subscribe((event) => {
 - `ui.resize(height)`: request 160–1200px; a host manual height overrides automatic resize.
 - `request(method, payload, {requestId}?)`: low-level access to the same method allowlist, including retrying requests after timeout. This never exposes repository operations.
 
-Record properties use field IDs. Date values are `{start: 'YYYY-MM-DD', end?: string, timeZone?: string}`; timed values include an ISO offset. Formula, rollup and system-time properties are read-only. Updates/deletes require the version returned by a read. A stale version returns `CONFLICT`; re-read before retrying. Writes are acknowledged after local repository commit, not after remote folder sync. Each write forms one undo entry. The existing host retry mechanism recovers ambiguous persistence failures without issuing a second mutation.
+Record properties use field IDs. Date values are `{start: 'YYYY-MM-DD', end?: string, timeZone?: string}`; timed values include an ISO offset. Formula, rollup and system-time properties are read-only. Updates/deletes require the version returned by a read. A stale version returns `CONFLICT`; re-read before retrying. Writes are acknowledged after the selected provider acknowledges its commit (direct file publication for folders). Each write forms one undo entry. The existing host retry mechanism recovers ambiguous persistence failures without issuing a second mutation.
 
 Requests time out after 15 seconds. Timeout is not cancellation: the error includes `requestId`, and retrying the **same payload with the same ID within the same running session** returns the original outcome. Do not submit a new ID to retry an uncertain record creation. Reloading starts a new session, so inspect persisted records before repeating an uncertain action. A session admits 10,000 distinct requests; restart after reaching that limit. Calls and logs are rate/size bounded; use pagination.
 

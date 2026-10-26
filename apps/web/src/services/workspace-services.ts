@@ -6,6 +6,7 @@ import {
   type TioObject,
   type AssetData,
   type ConnectionAccessState,
+  type WorkspaceRepository,
 } from '@tio/core';
 import { LocalStore, LocalCatalog } from '@tio/local-store';
 import { HostSyncRunner } from '@tio/sync';
@@ -44,6 +45,12 @@ export class WorkspaceServices {
     if (state.scope.connectionId !== this.connection?.id) return;
     if (this.accessStates.get(state.scope.workspaceId ?? '')?.code === state.code) return;
     this.accessStates.set(state.scope.workspaceId ?? '', state);
+    if (
+      this.active &&
+      this.repositories.get(this.active.session.id)?.repository.storageCapabilities?.offline ===
+        false
+    )
+      this.active.runtime.setWritable(this.access?.code === 'available');
     this.status();
     this.onChange();
   }
@@ -82,11 +89,34 @@ export class WorkspaceServices {
   private handle?: FileSystemDirectoryHandle;
   private repositories = new Map<
     string,
-    { repository: LocalStore; runner?: HostSyncRunner; unsubscribe?: () => void }
+    {
+      repository: WorkspaceRepository & { close(): void };
+      runner?: HostSyncRunner;
+      unsubscribe?: () => void;
+    }
   >();
   private active?: { session: WorkspaceSession; runtime: WorkspaceRuntime };
   private queue: Promise<void> = Promise.resolve();
   private status = () => {};
+  private polling = false;
+  private timer?: ReturnType<typeof setInterval>;
+  private startPolling() {
+    if (this.timer) return;
+    this.timer = setInterval(() => {
+      if (this.polling || !this.active || document.visibilityState !== 'visible') return;
+      this.polling = true;
+      void this.checkAccess(this.active.session.workspaceId)
+        .then((allowed) => {
+          if (allowed) return this.active?.runtime.poll();
+        })
+        .catch((error) => {
+          if (this.binding) this.setAccess(this.binding.adapter.classifyError(error));
+        })
+        .finally(() => {
+          this.polling = false;
+        });
+    }, 5000);
+  }
   async initialize() {
     const saved = await this.catalog.setting('connection');
     if (saved) {
@@ -114,11 +144,6 @@ export class WorkspaceServices {
     const saved = (await this.catalog.sessions()).filter(
       (s) => s.connectionId === this.connection!.id,
     );
-    for (const s of saved) {
-      const entry = this.repository(s);
-      const workspace = await entry.repository.get(s.workspaceId);
-      if (workspace) s.name = workspace.object.name ?? s.name;
-    }
     return saved;
   }
   async refreshRemote() {
@@ -147,8 +172,11 @@ export class WorkspaceServices {
         name: workspace.name ?? '',
       };
       await this.catalog.saveSession(session);
-      const { repository } = this.repository(session);
-      await repository.put(workspace);
+      // Discovery updates the catalog only. The provider remains authoritative.
+      if (!binding.repository) {
+        const { repository } = this.repository(session);
+        if (repository instanceof LocalStore) await repository.put(workspace);
+      }
     }
     this.onChange();
   }
@@ -161,13 +189,19 @@ export class WorkspaceServices {
   private repository(session: WorkspaceSession) {
     let entry = this.repositories.get(session.id);
     if (!entry) {
-      const repository = new LocalStore(session.id);
+      const repository =
+        this.binding?.repository?.(session.workspaceId, session.id) ?? new LocalStore(session.id);
       entry = { repository };
       this.repositories.set(session.id, entry);
       const content = this.binding?.adapter.supportsSync
         ? this.binding.content(session.workspaceId)
         : undefined;
-      if (content && this.connection) {
+      if (
+        content &&
+        this.connection &&
+        !this.binding?.repository &&
+        repository instanceof LocalStore
+      ) {
         const runner = new HostSyncRunner(
           repository,
           content,
@@ -237,7 +271,14 @@ export class WorkspaceServices {
     return this.transition(async () => {
       await this.active?.runtime.flush();
       const entry = this.repository(session);
-      const runtime = await WorkspaceRuntime.open(entry.repository);
+      if (
+        entry.repository.storageCapabilities?.offline === false &&
+        !(await this.checkAccess(session.workspaceId))
+      )
+        throw new ConnectionAccessError(this.accessFor(session.workspaceId)!);
+      const runtime = await WorkspaceRuntime.open(entry.repository, undefined, undefined, {
+        targetId: session.selectedId,
+      });
       try {
         await this.closeActive();
       } catch (error) {
@@ -245,6 +286,7 @@ export class WorkspaceServices {
         throw error;
       }
       this.active = { session, runtime };
+      this.startPolling();
       return runtime;
     });
   }
@@ -279,7 +321,8 @@ export class WorkspaceServices {
         this.setAccess(state);
         await this.refreshRemote();
         if (generation !== this.generation) return;
-        await this.active?.runtime.flush();
+        if (this.active?.runtime.state.getState().error) await this.active.runtime.retry();
+        else await this.active?.runtime.flush();
         await Promise.all(
           [...this.repositories.values()].flatMap((entry) =>
             entry.runner ? [entry.runner.sync()] : [],
@@ -296,6 +339,7 @@ export class WorkspaceServices {
     await this.active?.runtime.flush();
     await this.refreshRemote();
     await this.runner?.sync();
+    if (!this.runner && this.active) await this.active.runtime.poll();
   }
   async discard(id: string) {
     await this.active?.runtime.flush();
@@ -315,6 +359,8 @@ export class WorkspaceServices {
   }
   private invalidateConnection() {
     this.generation++;
+    clearInterval(this.timer);
+    this.timer = undefined;
     this.unsubscribeAccess?.();
     this.unsubscribeAccess = undefined;
     this.authorization = undefined;

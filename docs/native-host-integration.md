@@ -33,7 +33,7 @@ Implement `WorkspaceRepository` and the shared contract tests:
 
 - `readSnapshot`: coherent workspace version and object revisions.
 - `readChanges`: latest changed objects after a version cursor; a full snapshot is a valid fallback.
-- `commit`: atomic version CAS, identity/schema/access validation, binary promotion and compact receipt.
+- `commit`: identity/schema/access validation, provider-declared atomic CAS or recoverable publication, and compact receipt.
 - `getCommitResult`: recover an ambiguous timeout using the original commit ID.
 - `acknowledgeCommits`: compact acknowledged client sequences and retain a replay-prevention watermark.
 - `subscribeChanges`: version, commitId, origin and changedIds.
@@ -45,7 +45,7 @@ A committed result contains changed entries, not the whole workspace. Receipts f
 
 Messages carry protocol, sessionId, workspaceId, id, kind, method and payload. Requests and responses are validated at runtime. Bind the trusted channel to the repository and principal; session/workspace checks are routing guards, not a substitute for authentication.
 
-Handshake negotiates extension capabilities. Repository methods include snapshot/delta reads, commit/receipt/ack, asset methods and extension calls. Change notifications are versioned. Tests exercise real JSON encoding rather than structured clone. Duplicate/delayed responses cannot complete another request. Reopening a channel uses a new bridge and a fresh snapshot; unresolved commits keep their original identity during retry.
+Handshake negotiates extension capabilities. Repository methods include snapshot/delta reads, commit/receipt/ack, asset methods and extension calls. Change notifications are versioned. Tests exercise real JSON encoding rather than structured clone. Duplicate/delayed responses cannot complete another request. Reopening a channel uses a new bridge and fresh navigation and selected-object reads; unresolved commits keep their original identity during retry.
 
 Binary payloads use opaque upload/download/release references, not filesystem paths. The host releases an upload reference after consuming it. An expired request does not revoke an in-use transfer. Implement leases, idempotent release and expiration cleanup; the reference loopback expires transfers after 60 seconds. Native channels may renew leases for larger transfers. A failed asset stage must be retried before its business commit can succeed.
 
@@ -53,9 +53,9 @@ Binary payloads use opaque upload/download/release references, not filesystem pa
 
 `executeBasic` supports createPage, rename, appendText, createRecord and setField without React or a WebView. Use stable object/block IDs. The same command rules are revalidated against current state. Fine-grained rich text remains in the Web editor.
 
-`AccessPolicy` supports resource/field-level decisions, allowing a future repository adapter to expose coarse workspace rights or finer backend rights. Host checks are authoritative. Offline local drafts follow the last usable policy; `WorkspaceContentPort.authorize` refreshes publication rights. Denied publication preserves drafts and exposes retry/export/discard behavior.
+`AccessPolicy` supports resource/field-level decisions, allowing a future repository adapter to expose coarse workspace rights or finer backend rights. Host checks are authoritative. For offline-capable providers, local drafts follow the last usable policy; `WorkspaceContentPort.authorize` refreshes publication rights. Denied publication preserves drafts and exposes retry/export/discard behavior.
 
-Run `SyncCore` through `HostSyncRunner` or a native scheduler. `WorkspaceContentPort` is object-oriented; only `FileWorkspaceContent` assumes canonical files. OS background execution guarantees belong to the native host. Repository events, not editor callbacks, trigger synchronization.
+For providers maintaining a replica, run `SyncCore` through `HostSyncRunner` or a native scheduler. `WorkspaceContentPort` is object-oriented; only `FileWorkspaceContent` assumes canonical files. OS background execution guarantees belong to the native host. Repository events, not editor callbacks, trigger synchronization.
 
 Optional system extensions are declared by name/version at handshake. Calendar, widgets and shortcuts are not implemented in this change. Trigger system effects only after confirmed local commits and make them independently idempotent.
 
@@ -65,10 +65,14 @@ Optional system extensions are declared by name/version at handshake. Calendar, 
 
 ## Restoring expired connections
 
-Restore cached workspace content and navigation before checking remote authorization. Implement the host-only `ConnectionAdapter` contract separately from the editor repository and resource `AccessPolicy`. Silent checks must not open dialogs; only an explicit user action may invoke `reauthorize`. Report credential expiry using `ConnectionAccessError` with connection/workspace scope, and report a resource permission denial separately. The host preserves offline drafts and suspends publication while credentials are unavailable.
+Restore the local catalog first. Restore content before authorization only for providers declaring offline support; folder content requires access to its endpoint. Implement the host-only `ConnectionAdapter` contract separately from the editor repository and resource `AccessPolicy`. Silent checks must not open dialogs; only an explicit user action may invoke `reauthorize`. Report credential expiry using `ConnectionAccessError` with connection/workspace scope, and report a resource permission denial separately. Offline-capable providers preserve drafts and suspend publication while credentials are unavailable. Direct folder providers block new writes and retain unfinished journal entries.
 
-A successful reauthorization means the original identity and endpoint were restored. If the login flow selects another account/repository, fail recovery without rebinding or publishing cached content. Cancellation leaves the local session usable. Invalidate outstanding authorization results when disconnecting. Web folder permission prompts require the request to be invoked directly during the click event, before any asynchronous save or discovery operation.
+A successful reauthorization means the original identity and endpoint were restored. If the login flow selects another account/repository, fail recovery without rebinding or publishing cached content. Cancellation leaves the catalog and any already-loaded read-only view available. Invalidate outstanding authorization results when disconnecting. Web folder permission prompts require the request to be invoked directly during the click event, before any asynchronous save or discovery operation.
 
 ## Paged reads
 
-Hosts may expose `queryObjects({ scope: { type } | { databaseId }, after?, limit })`. It returns `{ version, entries, next? }` in stable object-ID order, with 1–1000 entries requested per page. The bridge reports `unsupported` if the host lacks this operation. Each page is transactionally consistent with its returned version; multiple pages are not a frozen snapshot. Restart a scan when a consistent export is required and versions differ. Tombstones remain in the result so consumers can maintain a projection. IndexedDB uses the type/database indexes; the memory host is the reference implementation.
+Hosts may expose `queryObjects({ scope: { type } | { databaseId }, after?, limit })`. It returns `{ version, entries, next? }` in stable object-ID order, with 1–1000 entries requested per page. The bridge reports `unsupported` if the host lacks this operation. Atomic providers return transactionally consistent pages; file providers retain best-effort scan semantics; multiple pages are not a frozen snapshot. Restart a scan when a consistent export is required and versions differ. Tombstones remain in the result so consumers can maintain a projection. IndexedDB uses the type/database indexes; the memory host is the reference implementation.
+
+## Provider-owned asynchronous reads
+
+Implement `queryNavigation`, `readObjects`, `queryRecords`, `scan` and optional `search` across the bridge. Declare `storageCapabilities`; do not assume a local replica or atomic persistence for every provider. Navigation summaries cannot be used as command baselines. See [asynchronous provider access](async-provider-access.md) for loading states, cursors, query completeness, export and file recovery semantics.

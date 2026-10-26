@@ -102,7 +102,7 @@ test('browser file provider with genuine directory handles (OPFS, not native pic
   expect(result.missing).toBeNull();
   expect(result.unrelated).toBe('preserve');
 });
-test('folder entry, background sync, external changes and fresh-cache restore', async ({
+test('folder entry, direct writes, external changes and catalog-free discovery', async ({
   page,
 }) => {
   await page.goto('/');
@@ -115,9 +115,9 @@ test('folder entry, background sync, external changes and fresh-cache restore', 
   await installPicker();
   await page.getByRole('button', { name: '连接本地文件夹', exact: false }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
-  await expect(page.getByText('已同步文件夹', { exact: true })).toBeVisible();
+  await expect(page.locator('header output').filter({ hasText: '已保存本地' })).toBeVisible();
   await page.getByLabel('页面标题').fill('文件夹中的文档');
-  await expect(page.getByText('已同步文件夹', { exact: true })).toBeVisible();
+  await expect(page.locator('header output').filter({ hasText: '已保存本地' })).toBeVisible();
   await expect
     .poll(async () =>
       page.evaluate(async () => {
@@ -154,7 +154,7 @@ test('folder entry, background sync, external changes and fresh-cache restore', 
       }
     }
   });
-  await page.getByRole('button', { name: '已同步文件夹' }).click();
+  await page.getByRole('button', { name: '已保存本地', exact: true }).click();
   await expect(page.getByLabel('页面标题')).toHaveValue('外部修改的文档');
   await settings(page, '存储与同步');
   await page.getByRole('button', { name: '返回入口 / 断开会话' }).click();
@@ -176,7 +176,7 @@ test('folder entry, background sync, external changes and fresh-cache restore', 
   await installPicker();
   await page.getByRole('button', { name: '连接本地文件夹', exact: false }).click();
   await page.getByRole('button', { name: '我的工作空间', exact: true }).click();
-  await expect(page.getByText('已同步文件夹', { exact: true })).toBeVisible();
+  await expect(page.locator('header output').filter({ hasText: '已保存本地' })).toBeVisible();
   await page
     .locator('nav')
     .getByRole('button', { name: '外部修改的文档', exact: true })

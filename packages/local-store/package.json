@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tio/core": "workspace:*",
+    "@tio/database": "workspace:*",
     "idb": "^8.0.3"
   }
 }

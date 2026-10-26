@@ -361,6 +361,9 @@ importers:
       '@tio/core':
         specifier: workspace:*
         version: link:../core
+      '@tio/database':
+        specifier: workspace:*
+        version: link:../database
       '@tio/serialization':
         specifier: workspace:*
         version: link:../serialization
@@ -391,6 +394,9 @@ importers:
       '@tio/core':
         specifier: workspace:*
         version: link:../core
+      '@tio/database':
+        specifier: workspace:*
+        version: link:../database
       idb:
         specifier: ^8.0.3
         version: 8.0.4
@@ -418,6 +424,9 @@ importers:
       '@tio/core':
         specifier: workspace:*
         version: link:../core
+      '@tio/database':
+        specifier: workspace:*
+        version: link:../database
       '@tio/storage':
         specifier: workspace:*
         version: link:../storage

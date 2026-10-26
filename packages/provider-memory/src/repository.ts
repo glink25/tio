@@ -1,3 +1,4 @@
+import type { PageQuery, RecordQuery, RepositoryCapabilities } from '@tio/core';
 import {
   applyCommit,
   createDomain,
@@ -17,8 +18,25 @@ import {
   type WorkspaceSnapshot,
   type ObjectQuery,
 } from '@tio/core';
+import { ScanningQueries } from '@tio/database/repository';
 /** Reference host implementation. Only this host owns durable state in embedding tests. */
 export class MemoryRepository implements WorkspaceRepository {
+  readonly storageCapabilities: RepositoryCapabilities = {
+    persistence: 'atomic',
+    offline: true,
+    prefetch: 'none',
+  };
+  private queries = new ScanningQueries(this);
+  queryNavigation(query: PageQuery) {
+    return this.queries.navigation(query);
+  }
+  queryRecords(query: RecordQuery) {
+    return this.queries.records(query);
+  }
+  scan(query: PageQuery) {
+    return this.queries.scan(query);
+  }
+
   private snapshot: WorkspaceSnapshot = { version: 0, entries: [] };
   private changedAt = new Map<string, number>();
   private receipts = new Map<string, { signature: string; result: CommitResult }>();
@@ -69,7 +87,16 @@ export class MemoryRepository implements WorkspaceRepository {
   }
   async readObjects(ids: string[]): Promise<WorkspaceSnapshot> {
     const selected = new Set(ids);
-    return this.selectEntries((id) => selected.has(id));
+    const result = this.selectEntries((id) => selected.has(id));
+    return {
+      ...result,
+      missing: ids.filter((id) => !this.snapshot.entries.some((e) => e.object.id === id)),
+      denied: ids.filter(
+        (id) =>
+          this.snapshot.entries.some((e) => e.object.id === id) &&
+          !result.entries.some((e) => e.object.id === id),
+      ),
+    };
   }
   async readChanges(since: number): Promise<WorkspaceSnapshot> {
     return this.selectEntries((id) => (this.changedAt.get(id) ?? 0) > since);

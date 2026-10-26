@@ -14,11 +14,12 @@ flowchart TD
   Presentation --> Editor[Web editor]
   Host --> Session[EditorSession / WorkspaceRuntime]
   Editor --> Session
-  Session --> Repository[WorkspaceRepository]
+  Session --> Repository[Provider-owned WorkspaceRepository]
   Basic[Headless basic commands] --> Repository
   Repository --> Events[Versioned commit events]
   Events --> Session
-  Events --> Runner[HostSyncRunner]
+  Repository --> Direct[FileRepository direct publication]
+  Events -. optional replica provider .-> Runner[HostSyncRunner]
   Runner --> Core[SyncCore]
   Core --> Content[WorkspaceContentPort]
   Content --> Files[FileWorkspaceContent]
@@ -31,7 +32,7 @@ Selecting a root folder establishes a connection and shows its workspace catalog
 
 `WorkspaceDescriptor` holds identity and connection ownership. `WorkspacePreferences` holds local selected-page/favorite state. `LocalCatalog` stores descriptors and personal preferences separately. File handles belong to the connection record, never to business objects.
 
-Switching space flushes local commands and closes the old editing session. Repositories and sync runners remain alive for the active connection, including spaces without an editor. Local flush failure prevents switching. Remote failure does not. Host services serialize open/close operations. Disconnect stops scheduling, waits for running tasks to reach completion/cancellation boundaries, closes repositories and clears the active connection. Local persisted drafts remain available on reconnection.
+Switching space flushes local commands and closes the old editing session. Repositories and sync runners remain alive for the active connection, including spaces without an editor. Local flush failure prevents switching. Remote failure does not. Host services serialize open/close operations. Disconnect stops scheduling, waits for running tasks to reach completion/cancellation boundaries, closes repositories and clears the active connection. Device persisted content remains available on reconnection; folder unfinished operations remain in the recovery journal.
 
 ## Presentation and CSS
 
@@ -45,19 +46,21 @@ Editor CSS is processed by `scripts/editor-css.mjs`, including third-party style
 
 `WorkspaceRuntime` owns the confirmed baseline, optimistic command queue and transaction receipts. Inputs read the synchronous projection; components retain interaction state, not separate persistence queues. Runtime lifecycle is opening, ready, flushing, closing, closed or error. `close()` flushes and refuses new commands while closing; failure retains pending work.
 
-Repository events contain workspace version, commit identity, origin and changed IDs. Runtime serializes event ingress with in-flight commits, uses receipts before recovering uncertain writes, then applies remaining commands over confirmed state. Events can be duplicated or missed: incrementally reading from the version cursor and re-reading before CAS retries recovers current state. A receipt and its change notification cannot execute a command twice. Saved means locally committed, not remotely published.
+Repository events contain workspace version, commit identity, origin and changed IDs. Runtime serializes event ingress with in-flight commits, uses receipts before recovering uncertain writes, then applies remaining commands over confirmed state. Events can be duplicated or missed: incrementally reading from the version cursor and re-reading before CAS retries recovers current state. A receipt and its change notification cannot execute a command twice. Saved means committed by the selected provider: an IndexedDB transaction for device storage, or completed file publication for folder storage.
 
 ## Persistence and permissions
 
-`WorkspaceRepository`, `AssetStore`, `SyncStateStore`, `WorkspaceCatalog` and `HostPreferences` describe separate duties. Web implementations share IndexedDB for atomic transactions. The editor never opens IndexedDB. The database has a new initial namespace and schema; no historical formats or migration compatibility paths are implemented.
+`WorkspaceRepository`, `AssetStore`, `SyncStateStore`, `WorkspaceCatalog` and `HostPreferences` describe separate duties. The device provider uses IndexedDB for atomic transactions. The folder provider writes files directly with a minimal recovery journal and recoverable best-effort commits. See [asynchronous provider access](async-provider-access.md). The editor never opens IndexedDB. The database has a new initial namespace and schema; no historical formats or migration compatibility paths are implemented.
 
-A commit is CAS against workspace version and validates identity, format and access. It returns changed entries only. Runtime requests carry client ID and sequence. Acknowledged receipts are removed and a client high-water mark prevents replay; compacted requests are never executed again. Unacknowledged requests retain their compact result. Incremental storage retains one latest change per object, not a workspace snapshot per keystroke. Initial reads remain full snapshots.
+A commit validates identity, format and access. Atomic providers use workspace-version CAS; file providers serialize cooperating writers and recheck files, without promising atomic multi-file visibility. It returns changed entries only. Runtime requests carry client ID and sequence. Acknowledged receipts are removed and a client high-water mark prevents replay; compacted requests are never executed again. Unacknowledged requests retain their compact result. Incremental storage retains one latest change per object, not a workspace snapshot per keystroke. Initialization requests navigation metadata and the selected body; explicit exports traverse the workspace. Scanning providers may still read all files internally.
 
 `AccessPolicy` resolves operations on workspace/page/database/record/field/asset resources. The host checks writes independently of UI controls. Read projections filter unavailable resources/fields, and unreadable fields survive updates to authorized fields. Native adapters must bind repositories and channels to the correct workspace and identity. Endpoint ACL inheritance is not assumed by shared code.
 
-Attachments are staged separately from committed binary reads. The transaction promotes staged bytes and metadata together. Binary-only repairs explicitly commit even when metadata is unchanged. Transport references are released after host consumption; a client timeout is not cancellation. Loopback uses expiring transfer references and actual JSON roundtrips for messages. Production native transport implementations must implement the same lease/ACK behavior.
+Attachments are staged separately from committed binary reads. Atomic providers promote staged bytes and metadata together. File publication writes assets first and retains unfinished operations in its recovery journal. Binary-only repairs explicitly commit even when metadata is unchanged. Transport references are released after host consumption; a client timeout is not cancellation. Loopback uses expiring transfer references and actual JSON roundtrips for messages. Production native transport implementations must implement the same lease/ACK behavior.
 
-## Synchronization
+## Optional replica synchronization
+
+The following components apply to providers that maintain a replica. The current folder connection uses direct publication and does not run this synchronization pipeline.
 
 `SyncCore` works with a workspace content port: object discovery/read/write, binary read/write and refreshed publication authorization. This allows record/API backends without imposing a file tree. `FileWorkspaceContent` alone maps objects to canonical paths and verifies path identity. File providers implement filesystem primitives.
 
@@ -75,10 +78,10 @@ Boundary checks recursively examine pure-package sources and transitive package 
 
 ## Offline connection recovery
 
-Local restoration does not depend on endpoint authorization. `WorkspaceServices.sessions()` reads cached descriptors, preferences and repositories only. Bootstrap restores the active editor first, then `refreshRemote()` checks the connection and discovers remote manifests. A failed discovery never clears the local catalog or replaces the active editor. Without cached spaces, the connection selector exposes the same recovery action.
+Restoration follows provider capabilities. Device restoration does not depend on endpoint authorization; folder content requires access to the original folder. `WorkspaceServices.sessions()` reads local descriptors and preferences only. Bootstrap opens the saved workspace through its provider; folder access is checked before opening content. `refreshRemote()` discovers remote manifests. A failed discovery never clears the local catalog or replaces the active editor. Without cached spaces, the connection selector exposes the same recovery action.
 
 `ConnectionAdapter` is a host-only contract: `supportsSync`, noninteractive `getAccessState(workspaceId?)`, optional interactive `reauthorize(workspaceId?)`, state subscription and error classification. States distinguish available, reauthorization-required, unreachable, unrecoverable and forbidden, scoped to a connection or workspace. `ConnectionAccessError` carries this structured state through content operations, including failures partway through publication. Resource-level `AccessPolicy` denial remains a separate publication issue and does not imply that logging in again will grant access.
 
-The folder adapter owns permission queries and requests. Requests execute immediately in the user's click stack, before flushing or awaiting other operations. Background tasks never prompt. The host gates each queued synchronization run, retains local writes during authorization suspension, retries transient endpoint errors, and resumes affected runners after authorization succeeds. Concurrent authorization clicks share a promise; disconnect invalidates late results. Reauthorization must restore the same endpoint and identity: an adapter must return failure for an identity mismatch and must never silently retarget cached drafts.
+The folder adapter owns permission queries and requests. Requests execute immediately in the user's click stack, before flushing or awaiting other operations. Background tasks never prompt. For replica providers the host gates queued synchronization and retains local drafts. For direct folder repositories it checks access before opening, makes an open editor read-only on detected access loss, and retains unfinished journal operations until authorization succeeds. Concurrent authorization clicks share a promise; disconnect invalidates late results. Reauthorization must restore the same endpoint and identity: an adapter must return failure for an identity mismatch and must never silently retarget cached drafts.
 
-The device implementation has no remote capability. The Web UI checks capabilities instead of folder-specific connection kinds. Future OAuth adapters can implement the same contract without changing editor sessions or local repositories. No OAuth/GitHub implementation is included.
+The device implementation has no remote capability. The Web UI checks capabilities instead of folder-specific connection kinds. Future OAuth adapters can implement the connection contract and supply their own repository/cache policy without changing editor sessions. No OAuth/GitHub implementation is included.

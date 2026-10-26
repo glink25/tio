@@ -1,6 +1,11 @@
 import { prepareAsset } from '@tio/assets';
 import {
   createDomain,
+  navigationObject,
+  type ObjectPage,
+  type RecordQuery,
+  type SearchQuery,
+  type SearchPage,
   type Domain,
   fullAccess,
   assertAccess,
@@ -23,6 +28,11 @@ import { createStore } from 'zustand/vanilla';
 import { executeCommand, fieldOperations, type WorkspaceCommand } from './commands';
 export interface WorkspaceState {
   objects: TioObject[];
+  loads: Record<string, 'loading' | 'ready' | 'missing' | 'denied' | 'error'>;
+  loadErrors: Record<string, string>;
+  navigationComplete: boolean;
+  writable: boolean;
+  version: number;
   status: 'loading' | 'saved' | 'saving' | 'error';
   pending: number;
   error: Error | null;
@@ -41,6 +51,11 @@ interface PendingCommand {
 }
 export const emptyWorkspaceState: WorkspaceState = {
   objects: [],
+  loads: {},
+  loadErrors: {},
+  navigationComplete: false,
+  writable: true,
+  version: 0,
   status: 'loading',
   pending: 0,
   error: null,
@@ -52,6 +67,17 @@ export class WorkspaceRuntime {
   private store = createStore<WorkspaceState>(() => ({ ...emptyWorkspaceState }));
   readonly state: Pick<typeof this.store, 'getState' | 'getInitialState' | 'subscribe'> =
     this.store;
+  private navigation = new Map<string, TioObject>();
+  private reads = new Map<string, Promise<void>>();
+  private preparing: Promise<void> | null = null;
+  private preparingCount = 0;
+  private waiting: {
+    intent: WorkspaceCommand;
+    remember: boolean;
+    assets: ReadonlyMap<string, AssetData>;
+    receipt?: Pick<PendingCommand, 'guard' | 'complete' | 'reject'>;
+  }[] = [];
+  private retained = new Map<string, number>();
   private baseline = new Map<string, WorkspaceEntry>();
   private pending: PendingCommand[] = [];
   private history: WorkspaceCommand[] = [];
@@ -72,11 +98,21 @@ export class WorkspaceRuntime {
     repository: WorkspaceRepository,
     access: AccessPolicy = fullAccess,
     domain: Domain = createDomain(),
+    options: { targetId?: string } = {},
   ) {
     const runtime = new WorkspaceRuntime(repository, access, domain);
     runtime.unsubscribe = repository.subscribeChanges((event) => runtime.ingest(event));
     try {
-      await runtime.refresh(true);
+      if (repository.queryNavigation && repository.readObjects) {
+        await runtime.loadNavigation();
+        const target =
+          options.targetId ??
+          [...runtime.navigation.values()].find(
+            (o) => ['page', 'database'].includes(o.type) && !o.deleted,
+          )?.id;
+        if (target) await runtime.ensure([target]);
+        runtime.publish();
+      } else await runtime.refresh(true);
       return runtime;
     } catch (error) {
       runtime.dispose();
@@ -95,6 +131,10 @@ export class WorkspaceRuntime {
     for (const entry of entries) {
       const current = this.baseline.get(entry.object.id);
       if (!current || entry.revision > current.revision) this.baseline.set(entry.object.id, entry);
+      this.retained.delete(entry.object.id);
+      this.retained.set(entry.object.id, Date.now());
+      if (['workspace', 'page', 'database', 'databaseView'].includes(entry.object.type))
+        this.navigation.set(entry.object.id, navigationObject(entry.object));
     }
   }
   private publish() {
@@ -104,44 +144,287 @@ export class WorkspaceRuntime {
           command.confirmed ? state : executeCommand(command.intent, state, undefined, this.domain),
         [...this.baseline.values()].map((e) => e.object),
       );
+      const ids = new Set(objects.map((o) => o.id));
       this.store.setState({
-        objects,
+        version: this.version,
+        objects: [...objects, ...[...this.navigation.values()].filter((o) => !ids.has(o.id))],
+        loads: {
+          ...this.store.getState().loads,
+          ...Object.fromEntries(objects.map((o) => [o.id, 'ready' as const])),
+        },
         lifecycle: this.closing ? 'closing' : this.pending.length ? 'flushing' : 'ready',
-        pending: this.pending.length,
+        pending: this.pending.length + this.preparingCount,
         canUndo: this.history.length > 0,
-        status: this.store.getState().error ? 'error' : this.pending.length ? 'saving' : 'saved',
+        status: this.store.getState().error
+          ? 'error'
+          : this.pending.length || this.preparingCount
+            ? 'saving'
+            : 'saved',
       });
     } catch (error) {
       this.fail(error);
     }
   }
   private fail(error: unknown) {
+    if (
+      this.repository.storageCapabilities?.offline === false &&
+      error instanceof HostError &&
+      error.code === 'permission'
+    )
+      this.setWritable(false);
     this.store.setState({
       status: 'error',
       lifecycle: 'error',
       error: error instanceof Error ? error : new Error(String(error)),
-      pending: this.pending.length,
+      pending: this.pending.length + this.preparingCount,
     });
   }
   private async refresh(initial = false) {
     const generation = ++this.readGeneration;
     try {
-      const { entries, version } = await (this.version && this.repository.readChanges
+      const { entries, version } = await (this.repository.readChanges
         ? this.repository.readChanges(this.version)
         : this.repository.readSnapshot());
       if (this.disposed || generation !== this.readGeneration) return;
       this.version = Math.max(this.version, version);
       for (const [id, event] of this.events)
         if (event.version <= this.version) this.events.delete(id);
-      this.accept(entries);
+      if (this.repository.queryNavigation) {
+        for (const entry of entries) {
+          if (['workspace', 'page', 'database', 'databaseView'].includes(entry.object.type))
+            this.navigation.set(entry.object.id, navigationObject(entry.object));
+        }
+        this.accept(entries.filter((e) => this.baseline.has(e.object.id)));
+      } else this.accept(entries);
       this.publish();
     } catch (error) {
       if (!this.disposed && generation === this.readGeneration) this.fail(error);
       if (initial) throw error;
     }
   }
+  private async loadNavigation() {
+    let after: string | undefined;
+    let initialVersion: number | undefined;
+    do {
+      const page = await this.repository.queryNavigation!({ after, limit: 250 });
+      if (this.disposed) return;
+      initialVersion ??= page.version;
+      for (const object of page.items) this.navigation.set(object.id, object);
+      if (page.next && page.next === after)
+        throw new HostError('invalid', 'Navigation cursor did not advance');
+      if (!page.complete && !page.next)
+        throw new HostError('unavailable', 'Navigation is incomplete');
+      after = page.next;
+      this.publish();
+    } while (after);
+    this.version = initialVersion ?? 0;
+    this.store.setState({ navigationComplete: true });
+  }
+  /** Loading a body never advances the workspace change cursor. */
+  async ensure(ids: string[], force = false): Promise<void> {
+    if (this.disposed) throw new HostError('closed');
+    await Promise.all(
+      [...new Set(ids.filter(Boolean))].map((id) => {
+        if (this.reads.has(id)) return this.reads.get(id)!;
+        if (!force && this.baseline.has(id)) return Promise.resolve();
+        this.store.setState({ loads: { ...this.store.getState().loads, [id]: 'loading' } });
+        const work = (async () => {
+          try {
+            const page = this.repository.readObjects
+              ? await this.repository.readObjects([id])
+              : await this.repository.readSnapshot();
+            if (this.disposed) return;
+            const entry = page.entries.find((e) => e.object.id === id);
+            if (entry) this.accept([entry]);
+            else this.baseline.delete(id);
+            this.store.setState({
+              loads: {
+                ...this.store.getState().loads,
+                [id]: entry ? 'ready' : page.denied?.includes(id) ? 'denied' : 'missing',
+              },
+            });
+            this.publish();
+          } catch (error) {
+            if (!this.disposed)
+              this.store.setState({
+                loads: {
+                  ...this.store.getState().loads,
+                  [id]:
+                    error instanceof HostError && error.code === 'permission' ? 'denied' : 'error',
+                },
+                loadErrors: { ...this.store.getState().loadErrors, [id]: String(error) },
+              });
+            throw error;
+          } finally {
+            this.reads.delete(id);
+          }
+        })();
+        this.reads.set(id, work);
+        return work;
+      }),
+    );
+  }
+  /** Pin visible content; only clean, unpinned bodies are eligible for eviction. */
+  private pins = new Map<string, number>();
+  retain(ids: string[]) {
+    ids.forEach((id) => this.pins.set(id, (this.pins.get(id) ?? 0) + 1));
+    return () => {
+      ids.forEach((id) => {
+        const count = (this.pins.get(id) ?? 1) - 1;
+        if (count) this.pins.set(id, count);
+        else this.pins.delete(id);
+      });
+      this.evict();
+    };
+  }
+  private evict() {
+    if (this.pending.length || this.preparing) return;
+    for (const id of this.retained.keys()) {
+      if (this.baseline.size <= 256) break;
+      if (this.pins.has(id)) continue;
+      this.baseline.delete(id);
+      this.retained.delete(id);
+      const loads = { ...this.store.getState().loads };
+      delete loads[id];
+      this.store.setState({ loads });
+    }
+    this.publish();
+  }
+  async loadTarget(id: string) {
+    await this.ensure([id]);
+    const object = this.baseline.get(id)?.object;
+    if (object?.databaseId) await this.ensure([object.databaseId]);
+    if (object) await this.loadValues([object]);
+  }
+  private async loadValues(objects: TioObject[], seen = new Set<string>()) {
+    for (const object of objects) {
+      if (seen.has(object.id)) continue;
+      seen.add(object.id);
+      if (!object.databaseId) continue;
+      await this.ensure([object.databaseId]);
+      const db = this.baseline.get(object.databaseId)?.object;
+      const ids: string[] = [];
+      for (const field of db?.fields ?? []) {
+        const value = object.properties?.[field.id];
+        const values = Array.isArray(value) ? value : value ? [value] : [];
+        if (field.type === 'relation')
+          ids.push(...values.filter((v): v is string => typeof v === 'string'));
+        if (field.type === 'files')
+          ids.push(
+            ...values
+              .filter((v): v is string => typeof v === 'string' && v.startsWith('asset:'))
+              .map((v) => v.slice(6)),
+          );
+      }
+      await this.ensure(ids.filter((id) => !seen.has(id)));
+      await this.loadValues(
+        ids.flatMap((id) => (this.baseline.has(id) ? [this.baseline.get(id)!.object] : [])),
+        seen,
+      );
+    }
+  }
+  async records(query: RecordQuery): Promise<ObjectPage> {
+    if (!this.repository.queryRecords)
+      throw new HostError('unsupported', 'Record queries unavailable');
+    const page = await this.repository.queryRecords(query);
+    if (this.disposed) throw new HostError('closed');
+    this.accept(page.entries);
+    await this.loadValues(page.entries.map((e) => e.object));
+    this.publish();
+    return page;
+  }
+  async loadDatabase(id: string) {
+    await this.ensure([id]);
+    if (this.repository.queryObjects) {
+      let after: string | undefined;
+      do {
+        const page = await this.repository.queryObjects({
+          scope: { type: 'databaseView' },
+          limit: 250,
+          after,
+        });
+        if (this.disposed) return;
+        this.accept(page.entries.filter((e) => e.object.databaseId === id));
+        after = page.next;
+      } while (after);
+      this.publish();
+    }
+  }
+  async search(query: SearchQuery): Promise<SearchPage> {
+    if (!this.repository.search) throw new HostError('unsupported', 'Search unavailable');
+    return this.repository.search(query);
+  }
+  async exportObjects(): Promise<TioObject[]> {
+    await this.flush();
+    if (!this.repository.scan)
+      return (await this.repository.readSnapshot()).entries.map((e) => e.object);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const objects: TioObject[] = [];
+      let after: string | undefined, version: number | undefined;
+      let consistent = true;
+      do {
+        const page = await this.repository.scan({ after, limit: 250 });
+        version ??= page.version;
+        if (page.version !== version) {
+          consistent = false;
+          break;
+        }
+        objects.push(...page.entries.map((e) => e.object));
+        if (page.next && page.next === after)
+          throw new HostError('invalid', 'Scan cursor did not advance');
+        after = page.next;
+      } while (after);
+      if (consistent) return objects;
+    }
+    throw new HostError('conflict', 'Workspace changed during export; retry');
+  }
+  private dependencies(intent: WorkspaceCommand) {
+    const ids: string[] = [];
+    if ('id' in intent) ids.push(intent.id);
+    if (intent.type === 'move' && intent.parentId) ids.push(intent.parentId);
+    if (intent.type === 'create') {
+      if (intent.embed) ids.push(intent.embed.pageId);
+      for (const object of intent.objects)
+        if (object.databaseId && !intent.objects.some((o) => o.id === object.databaseId))
+          ids.push(object.databaseId);
+    }
+    if (intent.type === 'checked') ids.push(...intent.expected.map((o) => o.id));
+    if (intent.type === 'restore') ids.push(...intent.after.map((o) => o.id));
+    if (intent.type === 'move') {
+      let parent = intent.parentId;
+      const seen = new Set<string>();
+      while (parent && !seen.has(parent)) {
+        seen.add(parent);
+        ids.push(parent);
+        parent =
+          (this.baseline.get(parent)?.object ?? this.navigation.get(parent))?.parentId ?? null;
+      }
+    }
+    for (const id of [...ids]) {
+      const object = this.baseline.get(id)?.object ?? this.navigation.get(id);
+      if (object?.databaseId) ids.push(object.databaseId);
+    }
+    return [...new Set(ids)].filter(
+      (id) =>
+        !this.store
+          .getState()
+          .objects.some(
+            (o) =>
+              o.id === id &&
+              this.pending.some(
+                (p) => p.intent.type === 'create' && p.intent.objects.some((o) => o.id === id),
+              ),
+          ),
+    );
+  }
+  setWritable(writable: boolean) {
+    this.store.setState({ writable });
+  }
   can(object: TioObject, operation: AccessOperation = 'update', fieldId?: string) {
-    return this.access.allows(resourceOf(object, fieldId), operation);
+    return (
+      (operation === 'read' || this.store.getState().writable) &&
+      this.access.allows(resourceOf(object, fieldId), operation)
+    );
   }
   private closing?: Promise<void>;
   close() {
@@ -164,10 +447,29 @@ export class WorkspaceRuntime {
     remember = false,
     assets: ReadonlyMap<string, AssetData> = new Map(),
     receipt?: Pick<PendingCommand, 'guard' | 'complete' | 'reject'>,
+    prepared = false,
   ) {
-    if (this.disposed || this.closing) throw new Error('Workspace is closed');
+    if (this.disposed || (this.closing && !prepared)) throw new Error('Workspace is closed');
+    if (!prepared && !this.store.getState().writable) throw new HostError('permission');
+    const dependencies = this.dependencies(intent);
+    if (!prepared && (this.preparing || dependencies.some((id) => !this.baseline.has(id)))) {
+      this.waiting.push({ intent: structuredClone(intent), remember, assets, receipt });
+      this.preparingCount = this.waiting.length;
+      this.store.setState({ pending: this.pending.length + this.preparingCount, status: 'saving' });
+      this.prepareWaiting();
+      return;
+    }
+
     intent = { ...intent, timestamp: intent.timestamp ?? new Date().toISOString() };
-    const before = this.store.getState().objects;
+    const before = this.store
+      .getState()
+      .objects.filter(
+        (o) =>
+          this.baseline.has(o.id) ||
+          this.pending.some(
+            (p) => p.intent.type === 'create' && p.intent.objects.some((n) => n.id === o.id),
+          ),
+      );
     const next = executeCommand(intent, before, undefined, this.domain);
     const originals = new Map(before.map((o) => [o.id, o]));
     const changed = next.filter((o) => o !== originals.get(o.id));
@@ -200,12 +502,40 @@ export class WorkspaceRuntime {
     for (const [id, blob] of assets) this.blobs.set(id, blob);
     // Synchronous publication is the only UI write path; no component-level draft mirror.
     this.store.setState({
-      objects: next,
-      pending: this.pending.length,
+      objects: [
+        ...next,
+        ...[...this.navigation.values()].filter((o) => !next.some((n) => n.id === o.id)),
+      ],
+      pending: this.pending.length + this.preparingCount,
       canUndo: this.history.length > 0,
       status: this.store.getState().error ? 'error' : 'saving',
     });
     this.drain();
+  }
+  private prepareWaiting() {
+    if (this.preparing || this.store.getState().error || !this.waiting.length) return;
+    this.preparing = Promise.resolve()
+      .then(async () => {
+        while (this.waiting.length && !this.disposed) {
+          const command = this.waiting[0];
+          try {
+            for (const id of this.dependencies(command.intent)) await this.loadTarget(id);
+            for (const id of this.dependencies(command.intent))
+              if (!this.baseline.has(id))
+                throw new HostError('unavailable', `Command dependency unavailable: ${id}`);
+            this.dispatch(command.intent, command.remember, command.assets, command.receipt, true);
+            this.waiting.shift();
+            this.preparingCount = this.waiting.length;
+          } catch (error) {
+            this.fail(error);
+            break;
+          }
+        }
+      })
+      .finally(() => {
+        this.preparing = null;
+        this.publish();
+      });
   }
   private drain() {
     if (this.running || this.disposed || this.store.getState().error || !this.pending.length)
@@ -253,7 +583,16 @@ export class WorkspaceRuntime {
         const snapshot = await (this.repository.readChanges
           ? this.repository.readChanges(this.version)
           : this.repository.readSnapshot());
-        this.accept(snapshot.entries);
+        for (const entry of snapshot.entries)
+          if (['workspace', 'page', 'database', 'databaseView'].includes(entry.object.type))
+            this.navigation.set(entry.object.id, navigationObject(entry.object));
+        this.accept(
+          snapshot.entries.filter(
+            (e) =>
+              this.baseline.has(e.object.id) ||
+              this.dependencies(command.intent).includes(e.object.id),
+          ),
+        );
         this.version = snapshot.version;
         command.guard?.();
         const confirmed = [...this.baseline.values()].map((entry) => entry.object);
@@ -272,6 +611,15 @@ export class WorkspaceRuntime {
           this.domain,
         );
         const previous = new Map(confirmed.map((object) => [object.id, object]));
+        if (command.historyEntry?.type === 'restore') {
+          const changed = next.filter(
+            (o) => JSON.stringify(o) !== JSON.stringify(previous.get(o.id)),
+          );
+          command.historyEntry.before = structuredClone(
+            changed.flatMap((o) => (previous.has(o.id) ? [previous.get(o.id)!] : [])),
+          );
+          command.historyEntry.after = structuredClone(changed);
+        }
         for (const [id, asset] of command.assets) await this.repository.stageAsset(id, asset);
         command.request = {
           id: crypto.randomUUID(),
@@ -289,15 +637,22 @@ export class WorkspaceRuntime {
       }
       const result = await this.repository.commit(command.request);
       if (result.status === 'committed') {
-        this.version = result.version;
+        // Consume change events separately: a recovered receipt may carry a newer workspace version.
         return result.entries;
       }
-      if (result.status === 'compacted') return (await this.repository.readSnapshot()).entries;
+      if (result.status === 'compacted')
+        return (
+          await (this.repository.readObjects
+            ? this.repository.readObjects(command.request.changes.map((o) => o.id))
+            : this.repository.readSnapshot())
+        ).entries;
       command.request = undefined;
     }
     throw new HostError('unavailable', 'Workspace is busy; retry the pending command');
   }
   async flush() {
+    this.prepareWaiting();
+    while (this.preparing) await this.preparing;
     do {
       if (this.store.getState().error) throw this.store.getState().error;
       this.drain();
@@ -305,8 +660,12 @@ export class WorkspaceRuntime {
     } while (this.pending.length && !this.store.getState().error);
     if (this.store.getState().error) throw this.store.getState().error;
   }
+  async poll() {
+    if (!this.pending.length && !this.running && !this.preparing) await this.refresh();
+  }
   async retry() {
     this.store.setState({ error: null });
+    this.prepareWaiting();
     for (const command of this.pending) {
       if (!command.request) continue;
       const receipt = await this.repository.getCommitResult(command.request.id);
@@ -319,7 +678,7 @@ export class WorkspaceRuntime {
     await this.flush();
     await this.refresh();
   }
-  /** Atomic compare-and-set command with a local persistence acknowledgement. */
+  /** Checked command acknowledged using the provider's declared persistence guarantee. */
   checked(expected: TioObject[], changes: TioObject[], guard: () => void): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
@@ -389,7 +748,7 @@ export class WorkspaceRuntime {
     return structuredClone(this.store.getState().objects);
   }
   dispose(force = false) {
-    if (!force && this.pending.length)
+    if (!force && (this.pending.length || this.preparingCount))
       throw new HostError('pending', 'Flush pending changes before disposing');
     this.disposed = true;
     this.store.setState({ lifecycle: 'closed' });
@@ -402,6 +761,13 @@ export class WorkspaceRuntime {
 /** Shared editor-facing contract for Web composition and independent embedding. */
 export type EditorSession = Pick<
   WorkspaceRuntime,
+  | 'ensure'
+  | 'retain'
+  | 'loadTarget'
+  | 'loadDatabase'
+  | 'records'
+  | 'search'
+  | 'exportObjects'
   | 'checked'
   | 'state'
   | 'access'

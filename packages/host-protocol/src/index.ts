@@ -8,6 +8,12 @@ import {
   type WorkspaceSnapshot,
   type ObjectQuery,
   type ObjectPage,
+  type PageQuery,
+  type NavigationPage,
+  type RecordQuery,
+  type SearchQuery,
+  type SearchPage,
+  type RepositoryCapabilities,
 } from '@tio/core';
 
 import {
@@ -60,6 +66,7 @@ export class BridgeRepository implements WorkspaceRepository {
   private closed = false;
   private ready = false;
   capabilities: Capability[] = [];
+  storageCapabilities?: RepositoryCapabilities;
   constructor(
     private transport: Transport,
     readonly context: HostContext,
@@ -104,6 +111,7 @@ export class BridgeRepository implements WorkspaceRepository {
     )
       throw new HostError('invalid');
     this.capabilities = response.capabilities;
+    this.storageCapabilities = response.storageCapabilities;
     this.ready = true;
   }
   private request(method: string, payload?: unknown): Promise<any> {
@@ -132,6 +140,49 @@ export class BridgeRepository implements WorkspaceRepository {
         reject(error);
       }
     });
+  }
+  async readObjects(ids: string[]): Promise<WorkspaceSnapshot> {
+    return parseSnapshot(await this.request('readObjects', { ids }));
+  }
+  async queryNavigation(query: PageQuery): Promise<NavigationPage> {
+    return this.page(await this.request('queryNavigation', query));
+  }
+  async search(query: SearchQuery): Promise<SearchPage> {
+    const page = this.page(await this.request('search', query));
+    if (!Number.isSafeInteger(page.scanned) || page.scanned < 0) throw new HostError('invalid');
+    return page;
+  }
+  private page(value: any) {
+    if (
+      !value ||
+      !Number.isSafeInteger(value.version) ||
+      value.version < 0 ||
+      !Array.isArray(value.items) ||
+      typeof value.complete !== 'boolean' ||
+      (value.next !== undefined && typeof value.next !== 'string') ||
+      value.complete !== !value.next ||
+      value.items.some(
+        (o: any) =>
+          !o ||
+          typeof o.id !== 'string' ||
+          o.workspaceId !== this.context.workspaceId ||
+          typeof o.type !== 'string',
+      )
+    )
+      throw new HostError('invalid');
+    return value;
+  }
+  async queryRecords(query: RecordQuery): Promise<ObjectPage> {
+    const page = await this.request('queryRecords', query);
+    const snapshot = parseSnapshot(page);
+    if (page.next !== undefined && typeof page.next !== 'string') throw new HostError('invalid');
+    return { ...snapshot, next: page.next };
+  }
+  async scan(query: PageQuery): Promise<ObjectPage> {
+    const page = await this.request('scan', query);
+    const snapshot = parseSnapshot(page);
+    if (page.next !== undefined && typeof page.next !== 'string') throw new HostError('invalid');
+    return { ...snapshot, next: page.next };
   }
   async queryObjects(query: ObjectQuery): Promise<ObjectPage> {
     const page = await this.request('queryObjects', query);
@@ -242,10 +293,27 @@ export function serveHost(
         if (request.method === 'hello') {
           if (p?.version !== PROTOCOL_VERSION) throw new HostError('unsupported');
           ready = true;
-          result = { capabilities: extensions.map((e) => e.capability) };
+          result = {
+            capabilities: extensions.map((e) => e.capability),
+            storageCapabilities: repository.storageCapabilities,
+          };
         } else {
           if (!ready) throw new HostError('unsupported', 'Handshake required');
           switch (request.method) {
+            case 'readObjects':
+              if (!repository.readObjects) throw new HostError('unsupported');
+              result = await repository.readObjects(p.ids);
+              break;
+            case 'queryNavigation':
+            case 'queryRecords':
+            case 'search':
+            case 'scan': {
+              const method: ((query: any) => Promise<unknown>) | undefined =
+                repository[request.method];
+              if (!method) throw new HostError('unsupported');
+              result = await method.call(repository, p);
+              break;
+            }
             case 'queryObjects':
               if (!repository.queryObjects)
                 throw new HostError('unsupported', 'Paged queries unavailable');

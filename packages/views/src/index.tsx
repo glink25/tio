@@ -21,7 +21,9 @@ export function DatabaseView(props: ViewProps) {
   useTranslation();
   const { database, view, objects, onAdd } = props;
   const evaluator = useFieldEvaluator(objects);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [localSearch, setLocalSearch] = useState('');
+  const searchQuery = props.queryText ?? localSearch;
+  const setSearchQuery = props.onQueryText ?? setLocalSearch;
   const preferenceKey = `tio.mobile-table.${database.workspaceId}.${database.id}`;
   const [tablePreferences, setTablePreferences] = useState<Record<string, boolean>>({});
   let storedTable = false;
@@ -32,15 +34,17 @@ export function DatabaseView(props: ViewProps) {
   }
   const mobileTable = tablePreferences[preferenceKey] ?? storedTable;
   const mobile = useMobile();
-  const rows = queryRecords(objects, database, view, evaluator).filter(
-    (record) =>
-      !searchQuery ||
-      database.fields?.some((field) =>
-        displayValue(record.properties?.[field.id], field, objects)
-          .toLocaleLowerCase()
-          .includes(searchQuery.toLocaleLowerCase()),
-      ),
-  );
+  const rows =
+    props.queriedRows ??
+    queryRecords(objects, database, view, evaluator).filter(
+      (record) =>
+        !searchQuery ||
+        database.fields?.some((field) =>
+          displayValue(record.properties?.[field.id], field, objects)
+            .toLocaleLowerCase()
+            .includes(searchQuery.toLocaleLowerCase()),
+        ),
+    );
   const order = view.fieldOrder ?? database.fields?.map((f) => f.id) ?? [];
   const fields = [...(database.fields ?? [])]
     .filter(
@@ -106,3 +110,5 @@ export {
   type FieldInputProps,
 } from './extensions';
 export type { ViewProps, RowsProps } from './types';
+
+export { RecordQueryContext } from './extensions';

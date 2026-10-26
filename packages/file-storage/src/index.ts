@@ -110,3 +110,5 @@ export class FileWorkspaceContent implements WorkspaceContentPort {
     this.filesPresent.add(path);
   }
 }
+
+export { FileRepository, type FileJournal, type FileJournalState } from './repository';

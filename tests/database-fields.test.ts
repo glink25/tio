@@ -317,7 +317,7 @@ describe('write paths, timestamps and attachment persistence', () => {
       const remote = new FileWorkspaceContent(new MemoryProvider(), 'w');
       await new SyncCore(store, remote, 'e', 'w').run();
       await new SyncCore(fresh, remote, 'e', 'w').run();
-      const reopened = await WorkspaceRuntime.open(fresh);
+      const reopened = await WorkspaceRuntime.open(fresh, undefined, undefined, { targetId: 'r' });
       try {
         expect(reopened.snapshot().find((o) => o.id === 'r')?.properties?.files).toEqual([ref]);
         expect(new TextDecoder().decode((await reopened.readAsset(ref.slice(6)))?.bytes)).toBe(

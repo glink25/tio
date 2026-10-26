@@ -67,6 +67,33 @@ export function requestPayload(method: string | undefined, p: any) {
       (p.after !== undefined && typeof p.after !== 'string'))
   )
     throw new HostError('invalid');
+  if (
+    ['queryNavigation', 'queryRecords', 'search', 'scan'].includes(method ?? '') &&
+    (!integer(p.limit) ||
+      p.limit < 1 ||
+      p.limit > 1000 ||
+      (p.after !== undefined && typeof p.after !== 'string'))
+  )
+    throw new HostError('invalid');
+  if (
+    method === 'queryRecords' &&
+    (typeof p.databaseId !== 'string' ||
+      (p.view !== undefined && !record(p.view)) ||
+      (p.text !== undefined && typeof p.text !== 'string'))
+  )
+    throw new HostError('invalid');
+  if (
+    method === 'search' &&
+    (typeof p.text !== 'string' || (p.type !== undefined && typeof p.type !== 'string'))
+  )
+    throw new HostError('invalid');
+  if (
+    method === 'readObjects' &&
+    (!Array.isArray(p.ids) ||
+      p.ids.length > 1000 ||
+      !p.ids.every((id: unknown) => typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id)))
+  )
+    throw new HostError('invalid');
   if (method === 'readChanges' && !integer(p.since)) throw new HostError('invalid');
   if (method === 'acknowledgeCommits' && (typeof p.clientId !== 'string' || !integer(p.sequence)))
     throw new HostError('invalid');

@@ -1,3 +1,4 @@
+import type { PageQuery, RecordQuery, RepositoryCapabilities } from '@tio/core';
 import {
   applyCommit,
   createDomain,
@@ -18,6 +19,7 @@ import {
   type ObjectPage,
   type TioObject,
 } from '@tio/core';
+import { ScanningQueries } from '@tio/database/repository';
 import type { IDBPDatabase, IDBPObjectStore } from 'idb';
 
 import { openHostDatabase } from './database';
@@ -27,6 +29,22 @@ export interface Entry {
   sync: Record<string, { base: TioObject; revision: number }>;
 }
 export class LocalStore {
+  readonly storageCapabilities: RepositoryCapabilities = {
+    persistence: 'atomic',
+    offline: true,
+    prefetch: 'none',
+  };
+  private queries = new ScanningQueries(this);
+  queryNavigation(query: PageQuery) {
+    return this.queries.navigation(query);
+  }
+  queryRecords(query: RecordQuery) {
+    return this.queries.records(query);
+  }
+  scan(query: PageQuery) {
+    return this.queries.scan(query);
+  }
+
   db: Promise<IDBPDatabase>;
   private channel?: BroadcastChannel;
   private listeners = new Set<(event: WorkspaceEvent) => void>();
@@ -92,13 +110,16 @@ export class LocalStore {
     const tx = (await this.db).transaction(['objects', 'settings']);
     const version = (await tx.objectStore('settings').get(this.key('$version'))) ?? 0;
     const entries: WorkspaceSnapshot['entries'] = [];
+    const missing: string[] = [],
+      denied: string[] = [];
     for (const id of ids) {
       const entry: Entry | undefined = await tx.objectStore('objects').get(this.key(id));
       const object = entry && readableObject(this.access, entry.object);
       if (entry && object) entries.push({ object, revision: entry.revision });
+      else (entry ? denied : missing).push(id);
     }
     await tx.done;
-    return { version, entries };
+    return { version, entries, missing, denied };
   }
   async queryObjects(query: ObjectQuery): Promise<ObjectPage> {
     if (!Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > 1000)
@@ -435,3 +456,4 @@ export class LocalStore {
 }
 
 export { LocalCatalog } from './catalog';
+export { RecoveryJournal } from './journal';

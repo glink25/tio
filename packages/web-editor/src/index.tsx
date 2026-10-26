@@ -115,7 +115,9 @@ export async function mountEditor(
   container: HTMLElement,
   options: EditorOptions,
 ): Promise<EditorHandle> {
-  const runtime = await WorkspaceRuntime.open(options.repository, options.access, options.domain);
+  const runtime = await WorkspaceRuntime.open(options.repository, options.access, options.domain, {
+    targetId: options.target.id,
+  });
   const root = createRoot(container);
   let target = options.target;
   let presentation: Presentation = {

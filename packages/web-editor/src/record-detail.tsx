@@ -8,13 +8,19 @@ import { Trash2, Maximize2 } from 'lucide-react';
 
 import type { EditorController } from './controller';
 import { DatabaseEmbed } from './database-embed';
+import { LoadNotice } from './load-notice';
 import { PageLink } from './page-link';
 import { WebSlice } from './web-slice/view';
 export function RecordDetail({ model: m }: { model: EditorController }) {
   const t = useT();
   const record = m.record,
     db = m.activeDb;
-  if (!record || !db) return null;
+  if (!record || !db)
+    return m.recordId ? (
+      <Drawer title={t('database.detail')} close={() => m.setRecordId(null)}>
+        <LoadNotice runtime={m.runtime} id={m.recordId} />
+      </Drawer>
+    ) : null;
   return (
     <Drawer
       title={t('database.detail')}

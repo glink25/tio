@@ -12,6 +12,8 @@ export interface WorkspaceEntry {
 export interface WorkspaceSnapshot {
   version: number;
   entries: WorkspaceEntry[];
+  missing?: string[];
+  denied?: string[];
 }
 export type WorkspaceMutation = (objects: TioObject[]) => TioObject[];
 export interface AssetData {
@@ -66,7 +68,13 @@ export interface ObjectPage extends WorkspaceSnapshot {
 }
 export interface WorkspaceRepository extends AssetStore {
   queryObjects?(query: ObjectQuery): Promise<ObjectPage>;
+  /** Explicit full traversal, reserved for export and providers which scan locally. */
   readSnapshot(): Promise<WorkspaceSnapshot>;
+  storageCapabilities?: RepositoryCapabilities;
+  queryNavigation?(query: PageQuery): Promise<NavigationPage>;
+  queryRecords?(query: RecordQuery): Promise<ObjectPage>;
+  search?(query: SearchQuery): Promise<SearchPage>;
+  scan?(query: PageQuery): Promise<ObjectPage>;
   readObjects?(ids: string[]): Promise<WorkspaceSnapshot>;
   readChanges?(since: number): Promise<WorkspaceSnapshot>;
   acknowledgeCommits?(clientId: string, sequence: number): Promise<void>;
@@ -95,4 +103,42 @@ export interface SyncRepository extends SyncStateStore {
   readAsset(id: string): Promise<AssetData | undefined>;
   stageAsset(id: string, asset: AssetData): Promise<void>;
   recover(value: unknown): Promise<void>;
+}
+
+/** Capabilities describe guarantees, never implementation-specific storage kinds. */
+export interface RepositoryCapabilities {
+  persistence: 'atomic' | 'recoverable';
+  offline: boolean;
+  prefetch: 'none' | 'all';
+}
+export interface PageQuery {
+  after?: string;
+  limit: number;
+}
+export interface NavigationPage {
+  version: number;
+  items: TioObject[];
+  next?: string;
+  complete: boolean;
+}
+export interface RecordQuery extends PageQuery {
+  text?: string;
+  databaseId: string;
+  view?: TioObject;
+}
+export interface SearchQuery extends PageQuery {
+  text: string;
+  type?: string;
+}
+export interface SearchPage {
+  version: number;
+  items: TioObject[];
+  next?: string;
+  complete: boolean;
+  scanned: number;
+}
+/** Navigation summaries are never valid command baselines. */
+export function navigationObject(object: TioObject): TioObject {
+  const { blocks: _blocks, properties: _properties, ...metadata } = object;
+  return metadata as TioObject;
 }

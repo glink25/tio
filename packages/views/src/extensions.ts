@@ -1,4 +1,4 @@
-import type { Field, TioObject } from '@tio/core';
+import type { ObjectPage, RecordQuery, Field, TioObject } from '@tio/core';
 import { createContext, useContext, type ComponentType } from 'react';
 
 import type { RowsProps } from './types';
@@ -28,3 +28,7 @@ export interface ViewExtensions {
 }
 export const ViewExtensionsContext = createContext<ViewExtensions>({});
 export const useViewExtensions = () => useContext(ViewExtensionsContext);
+
+export const RecordQueryContext = createContext<
+  ((query: RecordQuery) => Promise<ObjectPage>) | undefined
+>(undefined);

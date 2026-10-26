@@ -11,8 +11,8 @@ import {
   ObjectIcon,
   cn,
 } from '@tio/ui';
-import { search } from '@tio/workspace';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useStore } from 'zustand';
 
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 function excerpt(o: TioObject) {
@@ -25,14 +25,39 @@ function excerpt(o: TioObject) {
   );
 }
 export function SearchDialog({ model: m }: { model: WorkspaceController }) {
+  const version = useStore(m.runtime!.state, (state) => state.version);
   const [type, setType] = useState('all');
   const [selected, setSelected] = useState('');
-  const results = search(
-    m.objects.filter((o) => o.workspaceId === m.session?.workspaceId),
-    m.query,
-  )
-    .filter((o) => type === 'all' || o.type === type)
-    .slice(0, 50);
+  const [results, setResults] = useState<TioObject[]>([]);
+  const [complete, setComplete] = useState(false);
+  const [error, setError] = useState('');
+  const [revision, retry] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setResults([]);
+    setComplete(false);
+    setError('');
+    const timer = setTimeout(() => {
+      void (async () => {
+        let after: string | undefined;
+        const found = new Map<string, TioObject>();
+        do {
+          const page = await m.runtime!.search({ text: m.query, type, after, limit: 250 });
+          if (cancelled) return;
+          for (const object of page.items) found.set(object.id, object);
+          setResults([...found.values()].slice(0, 50));
+          setComplete(page.complete);
+          after = page.next;
+        } while (after && !cancelled);
+      })().catch((error) => {
+        if (!cancelled) setError(String(error));
+      });
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [m.runtime, m.query, type, revision, version]);
   const item = results.find((o) => o.id === selected) ?? results[0];
   const name = (o: TioObject) =>
     o.type === 'record'
@@ -82,9 +107,21 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
             </Button>
           ))}
         </div>
+        {!complete && !error && (
+          <output className="text-xs text-muted">
+            {t('common.loading')} · {results.length}
+          </output>
+        )}
+        {error && (
+          <p role="alert">
+            {error} <Button onClick={() => retry((v) => v + 1)}>{t('common.retry')}</Button>
+          </p>
+        )}
         <div className="grid gap-5 md:grid-cols-[1.3fr_1fr]">
           <CommandList className="min-h-64">
-            <CommandEmpty className="p-8 text-center text-muted">{t('ui.noResults')}</CommandEmpty>
+            <CommandEmpty className="p-8 text-center text-muted">
+              {complete ? t('ui.noResults') : t('common.loading')}
+            </CommandEmpty>
             {results.map((o) => (
               <CommandItem key={o.id} value={o.id} onSelect={() => m.navigate(o)}>
                 <div className="flex gap-3">

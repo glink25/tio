@@ -143,7 +143,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
             presentation={presentation}
             runtime={m.runtime}
             workspaceId={m.session!.workspaceId}
-            target={{ id: current?.id ?? '' }}
+            target={{ id: m.selected || current?.id || '' }}
             renderHeader={header}
             pageActions={
               current && (

@@ -50,6 +50,11 @@ export function useEditorController(props: EditorSurfaceProps) {
   const t = useT();
   const { i18n } = useTranslation();
   const state = useStore(runtime.state);
+  useEffect(() => {
+    const release = runtime.retain([target.id]);
+    void runtime.loadTarget(target.id).catch(() => {});
+    return release;
+  }, [runtime, target.id]);
   const objects = useMemo(
     () => state.objects.filter((o) => o.workspaceId === workspaceId),
     [state.objects, workspaceId],
@@ -78,11 +83,20 @@ export function useEditorController(props: EditorSurfaceProps) {
     setEmbedPicker(false);
   }, [target.id]);
   const isVisible = visibility(objects);
-  const current = objects.find((o) => o.id === target.id && isVisible(o));
+  const current =
+    state.loads[target.id] === 'ready'
+      ? objects.find((o) => o.id === target.id && isVisible(o))
+      : undefined;
   const nav = objects.filter((o) => ['page', 'database'].includes(o.type) && isVisible(o));
   const record = objects.find(
     (o) => o.id === (recordId ?? (current?.type === 'record' ? current.id : null)) && !o.deleted,
   );
+  useEffect(() => {
+    if (!recordId) return;
+    const release = runtime.retain([recordId]);
+    void runtime.loadTarget(recordId).catch(() => {});
+    return release;
+  }, [runtime, recordId]);
   const activeDb = objects.find((o) => o.id === record?.databaseId);
   const fieldTarget = objects.find((o) => o.id === fieldDb);
   function report(error: unknown) {

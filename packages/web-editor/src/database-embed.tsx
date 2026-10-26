@@ -3,9 +3,10 @@ import { useT } from '@tio/i18n';
 import { Button, EmptyNotice } from '@tio/ui';
 import { DatabaseView } from '@tio/views';
 import { ArrowUpRight, Database } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { EditorController } from './controller';
+import { LoadNotice } from './load-notice';
 export function DatabaseEmbed({
   model: m,
   databaseId,
@@ -18,6 +19,27 @@ export function DatabaseEmbed({
   fullPage?: boolean;
 }) {
   const t = useT();
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    let live = true;
+    const release = m.runtime.retain([databaseId]);
+    setLoaded(false);
+    setLoadError('');
+    void m.runtime
+      .loadDatabase(databaseId)
+      .then(() => {
+        if (live) setLoaded(true);
+      })
+      .catch((error) => {
+        if (live) setLoadError(String(error));
+      });
+    return () => {
+      live = false;
+      release();
+    };
+  }, [m.runtime, databaseId, retry]);
   const db = m.objects.find((o) => o.id === databaseId);
   const views = m.objects.filter(
     (o) => o.type === 'databaseView' && o.databaseId === databaseId && !o.deleted,
@@ -33,6 +55,60 @@ export function DatabaseEmbed({
   });
   const referenced = views.find((o) => o.id === viewId);
   const view = views.find((o) => o.id === selected) ?? (fullPage ? views[0] : referenced);
+  const [rows, setRows] = useState<TioObject[]>([]);
+  const [next, setNext] = useState<string | undefined>();
+  const [cursor, setCursor] = useState<string | undefined>();
+  const [queryText, setQueryText] = useState('');
+  const [querying, setQuerying] = useState(false);
+  const viewKey = JSON.stringify(view);
+  useEffect(() => {
+    setCursor(undefined);
+    setRows([]);
+  }, [databaseId, viewKey, queryText]);
+  useEffect(() => {
+    if (!loaded || !view) return;
+    let live = true;
+    setQuerying(true);
+    void m.runtime
+      .records({ databaseId, view, text: queryText, after: cursor, limit: 100 })
+      .then((page) => {
+        if (!live) return;
+        setRows(page.entries.map((e) => e.object));
+        setNext(page.next);
+        setQuerying(false);
+      })
+      .catch((error) => {
+        if (live) {
+          setLoadError(String(error));
+          setQuerying(false);
+        }
+      });
+    return () => {
+      live = false;
+    };
+    // Query results update the projection; only view definitions and completed writes invalidate queries.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    m.runtime,
+    databaseId,
+    loaded,
+    viewKey,
+    queryText,
+    cursor,
+    m.state.pending,
+    m.state.version,
+    retry,
+  ]);
+  const rowIds = rows.map((row) => row.id).join(',');
+  useEffect(() => m.runtime.retain(rowIds ? rowIds.split(',') : []), [m.runtime, rowIds]);
+  if (loadError)
+    return (
+      <EmptyNotice>
+        {loadError}
+        <Button onClick={() => setRetry((n) => n + 1)}>{t('common.retry')}</Button>
+      </EmptyNotice>
+    );
+  if (!loaded) return <LoadNotice runtime={m.runtime} id={databaseId} loading />;
   if (!db || db.deleted) return <EmptyNotice>{t('database.missing')}</EmptyNotice>;
   const choose = (next: string) => {
     setSelected(next);
@@ -111,6 +187,11 @@ export function DatabaseEmbed({
         view={view}
         views={views}
         objects={m.objects}
+        queriedRows={rows
+          .map((row) => m.objects.find((o) => o.id === row.id) ?? row)
+          .filter((o) => !o.deleted)}
+        queryText={queryText}
+        onQueryText={setQueryText}
         readOnly={!writable}
         canEdit={(record, field) => m.can(record, field.id)}
         onCell={m.cell}
@@ -139,6 +220,15 @@ export function DatabaseEmbed({
           )
         }
       />
+      {querying && <output>{t('common.loading')}</output>}
+      <div className="flex gap-2">
+        {cursor && <Button onClick={() => setCursor(undefined)}>←</Button>}
+        {next && (
+          <Button disabled={querying} onClick={() => setCursor(next)}>
+            →
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

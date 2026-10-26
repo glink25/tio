@@ -5,11 +5,11 @@ import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
 import { useT, type TranslationKey } from '@tio/i18n';
 import { Button } from '@tio/ui';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 
 import { useDisplayValue } from './display-value';
 import type { FieldInputProps } from './extensions';
-import { useViewExtensions } from './extensions';
+import { RecordQueryContext, useViewExtensions } from './extensions';
 
 export const optionPalette: Record<string, string> = {
   gray: '#787774',
@@ -317,6 +317,52 @@ export function FieldInput(props: FieldInputProps) {
   const [draft, setDraft] = useState<unknown>(value ?? null);
   const [search, setSearch] = useState(''),
     [error, setError] = useState('');
+  const queryRecords = useContext(RecordQueryContext);
+  const [relationRows, setRelationRows] = useState<TioObject[]>([]);
+  const [relationNext, setRelationNext] = useState<string | undefined>();
+  const [relationAfter, setRelationAfter] = useState<string | undefined>();
+  const [relationLoading, setRelationLoading] = useState(false);
+  const [relationError, setRelationError] = useState('');
+  const [relationRetry, retryRelation] = useState(0);
+  useEffect(() => {
+    setRelationAfter(undefined);
+  }, [field.targetDatabaseId, search]);
+  useEffect(() => {
+    if (!queryRecords || field.type !== 'relation' || !field.targetDatabaseId || readOnly) return;
+    let live = true;
+    setRelationLoading(true);
+    setRelationError('');
+    void queryRecords({
+      databaseId: field.targetDatabaseId,
+      text: search,
+      after: relationAfter,
+      limit: 100,
+    })
+      .then((page) => {
+        if (live) {
+          setRelationRows(page.entries.map((e) => e.object));
+          setRelationNext(page.next);
+          setRelationLoading(false);
+        }
+      })
+      .catch((error) => {
+        if (live) {
+          setRelationError(String(error));
+          setRelationLoading(false);
+        }
+      });
+    return () => {
+      live = false;
+    };
+  }, [
+    queryRecords,
+    field.type,
+    field.targetDatabaseId,
+    readOnly,
+    search,
+    relationAfter,
+    relationRetry,
+  ]);
   const [uploading, setUploading] = useState(false),
     [failed, setFailed] = useState<File[]>([]);
   const change = (next: unknown) => {
@@ -411,7 +457,7 @@ export function FieldInput(props: FieldInputProps) {
   else if (['select', 'multiSelect', 'relation', 'status'].includes(field.type)) {
     const options =
       field.type === 'relation'
-        ? objects
+        ? (queryRecords ? relationRows : objects)
             .filter(
               (o) => o.type === 'record' && o.databaseId === field.targetDatabaseId && !o.deleted,
             )
@@ -466,7 +512,17 @@ export function FieldInput(props: FieldInputProps) {
           }}
           className="max-h-56 overflow-y-auto"
         >
-          {!filtered.length && <p className="p-2 text-xs text-muted">{t('database.noOptions')}</p>}
+          {relationLoading && <output>{t('common.loading')}</output>}
+          {relationError && (
+            <p role="alert">
+              {relationError}
+              <Button onClick={() => retryRelation((n) => n + 1)}>{t('common.retry')}</Button>
+            </p>
+          )}
+          {relationNext && <Button onClick={() => setRelationAfter(relationNext)}>→</Button>}
+          {!relationLoading && !relationError && !filtered.length && (
+            <p className="p-2 text-xs text-muted">{t('database.noOptions')}</p>
+          )}
           {filtered.map((o, i) => (
             <div key={o.id}>
               {field.type === 'status' && o.group && o.group !== filtered[i - 1]?.group && (

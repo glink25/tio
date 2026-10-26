@@ -6,10 +6,14 @@ import {
   type TioObject,
 } from '@tio/core';
 import type { WorkspaceContentPort } from '@tio/core';
-import { FileWorkspaceContent } from '@tio/file-storage';
+import type { WorkspaceRepository } from '@tio/core';
+import { WorkerSearch } from '@tio/database/search-browser';
+import { FileWorkspaceContent, FileRepository, type FileJournalState } from '@tio/file-storage';
+import { LocalStore, RecoveryJournal } from '@tio/local-store';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
 export interface ConnectionBinding {
   adapter: ConnectionAdapter;
+  repository?(workspaceId: string, instanceId: string): WorkspaceRepository & { close(): void };
   discover(): Promise<TioObject[]>;
   content(workspaceId: string): WorkspaceContentPort | undefined;
 }
@@ -17,6 +21,16 @@ export type ConnectionFactory = (
   connection: Connection,
   handle?: FileSystemDirectoryHandle,
 ) => ConnectionBinding;
+function searchable<T extends WorkspaceRepository & { close(): void }>(repository: T): T {
+  const search = new WorkerSearch(repository);
+  repository.search = (query) => search.search(query);
+  const close = repository.close.bind(repository);
+  repository.close = () => {
+    search.close();
+    close();
+  };
+  return repository;
+}
 export const createConnectionBinding: ConnectionFactory = (connection, handle) => {
   if (connection.kind === 'device')
     return {
@@ -26,6 +40,7 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
         subscribe: () => () => {},
         classifyError: (error) => connectionError(error, connection.id),
       },
+      repository: (_workspaceId, instanceId) => searchable(new LocalStore(instanceId)),
       discover: async () => [],
       content: () => {
         throw new Error('Device connection has no remote endpoint');
@@ -35,6 +50,22 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
   const provider = handle && new LocalFolderProvider(handle);
   return {
     adapter,
+    repository(workspaceId, instanceId) {
+      if (!provider) throw new Error('Folder unavailable');
+      const journal = new RecoveryJournal<FileJournalState>(instanceId);
+      const repository = new FileRepository(
+        new FileWorkspaceContent(provider, workspaceId),
+        workspaceId,
+        journal,
+        (work) => (navigator.locks ? navigator.locks.request('tio-' + instanceId, work) : work()),
+      );
+      const close = repository.close.bind(repository);
+      repository.close = () => {
+        close();
+        journal.close();
+      };
+      return searchable(repository);
+    },
     async discover() {
       if (!provider) return [];
       const workspaces: TioObject[] = [];

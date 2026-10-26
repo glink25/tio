@@ -28,12 +28,12 @@ Open `http://localhost:4175` once while online, wait for the application to fini
 
 ## Two storage modes
 
-| Mode         | Entry                                                    | Persistence                                                                              |
-| ------------ | -------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Offline      | Create or reopen a workspace                             | IndexedDB in this browser                                                                |
-| Local Folder | Connect a root folder, then create or select a workspace | IndexedDB first, then automatic two-way synchronization with `workspaces/<workspaceId>/` |
+| Mode         | Entry                                                    | Persistence                                                                            |
+| ------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Offline      | Create or reopen a workspace                             | IndexedDB in this browser                                                              |
+| Local Folder | Connect a root folder, then create or select a workspace | Direct files in `workspaces/<workspaceId>/`, with an unfinished-write recovery journal |
 
-Local Folder supports reopening existing workspaces, multiple independent workspaces in one connection, external JSON edits, explicit missing-file restoration, and permission recovery. The application manages its recognized business files only. Revoking access does not discard local drafts.
+Local Folder supports reopening existing workspaces, multiple independent workspaces in one connection, external JSON edits, explicit missing-file restoration, and permission recovery. The application manages its recognized business files only. Revoking access blocks folder writes; unfinished commits remain recoverable.
 
 ## Features
 
@@ -104,3 +104,5 @@ GitHub, formula/rollup evaluation, calendar views, and cross-workspace relations
 ## License
 
 MIT for this project's code. Third-party packages retain their respective licenses; see [third-party notes](dependencies.md).
+
+See [provider-owned asynchronous access](async-provider-access.md) for storage guarantees and loading behavior.

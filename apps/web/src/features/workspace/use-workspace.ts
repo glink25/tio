@@ -266,6 +266,12 @@ export function useWorkspace() {
   }
   async function authorize() {
     await services.authorize();
+    if (!runtimeRef.current && services.access?.code === 'available') {
+      const active = await services.setting('active');
+      const available = await services.sessions();
+      const saved = available.find((s) => s.id === active);
+      if (saved) await activate(saved);
+    }
   }
   async function logout() {
     try {
@@ -311,7 +317,7 @@ export function useWorkspace() {
       const runtime = runtimeRef.current!;
       await runtime.flush();
       const bytes = await (reading ? exportMarkdownZip : exportZip)(
-        runtime.snapshot(),
+        await runtime.exportObjects(),
         async (id) => (await runtime.readAsset(id))?.bytes,
       );
       const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'application/zip' }));

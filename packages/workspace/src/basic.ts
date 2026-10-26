@@ -14,6 +14,9 @@ export async function executeBasic(repository: WorkspaceRepository, command: Bas
   if (command.version !== 1) throw new HostError('unsupported');
   const runtime = await WorkspaceRuntime.open(repository);
   try {
+    await runtime.loadTarget(command.id);
+    if (command.type === 'createRecord') await runtime.ensure([command.databaseId]);
+    if (command.type === 'createPage' && command.parentId) await runtime.ensure([command.parentId]);
     const objects = runtime.snapshot();
     if (objects.some((o) => o.workspaceId !== command.workspaceId)) throw new HostError('invalid');
     const target = objects.find((o) => o.id === command.id);
