@@ -260,8 +260,12 @@ test('nested pages, references, workspace rename and dark theme persist', async 
   await page.locator('nav').getByRole('button', { name: '孙页面', exact: true }).click();
   await page.locator('.bn-editor').getByRole('button', { name: '随手记' }).click();
   await expect(page.getByLabel('页面标题')).toHaveValue('随手记');
-  await expect(page.locator('main').getByText('反向链接')).toBeVisible();
-  await page.locator('main').getByRole('button', { name: '孙页面', exact: true }).click();
+  await expect(page.locator('main .tio-page-references')).toHaveCount(0);
+  await page.locator('nav').getByRole('button', { name: '孙页面', exact: true }).click();
+  await expect(page.locator('.tio-page-references')).toContainText('引用的文档');
+  await expect(
+    page.locator('.tio-page-references').getByRole('button', { name: '随手记' }),
+  ).toBeVisible();
   await setLight(page);
   await expect(page.locator('html')).not.toHaveClass('dark');
 });

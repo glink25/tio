@@ -15,11 +15,14 @@ import type { ViewExtensions } from '@tio/views';
 import { newPage, newDatabase, type EditorSession } from '@tio/workspace';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
+
+import { memoryPermissions, type WebSliceOptions } from './web-slice/types';
 export interface EditorTarget {
   id: string;
   mode?: 'page' | 'preview';
 }
 export interface EditorSurfaceProps {
+  webSlice?: WebSliceOptions;
   views?: ViewExtensions;
   extensions?: EditorSchema;
   runtime: EditorSession;
@@ -36,6 +39,14 @@ export interface EditorSurfaceProps {
 }
 export function useEditorController(props: EditorSurfaceProps) {
   const { runtime, workspaceId, target, onNavigate } = props;
+  const sliceStore = useMemo(() => {
+    void runtime;
+    return memoryPermissions();
+  }, [runtime]);
+  const webSlice = {
+    ...props.webSlice,
+    permissionStore: props.webSlice?.permissionStore ?? sliceStore,
+  };
   const t = useT();
   const { i18n } = useTranslation();
   const state = useStore(runtime.state);
@@ -177,6 +188,8 @@ export function useEditorController(props: EditorSurfaceProps) {
     return runtime.upload(workspaceId, await fileData(file));
   };
   return {
+    webSlice,
+    hostReadOnly: !!props.readOnly,
     runtime,
     openFull: (id: string) => onNavigate({ id, mode: 'page' }),
     state,

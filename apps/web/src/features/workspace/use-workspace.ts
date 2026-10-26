@@ -328,10 +328,17 @@ export function useWorkspace() {
     try {
       const data = await importZip(new Uint8Array(await file.arrayBuffer()));
       const workspaceId = id('workspace');
+      const rekeySlices = (blocks: import('@tio/core').Block[]): import('@tio/core').Block[] =>
+        blocks.map((block) => ({
+          ...block,
+          ...(block.type === 'webSlice' ? { id: id('block') } : {}),
+          children: rekeySlices(block.children),
+        }));
       const s = await services.create(
         data.objects.map((o) => ({
           ...o,
           workspaceId,
+          ...(o.blocks ? { blocks: rekeySlices(o.blocks) } : {}),
           ...(o.type === 'workspace' ? { id: workspaceId } : {}),
         })),
         new Map(

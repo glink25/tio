@@ -34,6 +34,10 @@ interface PendingCommand {
   assets: ReadonlyMap<string, AssetData>;
   request?: CommitRequest;
   confirmed?: boolean;
+  historyEntry?: WorkspaceCommand;
+  guard?: () => void;
+  complete?: () => void;
+  reject?: (error: unknown) => void;
 }
 export const emptyWorkspaceState: WorkspaceState = {
   objects: [],
@@ -159,6 +163,7 @@ export class WorkspaceRuntime {
     intent: WorkspaceCommand,
     remember = false,
     assets: ReadonlyMap<string, AssetData> = new Map(),
+    receipt?: Pick<PendingCommand, 'guard' | 'complete' | 'reject'>,
   ) {
     if (this.disposed || this.closing) throw new Error('Workspace is closed');
     const before = this.store.getState().objects;
@@ -173,21 +178,23 @@ export class WorkspaceRuntime {
         throw new HostError('permission');
       }
     }
+    let historyEntry: WorkspaceCommand | undefined;
     if (remember) {
-      this.history.push({
+      historyEntry = {
         type: 'restore',
         before: structuredClone(
           changed.flatMap((o) => (originals.has(o.id) ? [originals.get(o.id)!] : [])),
         ),
         after: structuredClone(changed),
-      });
+      };
+      this.history.push(historyEntry);
       while (
         this.history.length > 100 ||
         new TextEncoder().encode(JSON.stringify(this.history)).length > 8 * 1024 * 1024
       )
         this.history.shift();
     }
-    const command = { intent: structuredClone(intent), assets };
+    const command = { intent: structuredClone(intent), assets, historyEntry, ...receipt };
     this.pending.push(command);
     for (const [id, blob] of assets) this.blobs.set(id, blob);
     // Synchronous publication is the only UI write path; no component-level draft mirror.
@@ -210,11 +217,20 @@ export class WorkspaceRuntime {
             const entries = await this.commitCommand(command);
             this.accept(entries);
             this.pending.shift();
+            command.complete?.();
             for (const id of command.assets.keys()) this.blobs.delete(id);
             this.publish();
             if (command.request?.sequence)
               await this.repository.acknowledgeCommits?.(this.clientId, command.request.sequence);
           } catch (error) {
+            if (command.intent.type === 'checked' && !command.request) {
+              this.pending.shift();
+              if (command.historyEntry)
+                this.history = this.history.filter((entry) => entry !== command.historyEntry);
+              command.reject?.(error);
+              this.publish();
+              continue;
+            }
             this.fail(error);
           }
         }
@@ -232,11 +248,13 @@ export class WorkspaceRuntime {
         const receipt = await this.repository.getCommitResult(command.request.id);
         if (receipt?.status === 'committed') return receipt.entries;
       } else {
+        command.guard?.();
         const snapshot = await (this.repository.readChanges
           ? this.repository.readChanges(this.version)
           : this.repository.readSnapshot());
         this.accept(snapshot.entries);
         this.version = snapshot.version;
+        command.guard?.();
         const confirmed = [...this.baseline.values()].map((entry) => entry.object);
         const recovery: unknown[] = [];
         const next = executeCommand(
@@ -299,6 +317,21 @@ export class WorkspaceRuntime {
     // Receipt lookup precedes snapshot publication, including recovery from lost ACKs.
     await this.flush();
     await this.refresh();
+  }
+  /** Atomic compare-and-set command with a local persistence acknowledgement. */
+  checked(expected: TioObject[], changes: TioObject[], guard: () => void): Promise<void> {
+    return new Promise((resolve, reject) => {
+      try {
+        guard();
+        this.dispatch({ type: 'checked', expected, changes }, true, new Map(), {
+          guard,
+          complete: resolve,
+          reject,
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
   }
   patch(id: string, changes: Partial<TioObject>, remember = false) {
     this.dispatch({ type: 'patch', id, changes }, remember);
@@ -368,6 +401,7 @@ export class WorkspaceRuntime {
 /** Shared editor-facing contract for Web composition and independent embedding. */
 export type EditorSession = Pick<
   WorkspaceRuntime,
+  | 'checked'
   | 'state'
   | 'access'
   | 'can'

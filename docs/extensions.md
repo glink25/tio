@@ -31,3 +31,5 @@ Field definitions validate values at the host boundary, including callers that b
 The current AST uses BlockNote-compatible tables. This is an explicit format boundary, not a claim that every future BlockNote schema will deserialize identically. `tests/editor-codec.test.ts` and the browser table test guard unknown nested inline/style preservation and table edits. `tests/extensions.test.ts` guards independent domains and validators through commands, commits and files.
 
 Workspace packages currently export TypeScript source for monorepo consumers. The standalone editor production bundle is a browser embedding artifact, not a published npm SDK with declarations and semver guarantees. Public SDK packaging and third-party plugin distribution are separate release work.
+
+The built-in `webSlice` block provides page-scoped HTML applications with host-owned permissions. Custom editor schemas should extend `defaultEditorSchema` to retain it. See [Web Slice SDK and embedding](web-slice.md).

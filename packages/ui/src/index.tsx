@@ -106,11 +106,13 @@ export function Drawer({
   close,
   children,
   actions,
+  closeLabel,
 }: {
   title: string;
   close: () => void;
   children: ReactNode;
   actions?: ReactNode;
+  closeLabel?: string;
 }) {
   const t = useT();
   useOverlayBack(close);
@@ -132,7 +134,7 @@ export function Drawer({
             <div className="flex items-center gap-2">
               {actions}
               <Dialog.Close asChild>
-                <IconButton label={t('database.closeRecord')} className="p-1">
+                <IconButton label={closeLabel ?? t('database.closeRecord')} className="p-1">
                   <X size={20} />
                 </IconButton>
               </Dialog.Close>

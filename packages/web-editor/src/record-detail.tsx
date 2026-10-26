@@ -9,6 +9,7 @@ import { Trash2, Maximize2 } from 'lucide-react';
 import type { EditorController } from './controller';
 import { DatabaseEmbed } from './database-embed';
 import { PageLink } from './page-link';
+import { WebSlice } from './web-slice/view';
 export function RecordDetail({ model: m }: { model: EditorController }) {
   const t = useT();
   const record = m.record,
@@ -81,6 +82,7 @@ export function RecordContent({ model: m }: { model: EditorController }) {
           onChange={(b, p) => m.changeBlocks(record, b, p)}
           upload={m.upload}
           resolve={m.resolve}
+          renderWebSlice={(block) => <WebSlice model={m} page={record} block={block} />}
           renderPageReference={(id) => <PageLink model={m} pageId={id} />}
           renderDatabase={(databaseId, viewId) => (
             <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />

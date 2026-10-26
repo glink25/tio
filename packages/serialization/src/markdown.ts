@@ -45,6 +45,12 @@ export async function exportMarkdownZip(
               .map((line) => `    ${line}`)
               .join('\n');
             break;
+          case 'webSlice':
+            result = `${escape(valueText(b.props.title))}\n\n${valueText(b.props.html)
+              .split('\n')
+              .map((line) => '    ' + line)
+              .join('\n')}`;
+            break;
           case 'pageReference':
             result = reference(valueText(b.props.pageId));
             break;

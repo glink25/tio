@@ -1,7 +1,7 @@
 import { titleOf, type TioObject } from '@tio/core';
 import { t, translateStatus } from '@tio/i18n';
 import { Button, IconButton, MenuItem, Modal, cn, useMobile } from '@tio/ui';
-import { EditorSurface } from '@tio/web-editor';
+import { EditorSurface, type WebSlicePermissionStore } from '@tio/web-editor';
 import { ChevronRight, PanelLeft, Star, Move, Maximize2 } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 
@@ -9,6 +9,41 @@ import { Sidebar, WorkspaceSwitcher } from '../features/workspace/sidebar';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { usePresentation } from '../services/browser-presentation';
 
+const slicePermissions: WebSlicePermissionStore = {
+  subscribe(key, listener) {
+    const local = (event: Event) => {
+      if ((event as CustomEvent).detail === key) listener();
+    };
+    const remote = (event: StorageEvent) => {
+      if (event.key === 'tio.slice.' + key || event.key === null) listener();
+    };
+    window.addEventListener('tio-slice-permission', local);
+    window.addEventListener('storage', remote);
+    return () => {
+      window.removeEventListener('tio-slice-permission', local);
+      window.removeEventListener('storage', remote);
+    };
+  },
+  get(key) {
+    try {
+      const value = JSON.parse(localStorage.getItem('tio.slice.' + key) ?? 'null');
+      if (
+        value &&
+        ['read', 'readWrite'].includes(value.data) &&
+        typeof value.allowExternalResources === 'boolean'
+      )
+        return value;
+    } catch {
+      /* Missing or damaged preferences use read-only defaults. */
+    }
+    return undefined;
+  },
+  set(key, value) {
+    localStorage.setItem('tio.slice.' + key, JSON.stringify(value));
+    window.dispatchEvent(new CustomEvent('tio-slice-permission', { detail: key }));
+  },
+};
+const webSlice = { permissionStore: slicePermissions, namespace: 'browser-profile' };
 export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
   const presentation = usePresentation();
   const mobile = useMobile();
@@ -104,6 +139,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
       >
         {m.runtime ? (
           <EditorSurface
+            webSlice={webSlice}
             presentation={presentation}
             runtime={m.runtime}
             workspaceId={m.session!.workspaceId}
@@ -160,6 +196,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
               </select>
             </div>
             <EditorSurface
+              webSlice={webSlice}
               presentation={presentation}
               runtime={m.runtime}
               workspaceId={m.session!.workspaceId}

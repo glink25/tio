@@ -5,6 +5,7 @@
 @source '../../ui/src';
 @source '../../views/src';
 @source '../../editor-blocknote/src';
+@source "../../editor-blocknote/node_modules/@blocknote/shadcn/src";
 @custom-variant dark (&:where(.dark, .dark *));
 @theme reference {
   --color-panel: #ffffff;
@@ -137,4 +138,194 @@
 .tio-editor .bn-block-content:has(.database-embed) {
   display: block !important;
   width: 100%;
+}
+
+/* BlockNote chrome uses the same surfaces and interaction states as @tio/ui.
+   Scope by chrome classes/slots so embedded application controls keep theirs. */
+.tio-editor .bn-toolbar,
+.tio-editor .bn-suggestion-menu,
+.tio-editor [data-slot='dropdown-menu-content'],
+.tio-editor [data-slot='dropdown-menu-sub-content'],
+.tio-editor [data-slot='select-content'],
+.tio-editor [data-slot='popover-content'] {
+  color: var(--popover-foreground);
+  background-color: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow:
+    0 8px 24px #00000018,
+    0 2px 6px #0000000a;
+}
+.tio-editor .bn-menu-dropdown,
+.tio-editor [data-slot='select-content'] {
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+}
+.tio-editor [data-slot='dropdown-menu-item'],
+.tio-editor [data-slot='dropdown-menu-sub-trigger'],
+.tio-editor [data-slot='dropdown-menu-checkbox-item'],
+.tio-editor [data-slot='select-item'] {
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.tio-editor [data-slot='dropdown-menu-checkbox-item'],
+.tio-editor [data-slot='select-item'] {
+  padding-right: 32px;
+}
+.tio-editor [data-slot='dropdown-menu-item'][data-highlighted],
+.tio-editor [data-slot='dropdown-menu-sub-trigger'][data-highlighted],
+.tio-editor [data-slot='dropdown-menu-sub-trigger'][data-popup-open],
+.tio-editor [data-slot='dropdown-menu-checkbox-item'][data-highlighted],
+.tio-editor [data-slot='select-item'][data-highlighted],
+.tio-editor .bn-toolbar button:hover,
+.tio-editor .bn-toolbar button[aria-pressed='true'],
+.tio-editor .bn-toolbar button[aria-expanded='true'] {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+.tio-editor .tio-block-delete,
+.tio-editor .tio-block-delete[data-highlighted] {
+  color: var(--destructive);
+}
+.tio-editor .tio-block-delete[data-highlighted] {
+  background-color: color-mix(in srgb, var(--destructive) 10%, var(--popover));
+}
+.tio-editor .bn-side-menu .tio-block-action {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  color: var(--color-muted);
+}
+.tio-editor .bn-side-menu .tio-block-action svg {
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+.tio-editor .bn-side-menu .tio-block-action:hover {
+  color: var(--color-ink);
+  background-color: var(--color-surface-hover);
+}
+.tio-editor .bn-side-menu .tio-block-action:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+/* Preserve BlockNote's button semantics, state rotation and event handlers. */
+.tio-editor .bn-toggle-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--color-secondary);
+}
+.tio-editor .bn-toggle-button > svg {
+  display: none;
+}
+.tio-editor .bn-toggle-button::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  background-color: currentColor;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='m9 6 6 6-6 6' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 16px 16px no-repeat;
+}
+@media (max-width: 767px) {
+  .tio-editor .bn-side-menu .tio-block-action,
+  .tio-editor .bn-toggle-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .tio-editor [data-slot='dropdown-menu-item'],
+  .tio-editor [data-slot='dropdown-menu-sub-trigger'],
+  .tio-editor [data-slot='dropdown-menu-checkbox-item'],
+  .tio-editor [data-slot='select-item'] {
+    min-height: 44px;
+  }
+}
+.tio-editor .bn-side-menu .tio-block-action[data-popup-open],
+.tio-editor .bn-side-menu .tio-block-action[aria-expanded='true'] {
+  color: var(--color-ink);
+  background-color: var(--color-surface-hover);
+}
+
+.tio-editor .bn-toolbar button {
+  color: var(--popover-foreground);
+}
+.tio-editor .bn-suggestion-menu [role='option']:hover,
+.tio-editor .bn-suggestion-menu [role='option'][aria-selected='true'] {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+/* Chinese labels must not collapse to individual characters in submenus. */
+.tio-editor .bn-color-picker-dropdown {
+  min-width: 176px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+}
+.tio-editor .bn-color-picker-dropdown [role='menuitemcheckbox'] {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+/* App text-secondary is a text color; shadcn's secondary badge is a surface. */
+.tio-editor .bn-suggestion-menu [data-slot='badge'] {
+  color: var(--secondary-foreground);
+  background-color: var(--secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-weight: 400;
+}
+/* Keep selection and keyboard navigation legible without blue focus chrome.
+   Explicit document text/background colors and iframe contents are untouched. */
+.tio-editor ::selection {
+  color: var(--color-ink);
+  background-color: var(--color-surface-hover);
+}
+.tio-editor .bn-block-content.ProseMirror-selectednode > *::after,
+.tio-editor .ProseMirror-selectednode > .bn-block-content > *::after,
+.tio-editor .bn-block-content .ProseMirror-selectednode::after,
+.tio-editor .bn-inline-content .ProseMirror-selectednode::after,
+.tio-editor .bn-block-outer[data-drop-target='true']::after {
+  background-color: transparent;
+  box-shadow: none;
+}
+.tio-editor .bn-block-outer[data-drop-target='true']::after {
+  outline: 1px solid var(--border);
+}
+.tio-editor :is(button, input, select, textarea, [tabindex]):focus-visible {
+  --tw-ring-color: transparent;
+  outline: 1px solid var(--ring);
+  outline-offset: 2px;
+}
+.tio-editor .bn-editor:focus,
+.tio-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.tio-editor .cm-activeLine,
+.tio-editor .cm-activeLineGutter {
+  background-color: var(--color-surface);
+}
+.tio-editor .cm-editor .cm-selectionBackground,
+.tio-editor .cm-editor.cm-focused .cm-selectionBackground {
+  background-color: var(--color-surface-hover);
+}
+.tio-editor [data-show-selection] {
+  color: var(--color-ink);
+  background-color: var(--color-surface-hover);
+}
+.tio-editor .bn-table-drop-cursor {
+  background-color: var(--color-muted);
+}
+.tio-editor .bn-editor .selectedCell::after {
+  background-color: transparent;
+  outline: 1px solid var(--border);
+}
+/* Contentless custom blocks can have a selection but no formatting actions.
+   Do not paint an empty padded/bordered toolbar as a tiny circular control. */
+.tio-editor .bn-formatting-toolbar:empty {
+  display: none;
 }

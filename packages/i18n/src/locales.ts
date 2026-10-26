@@ -84,6 +84,7 @@ export const en = {
   'page.expand': 'Expand or collapse',
   'page.children': 'Subpages',
   'page.backlinks': 'Linked from',
+  'page.references': 'Referenced documents',
 
   'common.close': 'Close',
   'common.cancel': 'Cancel',
@@ -323,6 +324,7 @@ export const zh: Record<keyof typeof en, string> = {
   'page.expand': '展开或收起',
   'page.children': '子页面',
   'page.backlinks': '反向链接',
+  'page.references': '引用的文档',
 
   'common.close': '关闭',
   'common.cancel': '取消',

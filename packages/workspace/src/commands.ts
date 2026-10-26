@@ -211,6 +211,7 @@ export function inverse(
 
 /** Serializable editing intents; closures are implementation details of the executor only. */
 export type WorkspaceCommand =
+  | { type: 'checked'; expected: TioObject[]; changes: TioObject[] }
   | { type: 'undelete'; id: string }
   | { type: 'patch'; id: string; changes: Partial<TioObject> }
   | { type: 'create'; objects: TioObject[]; embed?: { pageId: string; block: Block } }
@@ -227,6 +228,34 @@ export function executeCommand(
   domain = defaults(),
 ): TioObject[] {
   switch (command.type) {
+    case 'checked': {
+      for (const expected of command.expected)
+        if (
+          !same(
+            objects.find((o) => o.id === expected.id),
+            expected,
+          )
+        )
+          throw new HostError('conflict');
+      const expectedIds = new Set(command.expected.map((o) => o.id));
+      for (const change of command.changes) {
+        const old = objects.find((o) => o.id === change.id);
+        if (old && !expectedIds.has(old.id)) throw new HostError('conflict');
+        if (
+          old &&
+          (old.type !== change.type ||
+            old.workspaceId !== change.workspaceId ||
+            old.schemaVersion !== change.schemaVersion)
+        )
+          throw new HostError('invalid');
+        domain.objects.decode(change);
+      }
+      const replacements = new Map(command.changes.map((o) => [o.id, o]));
+      return [
+        ...objects.map((o) => replacements.get(o.id) ?? o),
+        ...command.changes.filter((o) => !objects.some((old) => old.id === o.id)),
+      ];
+    }
     case 'undelete': {
       const current = objects.find((o) => o.id === command.id);
       if (!current || !domain.objects.supports(current)) throw new Error('Object is not editable');

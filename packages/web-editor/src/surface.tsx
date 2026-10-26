@@ -1,4 +1,4 @@
-import { editable, titleOf } from '@tio/core';
+import { editable } from '@tio/core';
 import { Editor } from '@tio/editor-blocknote';
 import { useT } from '@tio/i18n';
 import {
@@ -28,8 +28,9 @@ import { useRef, useState, useEffect } from 'react';
 import { useEditorController, type EditorSurfaceProps } from './controller';
 import { DatabaseEmbed } from './database-embed';
 import { EditorDialogs } from './dialogs';
-import { PageLink, Backlinks } from './page-link';
+import { PageLink, ReferencedPages } from './page-link';
 import { RecordContent } from './record-detail';
+import { WebSlice } from './web-slice/view';
 
 export function EditorSurface(props: EditorSurfaceProps) {
   const t = useT();
@@ -222,6 +223,7 @@ export function EditorSurface(props: EditorSurfaceProps) {
                 onChange={(b, p) => m.changeBlocks(current, b, p)}
                 upload={m.upload}
                 resolve={m.resolve}
+                renderWebSlice={(block) => <WebSlice model={m} page={current} block={block} />}
                 renderPageReference={(id) => <PageLink model={m} pageId={id} />}
                 renderDatabase={(databaseId, viewId) => (
                   <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />
@@ -258,19 +260,7 @@ export function EditorSurface(props: EditorSurfaceProps) {
           ) : (
             <DatabaseEmbed key={current.id} model={m} databaseId={current.id} fullPage />
           )}
-          {m.nav
-            .filter((o) => o.parentId === current.id)
-            .map((o) => (
-              <Button
-                key={o.id}
-                className="mt-2 w-full justify-start"
-                onClick={() => m.navigate(o)}
-              >
-                <ObjectIcon type={o.type} />
-                {titleOf(o)}
-              </Button>
-            ))}
-          <Backlinks model={m} />
+          <ReferencedPages model={m} />
         </main>
       ) : (
         <div className="p-12 text-center">

@@ -3,6 +3,7 @@
 @source '../../../../packages/ui/src';
 @source '../../../../packages/views/src';
 @source '../../../../packages/editor-blocknote/src';
+@source "../../../../packages/editor-blocknote/node_modules/@blocknote/shadcn/src";
 @custom-variant dark (&:where(.dark, .dark *));
 @theme {
   --color-panel: #ffffff;

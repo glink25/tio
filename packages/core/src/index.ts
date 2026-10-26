@@ -217,6 +217,24 @@ function validateBlocks(value: unknown, ids = new Set<string>()) {
       ids.has(b.id)
     )
       throw new Error('非法或重复 Block');
+    if (b.type === 'webSlice') {
+      const p = b.props;
+      if (
+        typeof p.html !== 'string' ||
+        p.html.length > 512_000 ||
+        typeof p.title !== 'string' ||
+        p.title.length > 200 ||
+        p.runtimeVersion !== 1 ||
+        typeof p.height !== 'number' ||
+        !Number.isFinite(p.height) ||
+        p.height < 160 ||
+        p.height > 1200 ||
+        typeof p.autoHeight !== 'boolean' ||
+        !Array.isArray(b.children) ||
+        b.children.length
+      )
+        throw new Error('Invalid Web Slice');
+    }
     ids.add(b.id);
     validateBlocks(b.children, ids);
   }

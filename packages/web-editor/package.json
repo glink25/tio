@@ -12,6 +12,9 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@codemirror/lang-html": "^6.4.12",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.15",
     "@tio/assets": "workspace:*",
     "@tio/core": "workspace:*",
     "@tio/database": "workspace:*",
@@ -21,6 +24,7 @@
     "@tio/ui": "workspace:*",
     "@tio/views": "workspace:*",
     "@tio/workspace": "workspace:*",
+    "codemirror": "^6.0.2",
     "lucide-react": "1.61.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
