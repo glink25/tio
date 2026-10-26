@@ -83,6 +83,20 @@ function bootstrap(token: string) {
         call('page.updateBlock', { id, changes, version }),
       removeBlock: (id: string, version: string) => call('page.removeBlock', { id, version }),
     },
+    pages: {
+      get: (pageId: string) => ({
+        get: () => call('pages.get', { pageId }),
+        getBlocks: () => call('pages.getBlocks', { pageId }),
+        update: (changes: unknown, version: string) =>
+          call('pages.update', { pageId, changes, version }),
+        insertBlocks: (blocks: unknown[], version: string) =>
+          call('pages.insertBlocks', { pageId, blocks, version }),
+        updateBlock: (id: string, changes: unknown, version: string) =>
+          call('pages.updateBlock', { pageId, id, changes, version }),
+        removeBlock: (id: string, version: string) =>
+          call('pages.removeBlock', { pageId, id, version }),
+      }),
+    },
     databases: {
       list: () => call('databases.list'),
       get: table,

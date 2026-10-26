@@ -1,7 +1,6 @@
-import { titleOf } from '@tio/core';
 import { useT } from '@tio/i18n';
 import { Button, Modal } from '@tio/ui';
-import { Database, FileText, Plus } from 'lucide-react';
+import { Database, Plus } from 'lucide-react';
 
 import type { EditorController } from './controller';
 import { FieldManager } from './field-manager';
@@ -11,23 +10,6 @@ export function EditorDialogs({ model: m }: { model: EditorController }) {
   const t = useT();
   return (
     <>
-      {m.referencePicker && (
-        <Modal title={t('page.reference')} close={() => m.setReferencePicker(false)}>
-          {m.nav
-            .filter((o) => o.id !== m.current?.id)
-            .map((o) => (
-              <Button
-                key={o.id}
-                className="w-full justify-start"
-                onClick={() => m.referencePage(o.id)}
-              >
-                <FileText size={16} />
-                {titleOf(o)}
-              </Button>
-            ))}
-        </Modal>
-      )}
-
       {m.recordId && <RecordDetail model={m} />}
       {m.fieldTarget && (
         <Modal title={t('database.fieldManager')} close={() => m.setFieldDb(null)}>

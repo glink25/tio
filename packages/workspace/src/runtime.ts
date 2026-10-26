@@ -290,6 +290,16 @@ export class WorkspaceRuntime {
     }
     this.publish();
   }
+  async mentionCandidates(text: string, after?: string) {
+    if (this.disposed) throw new HostError('closed');
+    if (!this.repository.queryNavigation) throw new HostError('unsupported');
+    return this.repository.queryNavigation({ text, after, limit: 50, mentionsOnly: true });
+  }
+  async mentionMetadata(ids: string[]) {
+    if (this.disposed) throw new HostError('closed');
+    if (!this.repository.readMetadata) throw new HostError('unsupported');
+    return this.repository.readMetadata(ids);
+  }
   async loadTarget(id: string) {
     await this.ensure([id]);
     const object = this.baseline.get(id)?.object;
@@ -761,6 +771,8 @@ export class WorkspaceRuntime {
 /** Shared editor-facing contract for Web composition and independent embedding. */
 export type EditorSession = Pick<
   WorkspaceRuntime,
+  | 'mentionCandidates'
+  | 'mentionMetadata'
   | 'ensure'
   | 'retain'
   | 'loadTarget'

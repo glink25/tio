@@ -6,11 +6,11 @@ Web Slice embeds a complete HTML document in a sandboxed iframe. Insert **Web Sl
 
 Each instance has two host-owned settings: `data: 'read' | 'readWrite'` and `allowExternalResources: boolean`. Defaults are read-only and no external resources. Editing source preserves grants. Browser grants belong to the local browser profile, workspace, containing page and block ID. Copies/pastes receive new block IDs through BlockNote; user imports re-key Slice IDs. Grants are not exported or synchronized.
 
-The SDK sees the containing page or record body, plus databases directly referenced by its nested database-view blocks. All readable records, fields and views of those databases are available, independently of the displayed view. Page links, child pages, record bodies and relation targets are not followed. A record body does not automatically grant its parent database. Removing the final reference revokes subsequent access, but cannot retract values already delivered to code.
+The SDK sees the containing page or record body, plus databases directly referenced by its nested database-view blocks. All readable records, fields and views of those databases are available, independently of the displayed view. Direct inline mentions and the containing record’s readable single-select mention fields also grant their page/database targets. Child pages, database record bodies, relation targets, mentions in embedded database records and mentions inside target pages are not followed. Cross-workspace references never grant access. A record body does not automatically grant its parent database. Removing the final reference revokes subsequent access, but cannot retract values already delivered to code.
 
 Read-write grants allow ordinary block edits, record CRUD, field/view management, and creating a database with an atomic reference insertion. They do not allow deleting the containing page/database, moving resources, rewriting Slice code, changing grants or inserting a reference to an inaccessible existing database. Existing user/field permissions remain authoritative. Host `presentation.readOnly` prohibits writes; the editor's local reading mode does not disable a granted application.
 
-Formula/rollup evaluation is not implemented in Tio. The SDK exposes their field definitions but omits derived values, including cached values, and prohibits writing them.
+Tio implements formula/rollup evaluation for editor views and queries. The Slice SDK exposes their definitions but still omits derived record values, including cached values, and prohibits writing them.
 
 ## SDK v1
 
@@ -32,6 +32,7 @@ const unsubscribe = tio.subscribe((event) => {
 ```
 
 - `context.get()`: API version, containing page/instance IDs, theme, locale, timezone and effective instance permissions.
+- `pages.get(id)` returns a handle for a directly mentioned page, exposing `.get()`, `.getBlocks()`, `.update(changes, version)`, `.insertBlocks(blocks, version)`, `.updateBlock(id, changes, version)` and `.removeBlock(id, version)`. Target writes follow the instance read/write grant and host/resource permissions. Deleting or moving target pages and modifying Slice blocks/code are prohibited.
 - `page.get()` / `page.getBlocks()`: page metadata or `{blocks, version}`. Links remain references.
 - `page.update({title}, version)`: update the title.
 - `page.insertBlocks(blocks, version)`: append valid Tio blocks with distinct IDs.
@@ -88,3 +89,9 @@ Scripts run after SDK initialization; normal DOM operations, inline scripts and 
 - `pnpm check`
 
 The ledger example uses inline SVG, requires no network, initializes its own table, and keeps business data in ordinary database records.
+
+## Mention authority
+
+Mentioned databases use the existing `databases` API with readable records, fields and views, independently of the loaded editor cache. Mentioned pages use `pages.get(id)`; `page` still refers to the containing page/record. A removed final direct reference or deleted target revokes subsequent access. Scope and host permissions are rechecked after asynchronous reads and before queued commits; already delivered content cannot be recalled.
+
+Slice writes cannot introduce an out-of-scope mention in nested blocks, table cells or record properties. Existing unavailable references can be preserved or removed. Field schema changes cannot activate dormant values to expand the containing record's authority. Target references never grant recursive access.

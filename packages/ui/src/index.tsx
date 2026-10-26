@@ -10,6 +10,7 @@ import {
   type ButtonHTMLAttributes,
   type ReactNode,
 } from 'react';
+export { MentionContext, MentionLabel, MentionPicker } from './mentions';
 export const PortalContext = createContext<HTMLElement | undefined>(undefined);
 import { twMerge } from 'tailwind-merge';
 export function cn(...values: ClassValue[]) {

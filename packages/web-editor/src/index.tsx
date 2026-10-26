@@ -88,6 +88,7 @@ function Ready({ children, onReady }: { children: ReactNode; onReady?: () => voi
   return children;
 }
 export interface EditorOptions {
+  mentions?: import('@tio/core').MentionService;
   webSlice?: WebSliceOptions;
   domain?: Domain;
   views?: ViewExtensions;
@@ -135,6 +136,7 @@ export async function mountEditor(
     root.render(
       <Ready onReady={options.onReady}>
         <EditorSurface
+          mentions={options.mentions}
           webSlice={options.webSlice}
           showSaveState
           views={options.views}

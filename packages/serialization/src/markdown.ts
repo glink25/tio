@@ -1,4 +1,11 @@
-import { plainText, titleOf, valueText, type Block, type TioObject } from '@tio/core';
+import {
+  isMentionReference,
+  plainText,
+  titleOf,
+  valueText,
+  type Block,
+  type TioObject,
+} from '@tio/core';
 import { strToU8, zipSync } from 'fflate';
 const escape = (value: string) => value.replace(/[\\`*_[\]<>|]/g, '\\$&');
 /** A reading projection, deliberately separate from the lossless JSON backup format. */
@@ -18,10 +25,24 @@ export async function exportMarkdownZip(
     const target = byId.get(id);
     return target ? `[${escape(label(target))}](${id}.md)` : escape(id);
   };
+  const inline = (value: unknown): string => {
+    if (Array.isArray(value)) return value.map(inline).join('');
+    if (value && typeof value === 'object') {
+      const node = value as Record<string, unknown>;
+      if (node.type === 'mention' && isMentionReference(node.props)) {
+        const target = byId.get(node.props.id);
+        return target?.workspaceId === node.props.workspaceId && target.type === node.props.kind
+          ? reference(target.id)
+          : '[Unavailable reference]';
+      }
+      if (node.content) return inline(node.content);
+    }
+    return escape(plainText(value));
+  };
   const blocks = (items: Block[], depth = 0): string =>
     items
       .map((b) => {
-        const text = escape(plainText(b.content).trim());
+        const text = inline(b.content).trim();
         let result = text;
         switch (b.type) {
           case 'heading':
@@ -51,9 +72,6 @@ export async function exportMarkdownZip(
               .map((line) => '    ' + line)
               .join('\n')}`;
             break;
-          case 'pageReference':
-            result = reference(valueText(b.props.pageId));
-            break;
           case 'databaseView':
             result = reference(valueText(b.props.databaseId));
             break;
@@ -72,9 +90,8 @@ export async function exportMarkdownZip(
           case 'table': {
             const content = b.content as { rows?: { cells?: unknown[] }[] };
             const rows =
-              content?.rows?.map((row) =>
-                (row.cells ?? []).map((cell) => escape(plainText(cell).trim())),
-              ) ?? [];
+              content?.rows?.map((row) => (row.cells ?? []).map((cell) => inline(cell).trim())) ??
+              [];
             result = rows
               .map(
                 (row, i) =>

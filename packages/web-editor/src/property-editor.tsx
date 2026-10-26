@@ -27,6 +27,7 @@ const types = [
   'select',
   'multiSelect',
   'status',
+  'mention',
   'url',
   'email',
   'phone',

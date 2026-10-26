@@ -27,9 +27,9 @@ async function mount(page: Page, development: boolean) {
       });
       const reference = (id: string, pageId: string) => ({
         id,
-        type: 'pageReference',
-        props: { pageId },
-        content: [],
+        type: 'paragraph',
+        props: {},
+        content: [{ type: 'mention', props: { workspaceId: 'chrome', kind: 'page', id: pageId } }],
         children: [],
       });
       const repository = new MemoryRepository();
@@ -203,7 +203,7 @@ for (const development of [true, false]) {
       });
       expect(warnings).toEqual([]);
     });
-    for (const kind of ['pageReference', 'webSlice']) {
+    for (const kind of ['webSlice']) {
       test(`selecting ${kind} never leaves an empty toolbar ring`, async ({ page }) => {
         if (kind === 'webSlice') {
           await page.evaluate(async () => {
@@ -222,6 +222,7 @@ for (const development of [true, false]) {
                       ? {
                           ...b,
                           type: 'webSlice',
+                          content: [],
                           props: {
                             title: 'Web Slice',
                             html: '<p>Embedded content</p>',
@@ -391,14 +392,165 @@ for (const development of [true, false]) {
       await input.focus();
       await expect(input).toHaveCSS('outline-color', 'rgb(128, 128, 128)');
     });
+    test('inline mentions support keyboard insertion, atomic deletion and undo', async ({
+      page,
+    }) => {
+      const block = page.locator('#one [data-id="select"] .bn-inline-content');
+      await selectText(page);
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.type(' @Explicit');
+      await expect(page.locator('#one .bn-suggestion-menu')).toContainText('Explicit target');
+      await page.keyboard.press('Enter');
+      await expect(block.getByRole('button', { name: 'Explicit target' })).toBeVisible();
+      await page.evaluate(() => (window as any).chromeFixture.one.flush());
+      const count = () =>
+        page.evaluate(async () => {
+          const s = await (window as any).chromeFixture.repository.readSnapshot();
+          return s.entries
+            .find((e: any) => e.object.id === 'main')
+            .object.blocks.find((b: any) => b.id === 'select')
+            .content.filter((n: any) => n.type === 'mention').length;
+        });
+      expect(await count()).toBe(1);
+      await page.keyboard.press('Backspace');
+      await page.keyboard.press('Backspace');
+      await expect(block.getByRole('button', { name: 'Explicit target' })).toHaveCount(0);
+      await page.keyboard.press('ControlOrMeta+z');
+      await expect(block.getByRole('button', { name: 'Explicit target' })).toBeVisible();
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.type(' @');
+      await page.keyboard.press('Escape');
+      await expect(page.locator('#one .bn-suggestion-menu')).toBeHidden();
+    });
+    test('mention candidates recover from query errors and paginate', async ({ page }) => {
+      await page.evaluate(async () => {
+        const r = (window as any).chromeFixture.repository;
+        const s = await r.readSnapshot();
+        const target = s.entries.find((e: any) => e.object.id === 'target').object;
+        await r.commit({
+          id: crypto.randomUUID(),
+          expectedVersion: s.version,
+          assetIds: [],
+          changes: Array.from({ length: 55 }, (_, i) => ({
+            ...target,
+            id: `candidate-${String(i).padStart(2, '0')}`,
+            title: `Candidate ${i}`,
+          })),
+        });
+        const query = r.queryNavigation.bind(r);
+        let fail = true;
+        r.queryNavigation = (q: any) => {
+          if (q.mentionsOnly && fail) {
+            fail = false;
+            throw new Error('temporary failure');
+          }
+          return query(q);
+        };
+      });
+      const block = page.locator('#one [data-id="select"] .bn-inline-content');
+      await selectText(page);
+      await page.keyboard.press('ArrowRight');
+      await page.keyboard.type(' @');
+      const menu = page.locator('#one');
+      await menu.getByText('Failed to load; retry', { exact: true }).click();
+      await page.keyboard.type('Candidate');
+      await menu.getByText('Next page →', { exact: true }).click();
+      await menu.getByText('Candidate 54', { exact: true }).click();
+      await expect(block.getByRole('button', { name: 'Candidate 54', exact: true })).toBeVisible();
+    });
+    test('table cells accept mentions and composition Enter never selects a target', async ({
+      page,
+    }) => {
+      await page.evaluate(async () => {
+        const r = (window as any).chromeFixture.repository;
+        const s = await r.readSnapshot();
+        const current = s.entries.find((e: any) => e.object.id === 'main').object;
+        await r.commit({
+          id: crypto.randomUUID(),
+          expectedVersion: s.version,
+          assetIds: [],
+          changes: [
+            {
+              ...current,
+              blocks: [
+                ...current.blocks,
+                {
+                  id: 'table',
+                  type: 'table',
+                  props: {},
+                  children: [],
+                  content: {
+                    type: 'tableContent',
+                    rows: [
+                      {
+                        cells: [
+                          [{ type: 'text', text: '', styles: {} }],
+                          [{ type: 'text', text: '', styles: {} }],
+                        ],
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          ],
+        });
+      });
+      const cell = page.locator('#one [data-id="table"] td p').first();
+      await cell.click();
+      await page.keyboard.type('@Explicit');
+      await expect(page.locator('#one .bn-suggestion-menu')).toContainText('Explicit target');
+      await cell.dispatchEvent('keydown', {
+        key: 'Enter',
+        code: 'Enter',
+        isComposing: true,
+        bubbles: true,
+      });
+      await expect(cell.getByRole('button', { name: 'Explicit target' })).toHaveCount(0);
+      await page.keyboard.press('Enter');
+      await expect(cell.getByRole('button', { name: 'Explicit target' })).toBeVisible();
+      await page.evaluate(() => (window as any).chromeFixture.one.flush());
+      await page.evaluate(() =>
+        (window as any).chromeFixture.one.setPresentation({ readOnly: true }),
+      );
+      await expect(page.locator('#one .bn-editor')).toHaveAttribute('contenteditable', 'false');
+    });
+    test('mention titles refresh and deleted targets keep an inert reference', async ({ page }) => {
+      const label = page.locator('#one .bn-block-outer[data-id="ref"] button');
+      await expect(label).toHaveText('Explicit target');
+      const update = async (changes: Record<string, unknown>) =>
+        page.evaluate(async (changes) => {
+          const r = (window as any).chromeFixture.repository;
+          const s = await r.readSnapshot();
+          await r.commit({
+            id: crypto.randomUUID(),
+            expectedVersion: s.version,
+            assetIds: [],
+            changes: [
+              { ...s.entries.find((e: any) => e.object.id === 'target').object, ...changes },
+            ],
+          });
+        }, changes);
+      await update({ title: 'Renamed target' });
+      await expect(label).toHaveText('Renamed target');
+      await update({ deleted: true });
+      await expect(label).toHaveText('Deleted document');
+      page.once('dialog', async (dialog) => {
+        expect(dialog.message()).toBe('The source document has been deleted');
+        await dialog.accept();
+      });
+      await label.click();
+      await expect(page.locator('#one').getByLabel('Page title')).toHaveValue('Editor chrome');
+    });
     test('fold chevrons and explicit references are distinct from document structure', async ({
       page,
     }) => {
-      const footer = page.locator('#one .tio-page-references');
-      await expect(footer).toContainText('Referenced documents');
-      await expect(footer.locator('li')).toHaveCount(2);
+      const footer = page.locator('#one .bn-block-outer[data-id="ref"]');
+      await expect(page.locator('#one .tio-page-references')).toHaveCount(0);
       await expect(footer.getByRole('button', { name: 'Explicit target' })).toHaveCount(1);
-      await expect(footer).toContainText('Page unavailable');
+      await expect(page.locator('#one .bn-block-outer[data-id="missing-ref"]')).toContainText(
+        'Document unavailable',
+      );
       await expect(page.locator('#one main')).not.toContainText('Tree-only child');
       await expect(footer).not.toContainText('Inbound-only page');
       const fold = page.locator(

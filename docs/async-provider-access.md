@@ -37,3 +37,9 @@ A folder without authorization cannot be reopened from a cached body. The catalo
 `tests/provider-async.test.ts` covers targeted reads, query completeness, cursor isolation, deduplicated loads, queued commands, folder recovery, external conflicts, permissions and bridge operations. Architecture browser tests use OPFS for direct file writes and authorization recovery. Existing runtime, host, sync and Web Slice tests remain regression coverage; optional replica synchronization tests do not describe the folder's current write path.
 
 The integration suite additionally exercises Worker search against unopened bodies and verifies that folder commits leave neither business objects in the IndexedDB object store nor completed body payloads in the recovery journal. Relation selectors query the provider asynchronously, and referenced record/asset metadata is loaded for displayed values without fetching attachment bytes.
+
+## Mention metadata
+
+`queryNavigation` accepts optional `text` and `mentionsOnly` filters, applied before pagination by the provider. `readMetadata(ids)` returns versioned metadata entries plus separate missing/denied IDs, with no body or record properties. Both operations are available over the JSON bridge. `EditorSession.mentionCandidates` and `.mentionMetadata` expose them without advancing the body change cursor or populating the body cache. Current scanning providers may still read files/objects internally; no workspace-size-independent scan guarantee is implied.
+
+The default host mention service batches resolution requests from the same render, refreshes after navigation metadata changes and scopes navigation to its workspace. UI requests discard superseded responses and expose loading/retry states. Tombstones display as deleted, denial hides titles, and missing IDs are not misreported as confirmed deletion.

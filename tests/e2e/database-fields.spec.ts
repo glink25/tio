@@ -223,3 +223,48 @@ test('property configuration offers formula preview and persists stable referenc
     )
     .toContain('prop("cost")');
 });
+
+test('mention properties are single-select, clearable, and URL values retain safe new-tab links', async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    const r = (window as any).databaseFixture.repository;
+    const s = await r.readSnapshot();
+    const d = s.entries.find((e: any) => e.object.id === 'd').object;
+    await r.commit({
+      id: crypto.randomUUID(),
+      expectedVersion: s.version,
+      assetIds: [],
+      changes: [
+        {
+          ...d,
+          fields: [
+            ...d.fields,
+            { id: 'mention', name: 'Mention', type: 'mention' },
+            { id: 'url', name: 'URL', type: 'url' },
+          ],
+        },
+      ],
+    });
+  });
+  await openRecord(page);
+  const group = page.getByRole('group', { name: 'Mention editor', exact: true });
+  await group.getByLabel('Search mention targets').fill('Database fields');
+  await group.getByRole('button', { name: 'Database fields', exact: true }).click();
+  await group.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect
+    .poll(() => state(page, 'mention'))
+    .toEqual({ workspaceId: 'w', kind: 'database', id: 'd' });
+  await group.getByRole('button', { name: 'Clear', exact: true }).click();
+  await group.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect.poll(() => state(page, 'mention')).toBeNull();
+  const url = page.getByRole('group', { name: 'URL editor', exact: true });
+  await url.getByLabel('URL', { exact: true }).fill('https://example.com/');
+  await url.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.evaluate(() =>
+    (window as any).databaseFixture.handle.setPresentation({ readOnly: true }),
+  );
+  const link = page.getByRole('link', { name: 'https://example.com/' });
+  await expect(link).toHaveAttribute('target', '_blank');
+  await expect(link).toHaveAttribute('rel', 'noreferrer');
+});

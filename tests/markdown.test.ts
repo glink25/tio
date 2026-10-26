@@ -8,7 +8,15 @@ it('exports readable Markdown with stable links and portable attachments without
     title: 'Parent',
     blocks: [
       textBlock('Text'),
-      { id: 'link', type: 'pageReference', props: { pageId: 'child' }, content: [], children: [] },
+      {
+        id: 'link',
+        type: 'paragraph',
+        props: {},
+        content: [
+          { type: 'mention', props: { workspaceId: 'workspace', kind: 'page', id: 'child' } },
+        ],
+        children: [],
+      },
       { id: 'image', type: 'image', props: { url: 'asset:picture' }, content: [], children: [] },
     ],
   });

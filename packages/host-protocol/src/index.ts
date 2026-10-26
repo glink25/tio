@@ -144,7 +144,37 @@ export class BridgeRepository implements WorkspaceRepository {
   async readObjects(ids: string[]): Promise<WorkspaceSnapshot> {
     return parseSnapshot(await this.request('readObjects', { ids }));
   }
-  async queryNavigation(query: PageQuery): Promise<NavigationPage> {
+  async readMetadata(ids: string[]): Promise<WorkspaceSnapshot> {
+    const value = await this.request('readMetadata', { ids });
+    if (
+      !value ||
+      !Array.isArray(value.entries) ||
+      value.entries.some(
+        (entry: any) =>
+          !entry ||
+          !Number.isSafeInteger(entry.revision) ||
+          entry.revision < 0 ||
+          !entry.object ||
+          'blocks' in entry.object ||
+          'properties' in entry.object ||
+          !ids.includes(entry.object.id),
+      ) ||
+      [value.missing, value.denied].some(
+        (list) =>
+          list !== undefined &&
+          (!Array.isArray(list) ||
+            list.some((id: unknown) => typeof id !== 'string' || !ids.includes(id))),
+      )
+    )
+      throw new HostError('invalid');
+    this.page({
+      version: value.version,
+      items: value.entries.map((e: any) => e.object),
+      complete: true,
+    });
+    return value;
+  }
+  async queryNavigation(query: import('@tio/core').NavigationQuery): Promise<NavigationPage> {
     return this.page(await this.request('queryNavigation', query));
   }
   async search(query: SearchQuery): Promise<SearchPage> {
@@ -300,6 +330,10 @@ export function serveHost(
         } else {
           if (!ready) throw new HostError('unsupported', 'Handshake required');
           switch (request.method) {
+            case 'readMetadata':
+              if (!repository.readMetadata) throw new HostError('unsupported');
+              result = await repository.readMetadata(p.ids);
+              break;
             case 'readObjects':
               if (!repository.readObjects) throw new HostError('unsupported');
               result = await repository.readObjects(p.ids);

@@ -2,6 +2,7 @@ import { editable } from '@tio/core';
 import { Editor } from '@tio/editor-blocknote';
 import { useT } from '@tio/i18n';
 import {
+  MentionContext,
   Button,
   IconButton,
   ObjectIcon,
@@ -21,7 +22,6 @@ import {
   Maximize2,
   FileText,
   Database,
-  Link,
   BookOpen,
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
@@ -30,7 +30,6 @@ import { useEditorController, type EditorSurfaceProps } from './controller';
 import { DatabaseEmbed } from './database-embed';
 import { EditorDialogs } from './dialogs';
 import { LoadNotice } from './load-notice';
-import { PageLink, ReferencedPages } from './page-link';
 import { RecordContent } from './record-detail';
 import { WebSlice } from './web-slice/view';
 
@@ -110,10 +109,6 @@ export function EditorSurface(props: EditorSurfaceProps) {
                 <Plus size={15} />
                 {t('page.child')}
               </MenuItem>
-              <MenuItem disabled={!m.can(current)} onSelect={() => m.setReferencePicker(true)}>
-                <Link size={15} />
-                {t('page.reference')}
-              </MenuItem>
               <MenuItem disabled={!m.can(current)} onSelect={() => m.setEmbedPicker(true)}>
                 <Database size={15} />
                 {t('document.embed')}
@@ -153,134 +148,133 @@ export function EditorSurface(props: EditorSurfaceProps) {
           )),
     );
   return (
-    <RecordQueryContext.Provider value={records}>
-      <div className="relative min-w-0">
-        {props.renderHeader ? (
-          props.renderHeader(actions)
-        ) : (
-          <header className="sticky top-0 z-10 flex h-12 items-center justify-end gap-2 bg-panel/95 px-4">
-            {actions}
-          </header>
-        )}
-        {(m.error || m.state.status === 'error') && (
-          <div
-            role="alert"
-            className="mx-4 flex items-center gap-3 rounded border border-red-300 p-3 text-sm"
-          >
-            <span className="flex-1">{m.error || t('ui.saveError')}</span>
-            <Button
-              onClick={() =>
-                void m.runtime
-                  .retry()
-                  .then(() => m.setError(''))
-                  .catch((e) => m.setError(String(e)))
-              }
+    <MentionContext.Provider value={m.mentions}>
+      <RecordQueryContext.Provider value={records}>
+        <div className="relative min-w-0">
+          {props.renderHeader ? (
+            props.renderHeader(actions)
+          ) : (
+            <header className="sticky top-0 z-10 flex h-12 items-center justify-end gap-2 bg-panel/95 px-4">
+              {actions}
+            </header>
+          )}
+          {(m.error || m.state.status === 'error') && (
+            <div
+              role="alert"
+              className="mx-4 flex items-center gap-3 rounded border border-red-300 p-3 text-sm"
             >
-              {t('common.retry')}
-            </Button>
-          </div>
-        )}
-        {!current && props.target.id ? (
-          <LoadNotice runtime={m.runtime} id={props.target.id} />
-        ) : current ? (
-          <main
-            className={cn(
-              'mx-auto min-w-0 px-5 pt-10 pb-24 md:px-12 md:pt-16',
-              fullWidth ? 'max-w-none' : 'max-w-[856px]',
-            )}
-          >
-            {current.type !== 'record' && (
-              <>
-                {current.icon && (
-                  <div className="mb-4 text-muted">
-                    <ObjectIcon type={current.type} icon={current.icon} size={38} />
-                  </div>
-                )}
-                <input
-                  ref={titleRef}
-                  key={`title-${current.id}`}
-                  className="tio-page-title w-full !rounded-none !border-0 !bg-transparent !p-0 !text-3xl !leading-tight !font-semibold tracking-tight outline-none md:!text-[40px]"
-                  aria-label={t('document.title')}
-                  placeholder={t('common.untitled')}
-                  value={current.title ?? current.name ?? ''}
-                  readOnly={!m.can(current) || !editable(current)}
-                  onChange={(e) =>
-                    m.patch(
-                      current,
-                      current.type === 'database'
-                        ? { name: e.target.value }
-                        : { title: e.target.value },
-                    )
-                  }
-                />
-                <div className="h-7" />
-              </>
-            )}
-            {!editable(current) ? (
-              <EmptyNotice>{t('document.unsupported')}</EmptyNotice>
-            ) : current.type === 'record' ? (
-              <RecordContent model={m} />
-            ) : current.type === 'page' ? (
-              <>
-                <Editor
-                  key={current.id}
-                  onSubpage={() => m.addPage(current.id)}
-                  onReference={() => m.setReferencePicker(true)}
-                  onDatabase={() => m.setEmbedPicker(true)}
-                  blocks={current.blocks ?? []}
-                  readOnly={!m.can(current)}
-                  onChange={(b, p) => m.changeBlocks(current, b, p)}
-                  upload={m.upload}
-                  resolve={m.resolve}
-                  renderWebSlice={(block) => <WebSlice model={m} page={current} block={block} />}
-                  renderPageReference={(id) => <PageLink model={m} pageId={id} />}
-                  renderDatabase={(databaseId, viewId) => (
-                    <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />
-                  )}
-                />
-                {empty && m.can(current) && (
-                  <div className="mt-12 text-sm text-muted">
-                    <p className="mb-3">{t('ui.start')}</p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          const el = titleRef.current
-                            ?.closest('main')
-                            ?.querySelector<HTMLElement>('[contenteditable=true]');
-                          el?.focus();
-                        }}
-                      >
-                        <FileText size={15} />
-                        {t('ui.text')}
-                      </Button>
-                      <Button variant="outline" onClick={() => m.addPage(current.id)}>
-                        <Plus size={15} />
-                        {t('page.child')}
-                      </Button>
-                      <Button variant="outline" onClick={() => m.setEmbedPicker(true)}>
-                        <Database size={15} />
-                        {t('ui.databases')}
-                      </Button>
+              <span className="flex-1">{m.error || t('ui.saveError')}</span>
+              <Button
+                onClick={() =>
+                  void m.runtime
+                    .retry()
+                    .then(() => m.setError(''))
+                    .catch((e) => m.setError(String(e)))
+                }
+              >
+                {t('common.retry')}
+              </Button>
+            </div>
+          )}
+          {!current && props.target.id ? (
+            <LoadNotice runtime={m.runtime} id={props.target.id} />
+          ) : current ? (
+            <main
+              className={cn(
+                'mx-auto min-w-0 px-5 pt-10 pb-24 md:px-12 md:pt-16',
+                fullWidth ? 'max-w-none' : 'max-w-[856px]',
+              )}
+            >
+              {current.type !== 'record' && (
+                <>
+                  {current.icon && (
+                    <div className="mb-4 text-muted">
+                      <ObjectIcon type={current.type} icon={current.icon} size={38} />
                     </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <DatabaseEmbed key={current.id} model={m} databaseId={current.id} fullPage />
-            )}
-            <ReferencedPages model={m} />
-          </main>
-        ) : (
-          <div className="p-12 text-center">
-            <h2 className="mb-4 text-xl">{t('ui.noSelection')}</h2>
-            <Button variant="primary" onClick={() => m.addPage()}>
-              {t('workspace.newPage')}
-            </Button>
-          </div>
-        )}
-        <EditorDialogs model={m} />
-      </div>
-    </RecordQueryContext.Provider>
+                  )}
+                  <input
+                    ref={titleRef}
+                    key={`title-${current.id}`}
+                    className="tio-page-title w-full !rounded-none !border-0 !bg-transparent !p-0 !text-3xl !leading-tight !font-semibold tracking-tight outline-none md:!text-[40px]"
+                    aria-label={t('document.title')}
+                    placeholder={t('common.untitled')}
+                    value={current.title ?? current.name ?? ''}
+                    readOnly={!m.can(current) || !editable(current)}
+                    onChange={(e) =>
+                      m.patch(
+                        current,
+                        current.type === 'database'
+                          ? { name: e.target.value }
+                          : { title: e.target.value },
+                      )
+                    }
+                  />
+                  <div className="h-7" />
+                </>
+              )}
+              {!editable(current) ? (
+                <EmptyNotice>{t('document.unsupported')}</EmptyNotice>
+              ) : current.type === 'record' ? (
+                <RecordContent model={m} />
+              ) : current.type === 'page' ? (
+                <>
+                  <Editor
+                    key={current.id}
+                    onSubpage={() => m.addPage(current.id)}
+                    onDatabase={() => m.setEmbedPicker(true)}
+                    blocks={current.blocks ?? []}
+                    readOnly={!m.can(current)}
+                    onChange={(b, p) => m.changeBlocks(current, b, p)}
+                    upload={m.upload}
+                    resolve={m.resolve}
+                    renderWebSlice={(block) => <WebSlice model={m} page={current} block={block} />}
+                    renderDatabase={(databaseId, viewId) => (
+                      <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />
+                    )}
+                  />
+                  {empty && m.can(current) && (
+                    <div className="mt-12 text-sm text-muted">
+                      <p className="mb-3">{t('ui.start')}</p>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            const el = titleRef.current
+                              ?.closest('main')
+                              ?.querySelector<HTMLElement>('[contenteditable=true]');
+                            el?.focus();
+                          }}
+                        >
+                          <FileText size={15} />
+                          {t('ui.text')}
+                        </Button>
+                        <Button variant="outline" onClick={() => m.addPage(current.id)}>
+                          <Plus size={15} />
+                          {t('page.child')}
+                        </Button>
+                        <Button variant="outline" onClick={() => m.setEmbedPicker(true)}>
+                          <Database size={15} />
+                          {t('ui.databases')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <DatabaseEmbed key={current.id} model={m} databaseId={current.id} fullPage />
+              )}
+            </main>
+          ) : (
+            <div className="p-12 text-center">
+              <h2 className="mb-4 text-xl">{t('ui.noSelection')}</h2>
+              <Button variant="primary" onClick={() => m.addPage()}>
+                {t('workspace.newPage')}
+              </Button>
+            </div>
+          )}
+          <EditorDialogs model={m} />
+        </div>
+      </RecordQueryContext.Provider>
+    </MentionContext.Provider>
   );
 }

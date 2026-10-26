@@ -88,10 +88,16 @@ export function requestPayload(method: string | undefined, p: any) {
   )
     throw new HostError('invalid');
   if (
-    method === 'readObjects' &&
+    ['readObjects', 'readMetadata'].includes(method ?? '') &&
     (!Array.isArray(p.ids) ||
       p.ids.length > 1000 ||
       !p.ids.every((id: unknown) => typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id)))
+  )
+    throw new HostError('invalid');
+  if (
+    method === 'queryNavigation' &&
+    ((p.text !== undefined && typeof p.text !== 'string') ||
+      (p.mentionsOnly !== undefined && typeof p.mentionsOnly !== 'boolean'))
   )
     throw new HostError('invalid');
   if (method === 'readChanges' && !integer(p.since)) throw new HostError('invalid');

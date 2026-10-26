@@ -305,3 +305,28 @@ it('reports denied and missing loads separately without failing the selected doc
   expect(runtime.state.getState().error).toBeNull();
   runtime.dispose();
 });
+
+it('queries mention metadata through folder and JSON bridge without populating body caches', async () => {
+  const repo = folder().repository;
+  await repo.commit({
+    id: 'mention-seed',
+    expectedVersion: 0,
+    changes: [page('a', 'Alpha'), page('b', 'Beta'), { ...page('gone'), deleted: true }],
+    assetIds: [],
+  });
+  const pair = createLoopback();
+  const context = { sessionId: 'mention-session', workspaceId: 'w' };
+  const stop = serveHost(pair.host, context, repo);
+  const bridge = new BridgeRepository(pair.client, context);
+  await bridge.connect();
+  const runtime = await WorkspaceRuntime.open(bridge, undefined, undefined, { targetId: 'a' });
+  expect((await runtime.mentionCandidates('Beta')).items.map((o) => o.id)).toEqual(['b']);
+  const result = await runtime.mentionMetadata(['b', 'gone', 'absent']);
+  expect(result.entries.find((e) => e.object.id === 'b')?.object.blocks).toBeUndefined();
+  expect(result.entries.find((e) => e.object.id === 'gone')?.object.deleted).toBe(true);
+  expect(result.missing).toContain('absent');
+  expect(runtime.state.getState().loads.b).toBeUndefined();
+  runtime.dispose();
+  bridge.dispose();
+  stop();
+});

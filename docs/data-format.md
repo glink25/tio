@@ -22,7 +22,7 @@ Every business object has `id`, `workspaceId`, `type`, `schemaVersion`, and opti
 | View      | `type: databaseView`, `databaseId`, `layout`, `visibleFieldIds`, `filters`, `sorts`, `groupBy` |
 | Asset     | `filename`, `mime`, `byteSize`, `assetPath`                                                    |
 
-The navigation tree is derived from Page/Database `parentId` and `order`; there is no second authoritative child list. A deleted parent hides its navigation subtree. Database embeds reference `databaseId` and `viewId`; removing an embed does not delete the target. Page references use `type: pageReference` and `props: { pageId }`. Subpages have one authoritative parent; references can point to that page from any number of documents. Titles and Workspace names are mutable labels, never identifiers.
+The navigation tree is derived from Page/Database `parentId` and `order`; there is no second authoritative child list. A deleted parent hides its navigation subtree. Database embeds reference `databaseId` and `viewId`; removing an embed does not delete the target. Inline mentions use `type: mention` and a stable `{workspaceId, kind, id}` reference in `props`. Subpages have one authoritative parent; references can point to that page from any number of documents. Titles and Workspace names are mutable labels, never identifiers.
 
 ## Blocks
 
@@ -63,3 +63,9 @@ Prefer additive properties and new registered definitions instead of changing ex
 ## Reading export
 
 The separate Markdown ZIP contains `documents/<id>.md` with relative document links and an `assets/` directory. It is a lossy reading projection: rich styles, unknown block payloads, live queries and formulas are not a restorable representation. Use the canonical JSON ZIP for backup/import. The exporter never changes source objects.
+
+## Inline mentions
+
+Rich-text arrays (including table-cell content) support `{ "type": "mention", "props": { "workspaceId": "workspace-id", "kind": "page", "id": "page-id" } }`. `kind` also accepts `database`; record/user targets are not registered. This node is atomic and has no editable title or child content. The same reference object is the value of a `mention` field; `null` clears it. IDs retain their source workspace across copying and JSON export/import. Deleted or unavailable targets do not erase references. Unknown extension content continues to roundtrip opaquely. The former `pageReference` block and page-footer reference summary have been removed without migration.
+
+Markdown export resolves known mention targets to stable relative document links; unavailable references become an explicit unavailable label. JSON remains the lossless export format.

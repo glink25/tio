@@ -1,4 +1,7 @@
 import {
+  blockMentions,
+  isMentionReference,
+  mentionKey,
   id,
   object,
   readableObject,
@@ -89,15 +92,51 @@ export class SliceBroker {
       return fail('RESOURCE_REMOVED');
     return page;
   }
-  private databases() {
-    const ids = new Set(
-      flatten(this.page().blocks ?? [])
+  private references() {
+    const page = this.page();
+    const refs = blockMentions(page.blocks ?? []);
+    if (page.type === 'record') {
+      const db = this.objects().find((o) => o.id === page.databaseId);
+      for (const field of db ? (this.readable(db).fields ?? []) : []) {
+        const value = this.readable(page).properties?.[field.id];
+        if (field.type === 'mention' && isMentionReference(value)) refs.push(value);
+      }
+    }
+    return refs.filter((ref) => ref.workspaceId === this.options.workspaceId);
+  }
+  private databaseIds() {
+    return new Set([
+      ...flatten(this.page().blocks ?? [])
         .filter((b) => b.type === 'databaseView')
-        .map((b) => b.props.databaseId),
-    );
+        .map((b) => String(b.props.databaseId)),
+      ...this.references()
+        .filter((ref) => ref.kind === 'database')
+        .map((ref) => ref.id),
+    ]);
+  }
+  private databases() {
+    const ids = this.databaseIds();
     return this.objects().filter(
       (o) => o.type === 'database' && ids.has(o.id) && this.options.runtime.can(o, 'read'),
     );
+  }
+  private targetPage(id: string) {
+    if (!this.references().some((ref) => ref.kind === 'page' && ref.id === id))
+      fail('PERMISSION_DENIED');
+    return (
+      this.objects().find(
+        (o) => o.id === id && o.type === 'page' && this.options.runtime.can(o, 'read'),
+      ) ?? fail('PERMISSION_DENIED')
+    );
+  }
+  private validateMentions(
+    refs: import('@tio/core').MentionReference[],
+    previous: import('@tio/core').MentionReference[] = [],
+  ) {
+    const allowed = new Set([...this.references(), ...previous].map(mentionKey));
+    for (const id of this.databaseIds())
+      allowed.add(mentionKey({ workspaceId: this.options.workspaceId, kind: 'database', id }));
+    for (const ref of refs) if (!allowed.has(mentionKey(ref))) fail('PERMISSION_DENIED');
   }
   private db(id: string) {
     return this.databases().find((o) => o.id === id) ?? fail('PERMISSION_DENIED');
@@ -161,6 +200,15 @@ export class SliceBroker {
       return JSON.stringify([
         this.page().title,
         this.page().blocks,
+        this.references(),
+        ...this.objects()
+          .filter(
+            (o) =>
+              o.type === 'page' &&
+              this.references().some((r) => r.kind === 'page' && r.id === o.id) &&
+              this.options.runtime.can(o, 'read'),
+          )
+          .map((o) => this.readable(o)),
         ...dbs.map(visible),
         ...this.objects()
           .filter(
@@ -188,14 +236,53 @@ export class SliceBroker {
       if (o.id === page.id && o.deleted) fail('PERMISSION_DENIED');
       validate(o);
     }
+    const existing = new Set(this.objects().map((o) => o.id));
+    const recheck = () => {
+      this.writable();
+      for (const next of changes) {
+        const old = expected.find((o) => o.id === next.id);
+        if (next.type === 'page' && next.id !== this.options.pageId) this.targetPage(next.id);
+        if (
+          next.databaseId &&
+          next.id !== this.options.pageId &&
+          !changes.some(
+            (o) => o.id === next.databaseId && o.type === 'database' && !existing.has(o.id),
+          )
+        )
+          this.db(next.databaseId);
+        if (next.type === 'database' && existing.has(next.id)) this.db(next.id);
+        if (next.blocks && !changes.some((o) => o.type === 'database' && !existing.has(o.id)))
+          this.validateBlocks(old?.blocks ?? [], next.blocks);
+        const db = next.databaseId
+          ? this.objects().find((o) => o.id === next.databaseId)
+          : undefined;
+        for (const field of db?.fields ?? []) {
+          const value = next.properties?.[field.id],
+            previous = old?.properties?.[field.id];
+          if (field.type === 'mention' && isMentionReference(value))
+            this.validateMentions([value], isMentionReference(previous) ? [previous] : []);
+        }
+        if (next.type === 'database' && old) {
+          for (const field of next.fields ?? []) {
+            const before = old.fields?.find((f) => f.id === field.id);
+            if (
+              field.type === 'mention' &&
+              before?.type !== 'mention' &&
+              page.databaseId === next.id
+            ) {
+              const value = page.properties?.[field.id];
+              if (isMentionReference(value)) this.validateMentions([value]);
+            }
+          }
+        }
+      }
+    };
     this.origin = this.options.blockId;
     try {
       await this.options.runtime.checked(
         [...new Map([page, ...expected].map((o) => [o.id, o])).values()],
         changes,
-        () => {
-          this.writable();
-        },
+        recheck,
       );
     } catch (error) {
       if (error instanceof SliceError) throw error;
@@ -213,14 +300,17 @@ export class SliceBroker {
     }
   }
   private validateBlocks(before: Block[], after: Block[]) {
-    const allowed = new Set(this.databases().map((d) => d.id));
+    const allowed = this.databaseIds();
+    this.validateMentions(blockMentions(after), blockMentions(before));
     const protectedBefore = flatten(before).filter((b) => b.type === 'webSlice');
     const protectedAfter = flatten(after).filter((b) => b.type === 'webSlice');
     if (!same(protectedBefore, protectedAfter)) fail('PERMISSION_DENIED');
     for (const b of flatten(after)) {
-      if (b.type === 'databaseView' && !allowed.has(String(b.props.databaseId)))
-        fail('PERMISSION_DENIED');
-      if (b.type === 'pageReference' && !flatten(before).some((old) => same(old, b)))
+      if (
+        b.type === 'databaseView' &&
+        !allowed.has(String(b.props.databaseId)) &&
+        !flatten(before).some((old) => same(old, b))
+      )
         fail('PERMISSION_DENIED');
     }
   }
@@ -269,37 +359,50 @@ export class SliceBroker {
       this.options.resize(Math.max(160, Math.min(1200, p.height)));
       return null;
     }
-    if (method === 'page.get') {
-      const page = this.page();
+    if (this.page().databaseId) await this.options.runtime.ensure([this.page().databaseId!]);
+    if (method.startsWith('pages.')) {
+      if (
+        typeof p.pageId !== 'string' ||
+        !this.references().some((ref) => ref.kind === 'page' && ref.id === p.pageId)
+      )
+        fail('PERMISSION_DENIED');
+      await this.options.runtime.ensure([p.pageId]);
+      this.targetPage(p.pageId);
+    }
+    const pageTarget = () =>
+      method.startsWith('pages.') ? this.targetPage(p.pageId) : this.page();
+    const pageMethod = method.replace(/^pages\./, 'page.');
+    if (pageMethod === 'page.get') {
+      const page = pageTarget();
       return { id: page.id, type: page.type, title: page.title, version: this.version(page) };
     }
-    if (method === 'page.getBlocks')
+    if (pageMethod === 'page.getBlocks')
       return {
-        blocks: structuredClone(this.page().blocks ?? []),
-        version: this.version(this.page()),
+        blocks: structuredClone(this.readable(pageTarget()).blocks ?? []),
+        version: this.version(pageTarget()),
       };
-    if (method.startsWith('page.')) {
+    if (pageMethod.startsWith('page.')) {
       this.writable();
-      const page = this.page();
+      const page = pageTarget();
       this.checkVersion(page, p.version);
       let next = structuredClone(page);
-      if (method === 'page.update') {
+      if (pageMethod === 'page.update') {
         only(p.changes, ['title']);
         if (typeof p.changes.title !== 'string') fail('INVALID_INPUT');
         next.title = p.changes.title;
       } else {
         const blocks = next.blocks ?? [];
-        if (method === 'page.insertBlocks') {
+        if (pageMethod === 'page.insertBlocks') {
           if (!Array.isArray(p.blocks)) fail('INVALID_INPUT');
           next.blocks = [...blocks, ...p.blocks];
-        } else if (method === 'page.updateBlock' || method === 'page.removeBlock') {
+        } else if (pageMethod === 'page.updateBlock' || pageMethod === 'page.removeBlock') {
           if (!flatten(blocks).some((b) => b.id === p.id)) fail('RESOURCE_REMOVED');
-          if (method === 'page.updateBlock')
+          if (pageMethod === 'page.updateBlock')
             only(p.changes, ['props', 'content', 'type', 'children']);
           const edit = (items: Block[]): Block[] =>
             items.flatMap((b) =>
               b.id === p.id
-                ? method === 'page.removeBlock'
+                ? pageMethod === 'page.removeBlock'
                   ? []
                   : [{ ...b, ...p.changes, id: b.id }]
                 : [{ ...b, children: edit(b.children) }],
@@ -311,7 +414,10 @@ export class SliceBroker {
       await this.commit([page], [next]);
       return { id: next.id, type: next.type, title: next.title, version: this.version(next) };
     }
-    if (method === 'databases.list') return this.databases().map((d) => this.output(d));
+    if (method === 'databases.list') {
+      await this.options.runtime.ensure([...this.databaseIds()]);
+      return this.databases().map((d) => this.output(d));
+    }
     if (method === 'databases.create') {
       this.writable();
       only(p, ['name', 'fields']);
@@ -345,7 +451,7 @@ export class SliceBroker {
       await this.commit([page], [db, view, next]);
       return this.output(db);
     }
-    this.db(p.databaseId); // Scope authorization precedes any fetch.
+    if (!this.databaseIds().has(p.databaseId)) fail('PERMISSION_DENIED'); // Scope before fetch.
     await this.options.runtime.loadDatabase(p.databaseId);
     if (typeof p.id === 'string' && method.startsWith('records.'))
       await this.options.runtime.ensure([p.id]);
@@ -403,6 +509,10 @@ export class SliceBroker {
         if (['formula', 'rollup', 'createdTime', 'lastEditedTime'].includes(field.type))
           fail('INVALID_INPUT');
         validateValue(field, value);
+        if (field.type === 'mention' && isMentionReference(value)) {
+          const previous = old?.properties?.[key];
+          this.validateMentions([value], isMentionReference(previous) ? [previous] : []);
+        }
       }
       const next = old
         ? {

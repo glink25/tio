@@ -1,6 +1,12 @@
-import { BlockNoteSchema, defaultBlockSpecs, filterSuggestionItems } from '@blocknote/core';
+import {
+  BlockNoteSchema,
+  defaultInlineContentSpecs,
+  defaultBlockSpecs,
+  filterSuggestionItems,
+} from '@blocknote/core';
 import { zh, en } from '@blocknote/core/locales';
 import {
+  createReactInlineContentSpec,
   createReactBlockSpec,
   useCreateBlockNote,
   SuggestionMenuController,
@@ -11,11 +17,12 @@ import { BlockNoteView } from '@blocknote/shadcn';
 
 import { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
+import { MentionMenu } from './mention-menu';
 export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
 import { useT, useTranslation } from '@tio/i18n';
-import { EmptyNotice, useTheme, useMobile, IconButton, PortalContext } from '@tio/ui';
-import { FilePlus, Link, Database, Bold, Italic, Code, Undo2, Redo2, Plus } from 'lucide-react';
+import { MentionLabel, EmptyNotice, useTheme, useMobile, IconButton, PortalContext } from '@tio/ui';
+import { FilePlus, Database, Bold, Italic, Code, Undo2, Redo2, Plus } from 'lucide-react';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 import '@blocknote/core/fonts/inter.css';
@@ -62,24 +69,18 @@ const WebSliceBlock = createReactBlockSpec(
     },
   },
 )();
-const PageContext = createContext<(id: string) => React.ReactNode>(() => null);
-const PageReferenceBlock = createReactBlockSpec(
+const MentionInline = createReactInlineContentSpec(
   {
-    type: 'pageReference',
-    propSchema: { pageId: { default: '' } },
+    type: 'mention',
+    propSchema: {
+      workspaceId: { default: '' },
+      kind: { default: 'page', values: ['page', 'database'] as const },
+      id: { default: '' },
+    },
     content: 'none',
   },
-  {
-    render: function PageReferenceRenderer({ block }) {
-      const render = useContext(PageContext);
-      return (
-        <div className="w-full" contentEditable={false}>
-          {render(block.props.pageId)}
-        </div>
-      );
-    },
-  },
-)();
+  { render: ({ inlineContent }) => <MentionLabel reference={inlineContent.props} /> },
+);
 const OpaqueBlock = createReactBlockSpec(
   {
     type: 'unsupported',
@@ -98,11 +99,11 @@ const OpaqueBlock = createReactBlockSpec(
   },
 )();
 export const defaultEditorSchema = BlockNoteSchema.create({
+  inlineContentSpecs: { ...defaultInlineContentSpecs, mention: MentionInline },
   blockSpecs: {
     ...defaultBlockSpecs,
     databaseView: DatabaseBlock,
     webSlice: WebSliceBlock,
-    pageReference: PageReferenceBlock,
     unsupported: OpaqueBlock,
   },
 });
@@ -117,27 +118,23 @@ export const EditorSchemaContext = createContext<EditorSchema>({ schema: default
 export interface EditorProps {
   renderWebSlice?: (block: Block) => React.ReactNode;
   onSubpage?: () => void;
-  onReference?: () => void;
   onDatabase?: () => void;
   blocks: Block[];
   readOnly?: boolean;
   onChange: (blocks: Block[], previous: Block[]) => void;
   upload: (file: File) => Promise<string>;
   resolve: (url: string) => Promise<string>;
-  renderPageReference?: (id: string) => React.ReactNode;
   renderDatabase: (db: string, view: string) => React.ReactNode;
 }
 export function EditorContent({
   blocks,
   onSubpage,
-  onReference,
   onDatabase,
   readOnly,
   onChange,
   upload,
   resolve,
   renderDatabase,
-  renderPageReference,
   renderWebSlice,
 }: EditorProps) {
   const t = useT();
@@ -251,156 +248,142 @@ export function EditorContent({
     };
   }, [blocks, editor, schema, codecs]);
   return (
-    <PageContext.Provider
-      value={renderPageReference ?? (() => <EmptyNotice>{t('page.missing')}</EmptyNotice>)}
-    >
-      <EmbedContext.Provider value={renderDatabase}>
-        <SliceContext.Provider value={renderWebSlice ?? (() => null)}>
-          <BlockNoteView
-            shadCNComponents={shadCNComponents}
-            editor={editor}
-            portalElements={portal ? { default: portal } : undefined}
-            onFocusCapture={() => setFocused(true)}
-            onBlurCapture={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+    <EmbedContext.Provider value={renderDatabase}>
+      <SliceContext.Provider value={renderWebSlice ?? (() => null)}>
+        <BlockNoteView
+          shadCNComponents={shadCNComponents}
+          editor={editor}
+          portalElements={portal ? { default: portal } : undefined}
+          onFocusCapture={() => setFocused(true)}
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
+          }}
+          slashMenu={false}
+          sideMenu={false}
+          linkToolbar={false}
+          editable={!readOnly}
+          theme={theme}
+          onChange={() => {
+            if (applying.current) return;
+            const previous = original.current;
+            const next = fromEditor(editor.document, previous, codecs);
+            original.current = next;
+            sent.current.add(JSON.stringify(next));
+            if (sent.current.size > 500) sent.current.delete(sent.current.values().next().value!);
+            onChange(next, previous);
+          }}
+        >
+          {!readOnly && <MentionMenu />}
+          <EditorLinkToolbar />
+          <SideMenuController
+            sideMenu={EditorSideMenu}
+            floatingUIOptions={
+              mobile ? { useFloatingOptions: { placement: 'top-start' } } : undefined
+            }
+          />
+          <SuggestionMenuController
+            triggerCharacter="/"
+            getItems={async (query) =>
+              filterSuggestionItems(
+                [
+                  ...getDefaultReactSlashMenuItems(editor),
+                  ...(renderWebSlice
+                    ? [
+                        {
+                          title: i18n.language === 'zh' ? '自定义网页' : 'Web Slice',
+                          group: t('workspace.name'),
+                          aliases: ['web', 'slice', 'html', '网页'],
+                          icon: <Code size={18} />,
+                          onItemClick: () => {
+                            editor.insertBlocks(
+                              [{ type: 'webSlice' }],
+                              editor.getTextCursorPosition().block,
+                              'after',
+                            );
+                          },
+                        },
+                      ]
+                    : []),
+                  ...(slashItems?.(editor) ?? []),
+                  ...(onSubpage
+                    ? [
+                        {
+                          title: t('page.child'),
+                          group: t('workspace.name'),
+                          aliases: ['page', 'subpage', '子页面'],
+                          icon: <FilePlus size={18} />,
+                          onItemClick: onSubpage,
+                        },
+                      ]
+                    : []),
+                  ...(onDatabase
+                    ? [
+                        {
+                          title: t('document.embed'),
+                          group: t('workspace.name'),
+                          aliases: ['database', '数据库'],
+                          icon: <Database size={18} />,
+                          onItemClick: onDatabase,
+                        },
+                      ]
+                    : []),
+                ],
+                query,
+              )
+            }
+          />
+        </BlockNoteView>
+        {mobile && focused && !readOnly && (
+          <div
+            role="toolbar"
+            aria-label={t('common.edit')}
+            className="fixed inset-x-0 z-40 flex items-center justify-center gap-2 border-t border-line bg-panel px-3 py-1 shadow-lg"
+            style={{
+              bottom: keyboardOffset,
+              paddingBottom: 'max(4px, env(safe-area-inset-bottom))',
             }}
-            slashMenu={false}
-            sideMenu={false}
-            linkToolbar={false}
-            editable={!readOnly}
-            theme={theme}
-            onChange={() => {
-              if (applying.current) return;
-              const previous = original.current;
-              const next = fromEditor(editor.document, previous, codecs);
-              original.current = next;
-              sent.current.add(JSON.stringify(next));
-              if (sent.current.size > 500) sent.current.delete(sent.current.values().next().value!);
-              onChange(next, previous);
-            }}
+            onPointerDown={(e) => e.preventDefault()}
           >
-            <EditorLinkToolbar />
-            <SideMenuController
-              sideMenu={EditorSideMenu}
-              floatingUIOptions={
-                mobile ? { useFloatingOptions: { placement: 'top-start' } } : undefined
-              }
-            />
-            <SuggestionMenuController
-              triggerCharacter="/"
-              getItems={async (query) =>
-                filterSuggestionItems(
-                  [
-                    ...getDefaultReactSlashMenuItems(editor),
-                    ...(renderWebSlice
-                      ? [
-                          {
-                            title: i18n.language === 'zh' ? '自定义网页' : 'Web Slice',
-                            group: t('workspace.name'),
-                            aliases: ['web', 'slice', 'html', '网页'],
-                            icon: <Code size={18} />,
-                            onItemClick: () => {
-                              editor.insertBlocks(
-                                [{ type: 'webSlice' }],
-                                editor.getTextCursorPosition().block,
-                                'after',
-                              );
-                            },
-                          },
-                        ]
-                      : []),
-                    ...(slashItems?.(editor) ?? []),
-                    ...(onSubpage
-                      ? [
-                          {
-                            title: t('page.child'),
-                            group: t('workspace.name'),
-                            aliases: ['page', 'subpage', '子页面'],
-                            icon: <FilePlus size={18} />,
-                            onItemClick: onSubpage,
-                          },
-                        ]
-                      : []),
-                    ...(onReference
-                      ? [
-                          {
-                            title: t('page.reference'),
-                            group: t('workspace.name'),
-                            aliases: ['link', 'reference', '引用'],
-                            icon: <Link size={18} />,
-                            onItemClick: onReference,
-                          },
-                        ]
-                      : []),
-                    ...(onDatabase
-                      ? [
-                          {
-                            title: t('document.embed'),
-                            group: t('workspace.name'),
-                            aliases: ['database', '数据库'],
-                            icon: <Database size={18} />,
-                            onItemClick: onDatabase,
-                          },
-                        ]
-                      : []),
-                  ],
-                  query,
-                )
-              }
-            />
-          </BlockNoteView>
-          {mobile && focused && !readOnly && (
-            <div
-              role="toolbar"
-              aria-label={t('common.edit')}
-              className="fixed inset-x-0 z-40 flex items-center justify-center gap-2 border-t border-line bg-panel px-3 py-1 shadow-lg"
-              style={{
-                bottom: keyboardOffset,
-                paddingBottom: 'max(4px, env(safe-area-inset-bottom))',
+            <IconButton
+              label={t('common.create')}
+              onClick={() => {
+                editor.focus();
+                editor.insertInlineContent('/');
               }}
-              onPointerDown={(e) => e.preventDefault()}
             >
-              <IconButton
-                label={t('common.create')}
-                onClick={() => {
-                  editor.focus();
-                  editor.insertInlineContent('/');
-                }}
-              >
-                <Plus size={18} />
-              </IconButton>
-              <IconButton
-                label={i18n.language === 'zh' ? '粗体' : 'Bold'}
-                onClick={() => editor.toggleStyles({ bold: true })}
-              >
-                <Bold size={18} />
-              </IconButton>
-              <IconButton
-                label={i18n.language === 'zh' ? '斜体' : 'Italic'}
-                onClick={() => editor.toggleStyles({ italic: true })}
-              >
-                <Italic size={18} />
-              </IconButton>
-              <IconButton
-                label={i18n.language === 'zh' ? '代码' : 'Code'}
-                onClick={() => editor.toggleStyles({ code: true })}
-              >
-                <Code size={18} />
-              </IconButton>
-              <IconButton label={t('common.undo')} onClick={() => editor.undo()}>
-                <Undo2 size={18} />
-              </IconButton>
-              <IconButton
-                label={i18n.language === 'zh' ? '重做' : 'Redo'}
-                onClick={() => editor.redo()}
-              >
-                <Redo2 size={18} />
-              </IconButton>
-            </div>
-          )}
-        </SliceContext.Provider>
-      </EmbedContext.Provider>
-    </PageContext.Provider>
+              <Plus size={18} />
+            </IconButton>
+            <IconButton
+              label={i18n.language === 'zh' ? '粗体' : 'Bold'}
+              onClick={() => editor.toggleStyles({ bold: true })}
+            >
+              <Bold size={18} />
+            </IconButton>
+            <IconButton
+              label={i18n.language === 'zh' ? '斜体' : 'Italic'}
+              onClick={() => editor.toggleStyles({ italic: true })}
+            >
+              <Italic size={18} />
+            </IconButton>
+            <IconButton
+              label={i18n.language === 'zh' ? '代码' : 'Code'}
+              onClick={() => editor.toggleStyles({ code: true })}
+            >
+              <Code size={18} />
+            </IconButton>
+            <IconButton label={t('common.undo')} onClick={() => editor.undo()}>
+              <Undo2 size={18} />
+            </IconButton>
+            <IconButton
+              label={i18n.language === 'zh' ? '重做' : 'Redo'}
+              onClick={() => editor.redo()}
+            >
+              <Redo2 size={18} />
+            </IconButton>
+          </div>
+        )}
+      </SliceContext.Provider>
+    </EmbedContext.Provider>
   );
 }
 

@@ -1,4 +1,5 @@
 import type { DateValue, Field, TioObject } from './index';
+import { isMentionReference } from './mentions';
 
 export const isDerivedField = (field: Field) =>
   ['formula', 'rollup', 'createdTime', 'lastEditedTime'].includes(field.type);
@@ -120,6 +121,11 @@ export function validateFieldReference(
   objects: TioObject[],
 ) {
   if (value == null) return;
+  if (
+    field.type === 'mention' &&
+    (!isMentionReference(value) || value.workspaceId !== record.workspaceId)
+  )
+    throw new Error('Invalid mention workspace');
   if (field.type === 'relation') {
     const target = objects.find(
       (o) =>
@@ -157,6 +163,7 @@ export function validateFieldReference(
 }
 export function createFieldRegistry() {
   const registry = new FieldRegistry();
+  registry.register({ type: 'mention', validate: isMentionReference });
   for (const type of ['title', 'text', 'phone'])
     registry.register({
       type,

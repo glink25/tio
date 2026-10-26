@@ -339,3 +339,89 @@ test('drawer fits mobile dark layout and restores failed permission changes', as
   await expect(page.getByText('Could not save permission. Try again.')).toBeVisible();
   await page.screenshot({ path: 'test-results/web-slice-mobile-dark.png' });
 });
+
+test('SDK pages handle reads and writes direct mentions and revokes removed references', async ({
+  page,
+}) => {
+  await expect(
+    page.frameLocator('iframe').getByRole('button', { name: '创建账目表 / Initialize' }),
+  ).toBeDisabled();
+  await page.evaluate(async () => {
+    const r = (window as any).fixture.repository,
+      s = await r.readSnapshot();
+    const current = s.entries.find((e: any) => e.object.id === 'p').object;
+    await r.commit({
+      id: crypto.randomUUID(),
+      expectedVersion: s.version,
+      assetIds: [],
+      changes: [
+        {
+          id: 'target',
+          workspaceId: 'w',
+          type: 'page',
+          schemaVersion: 1,
+          title: 'Target',
+          blocks: [],
+        },
+        {
+          ...current,
+          blocks: [
+            ...current.blocks,
+            {
+              id: 'mention',
+              type: 'paragraph',
+              props: {},
+              content: [
+                { type: 'mention', props: { workspaceId: 'w', kind: 'page', id: 'target' } },
+              ],
+              children: [],
+            },
+          ],
+        },
+      ],
+    });
+  });
+  await expect(page.getByRole('button', { name: 'Target', exact: true })).toBeVisible();
+  const frame = () => page.frames().find((f) => f !== page.mainFrame())!;
+  expect(
+    await frame().evaluate(async () => (await (window as any).tio.pages.get('target').get()).title),
+  ).toBe('Target');
+  await settings(page);
+  await page.getByRole('radio', { name: 'Read & write', exact: true }).check();
+  await closeSettings(page);
+  await expect(
+    page.frameLocator('iframe').getByRole('button', { name: '创建账目表 / Initialize' }),
+  ).toBeEnabled();
+  await frame().evaluate(async () => {
+    const target = (window as any).tio.pages.get('target'),
+      current = await target.get();
+    await target.update({ title: 'Updated through SDK' }, current.version);
+  });
+  await expect(
+    page.getByRole('button', { name: 'Updated through SDK', exact: true }),
+  ).toBeVisible();
+  await page.evaluate(async () => {
+    const r = (window as any).fixture.repository,
+      s = await r.readSnapshot();
+    const current = s.entries.find((e: any) => e.object.id === 'p').object;
+    await r.commit({
+      id: crypto.randomUUID(),
+      expectedVersion: s.version,
+      assetIds: [],
+      changes: [{ ...current, blocks: current.blocks.filter((b: any) => b.id !== 'mention') }],
+    });
+  });
+  await expect(page.getByRole('button', { name: 'Updated through SDK', exact: true })).toHaveCount(
+    0,
+  );
+  expect(
+    await frame().evaluate(async () => {
+      try {
+        await (window as any).tio.pages.get('target').getBlocks();
+        return 'unexpected';
+      } catch (error: any) {
+        return error.code;
+      }
+    }),
+  ).toBe('PERMISSION_DENIED');
+});

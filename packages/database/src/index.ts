@@ -1,4 +1,11 @@
-import { isDateValue, isDerivedField, valueText } from '@tio/core';
+import {
+  isMentionReference,
+  mentionKey,
+  mentionTitle,
+  isDateValue,
+  isDerivedField,
+  valueText,
+} from '@tio/core';
 import type { Field, TioObject, RollupOperation } from '@tio/core';
 
 import { localTimeZone } from './dates';
@@ -184,6 +191,10 @@ export function displayValue(
   language: 'en' | 'zh' = 'zh',
 ): string {
   if (value == null) return '';
+  if (field.type === 'mention' && isMentionReference(value))
+    return (
+      mentionTitle(value, objects) ?? (language === 'zh' ? '引用不可用' : 'Unavailable reference')
+    );
   if (isFieldError(value)) return `⚠ ${value.fieldError}`;
   if (['select', 'multiSelect', 'status'].includes(field.type))
     return (Array.isArray(value) ? value : [value])
@@ -290,6 +301,12 @@ export function queryRecords(
         case 'notEmpty':
           return !isEmpty(value);
         case 'eq':
+          if (field.type === 'mention')
+            return (
+              isMentionReference(value) &&
+              isMentionReference(filter.value) &&
+              mentionKey(value) === mentionKey(filter.value)
+            );
           return Array.isArray(value) ? value.includes(filter.value) : a === b;
         case 'gt':
         case 'gte':

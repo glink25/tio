@@ -76,3 +76,5 @@ Hosts may expose `queryObjects({ scope: { type } | { databaseId }, after?, limit
 ## Provider-owned asynchronous reads
 
 Implement `queryNavigation`, `readObjects`, `queryRecords`, `scan` and optional `search` across the bridge. Declare `storageCapabilities`; do not assume a local replica or atomic persistence for every provider. Navigation summaries cannot be used as command baselines. See [asynchronous provider access](async-provider-access.md) for loading states, cursors, query completeness, export and file recovery semantics.
+
+Mention support requires provider `readMetadata(ids)` and the optional `text`/`mentionsOnly` filters on `queryNavigation`. Metadata responses carry `version`, revisioned `entries`, `missing` and `denied`, omit bodies/properties, and apply host access filtering. The JSON bridge transports these operations. Hosts may inject a `MentionService` through editor options for candidate queries, metadata resolution, subscriptions and navigation; no mutable global resolver is used.

@@ -29,13 +29,23 @@ export class ScanningQueries {
   async scan(query: PageQuery) {
     return pageEntries(await this.repository.readSnapshot(), query);
   }
-  async navigation(query: PageQuery) {
+  async navigation(query: import('@tio/core').NavigationQuery) {
     const snapshot = await this.repository.readSnapshot();
+    const visible = visibility(snapshot.entries.map((e) => e.object));
     const page = pageEntries(
       {
         ...snapshot,
-        entries: snapshot.entries.filter((e) =>
-          ['workspace', 'page', 'database', 'databaseView'].includes(e.object.type),
+        entries: snapshot.entries.filter(
+          (e) =>
+            (query.mentionsOnly
+              ? ['page', 'database']
+              : ['workspace', 'page', 'database', 'databaseView']
+            ).includes(e.object.type) &&
+            (!query.mentionsOnly || (!e.object.deleted && visible(e.object))) &&
+            (!query.text ||
+              (e.object.title || e.object.name || '')
+                .toLocaleLowerCase()
+                .includes(query.text.toLocaleLowerCase())),
         ),
       },
       query,

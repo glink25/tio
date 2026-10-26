@@ -1,9 +1,11 @@
 import { validDatePart, validateFieldDefinition } from './fields';
 import { assertJson } from './json';
+import { contentMentions } from './mentions';
 import { createDefaultRegistry } from './registry';
 export { assertJson } from './json';
 export * from './fields';
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+export * from './mentions';
 export type FieldType =
   | 'title'
   | 'text'
@@ -13,6 +15,7 @@ export type FieldType =
   | 'select'
   | 'multiSelect'
   | 'relation'
+  | 'mention'
   | 'formula'
   | 'rollup'
   | 'files'
@@ -276,6 +279,7 @@ function validateBlocks(value: unknown, ids = new Set<string>()) {
       )
         throw new Error('Invalid Web Slice');
     }
+    contentMentions(b.content);
     ids.add(b.id);
     validateBlocks(b.children, ids);
   }

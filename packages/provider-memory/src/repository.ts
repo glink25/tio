@@ -1,3 +1,4 @@
+import { navigationObject } from '@tio/core';
 import type { PageQuery, RecordQuery, RepositoryCapabilities } from '@tio/core';
 import {
   applyCommit,
@@ -27,7 +28,14 @@ export class MemoryRepository implements WorkspaceRepository {
     prefetch: 'none',
   };
   private queries = new ScanningQueries(this);
-  queryNavigation(query: PageQuery) {
+  async readMetadata(ids: string[]) {
+    const result = await this.readObjects(ids);
+    return {
+      ...result,
+      entries: result.entries.map((e) => ({ ...e, object: navigationObject(e.object) })),
+    };
+  }
+  queryNavigation(query: import('@tio/core').NavigationQuery) {
     return this.queries.navigation(query);
   }
   queryRecords(query: RecordQuery) {

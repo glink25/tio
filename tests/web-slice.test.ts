@@ -333,3 +333,161 @@ it('rejects concurrent remote changes instead of overwriting them', async () => 
   f.broker.dispose();
   await f.runtime.close();
 });
+
+describe('direct mention authority', () => {
+  const mention = (id: string, kind = 'page', workspaceId = 'w'): Block => ({
+    id: `mention-${id}`,
+    type: 'paragraph',
+    props: {},
+    children: [],
+    content: [{ type: 'mention', props: { workspaceId, kind, id } }],
+  });
+  it('loads unopened directly mentioned pages, allows writes, refuses recursion and revokes after removal', async () => {
+    const f = await fixture();
+    f.write();
+    f.runtime.create([
+      object('page', 'w', { id: 'target', title: 'Target', blocks: [mention('nested')] }),
+      object('page', 'w', { id: 'nested', title: 'Nested', blocks: [] }),
+    ]);
+    f.runtime.append('p', mention('target'));
+    await f.runtime.flush();
+    const target: any = await f.broker.invoke('pages.get', { pageId: 'target' });
+    expect(target.title).toBe('Target');
+    await f.broker.invoke('pages.update', {
+      pageId: 'target',
+      version: target.version,
+      changes: { title: 'Updated' },
+    });
+    await expect(f.broker.invoke('pages.get', { pageId: 'nested' })).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+    });
+    const current: any = await f.broker.invoke('page.get');
+    await expect(
+      f.broker.invoke('page.insertBlocks', {
+        version: current.version,
+        blocks: [mention('nested')],
+      }),
+    ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+    f.runtime.patch('p', { blocks: f.page.blocks });
+    await f.runtime.flush();
+    await expect(f.broker.invoke('pages.get', { pageId: 'target' })).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
+    });
+    f.broker.dispose();
+    await f.runtime.close();
+  });
+  it('allows mentioned databases but rejects guessed IDs, foreign workspaces and record-field expansion', async () => {
+    const f = await fixture();
+    f.write();
+    f.runtime.append('p', mention('secret', 'database'));
+    await f.runtime.flush();
+    expect(((await f.broker.invoke('databases.list')) as any[]).map((d) => d.id)).toEqual([
+      'secret',
+    ]);
+    f.runtime.fields('secret', [
+      { id: 'x', name: 'Secret', type: 'text' },
+      { id: 'm', name: 'Mention', type: 'mention' },
+    ]);
+    await f.runtime.flush();
+    await expect(
+      f.broker.invoke('records.create', {
+        databaseId: 'secret',
+        properties: { m: { workspaceId: 'w', kind: 'page', id: 'guessed' } },
+      }),
+    ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+    f.runtime.patch('p', { blocks: [...f.page.blocks!, mention('secret', 'database', 'other')] });
+    await f.runtime.flush();
+    expect(await f.broker.invoke('databases.list')).toEqual([]);
+    f.broker.dispose();
+    await f.runtime.close();
+  });
+});
+
+it('record mention fields grant only their direct targets and recheck field access', async () => {
+  const repository = new MemoryRepository();
+  const slice: Block = {
+    id: 'slice',
+    type: 'webSlice',
+    props: { title: '', html: '', height: 320, autoHeight: true, runtimeVersion: 1 },
+    content: [],
+    children: [],
+  };
+  await repository.commit({
+    id: 'seed',
+    expectedVersion: 0,
+    assetIds: [],
+    changes: [
+      object('database', 'w', {
+        id: 'parent',
+        name: 'Parent',
+        fields: [{ id: 'm', name: 'Mention', type: 'mention' }],
+      }),
+      object('record', 'w', {
+        id: 'r',
+        databaseId: 'parent',
+        properties: { m: { workspaceId: 'w', kind: 'page', id: 'target' } },
+        blocks: [slice],
+      }),
+      object('page', 'w', { id: 'target', title: 'Target', blocks: [] }),
+    ],
+  });
+  let hide = false;
+  const access: AccessPolicy = {
+    ...fullAccess,
+    allows: (resource, op) => !(hide && resource.fieldId === 'm' && op === 'read'),
+  };
+  const runtime = await WorkspaceRuntime.open(repository, access, undefined, { targetId: 'r' });
+  const broker = new SliceBroker({
+    runtime,
+    pageId: 'r',
+    blockId: 'slice',
+    workspaceId: 'w',
+    permission: () => ({ data: 'readWrite', allowExternalResources: false }),
+    readOnly: () => false,
+    context: () => ({}),
+    resize: () => {},
+  });
+  expect(((await broker.invoke('pages.get', { pageId: 'target' })) as any).title).toBe('Target');
+  expect(await broker.invoke('databases.list')).toEqual([]);
+  const own: any = await broker.invoke('page.get');
+  await broker.invoke('page.insertBlocks', {
+    version: own.version,
+    blocks: [{ id: 'text', type: 'paragraph', props: {}, content: [], children: [] }],
+  });
+  hide = true;
+  await expect(broker.invoke('pages.get', { pageId: 'target' })).rejects.toMatchObject({
+    code: 'PERMISSION_DENIED',
+  });
+  broker.dispose();
+  await runtime.close();
+});
+
+it('revokes direct target access while an asynchronous body read is pending', async () => {
+  const f = await fixture();
+  f.runtime.create([object('page', 'w', { id: 'target', title: 'Target', blocks: [] })]);
+  f.runtime.append('p', {
+    id: 'm',
+    type: 'paragraph',
+    props: {},
+    content: [{ type: 'mention', props: { workspaceId: 'w', kind: 'page', id: 'target' } }],
+    children: [],
+  });
+  await f.runtime.flush();
+  let release!: () => void;
+  const barrier = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const ensure = f.runtime.ensure.bind(f.runtime);
+  f.runtime.ensure = async (ids) => {
+    if (ids.includes('target')) await barrier;
+    return ensure(ids);
+  };
+  const read = f.broker.invoke('pages.getBlocks', { pageId: 'target' });
+  await Promise.resolve();
+  f.runtime.patch('p', { blocks: f.page.blocks });
+  await f.runtime.flush();
+  release();
+  await expect(read).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
+  f.broker.dispose();
+  await f.runtime.close();
+});

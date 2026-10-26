@@ -1,10 +1,17 @@
 /* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- The editor group handles Enter/Escape bubbling from its input controls. */
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- Rich searchable options render colored tags and record links. */
-import { fieldColors, isDateValue, isDerivedField, validateValue, valueText } from '@tio/core';
+import {
+  isMentionReference,
+  fieldColors,
+  isDateValue,
+  isDerivedField,
+  validateValue,
+  valueText,
+} from '@tio/core';
 import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
 import { useT, type TranslationKey } from '@tio/i18n';
-import { Button } from '@tio/ui';
+import { MentionLabel, MentionPicker, Button } from '@tio/ui';
 import { useState, useEffect, useContext } from 'react';
 
 import { useDisplayValue } from './display-value';
@@ -98,6 +105,8 @@ export function FieldValue(
 ) {
   const { field, value, objects, resolve, onOpen } = props;
   const format = useDisplayValue();
+  if (field.type === 'mention')
+    return isMentionReference(value) ? <MentionLabel reference={value} /> : null;
   if (field.type === 'files')
     return (
       <div className="w-full min-w-0 space-y-1">
@@ -556,7 +565,8 @@ export function FieldInput(props: FieldInputProps) {
         </div>
       </div>
     );
-  } else if (['title', 'text', 'number', 'url', 'email', 'phone'].includes(field.type))
+  } else if (field.type === 'mention') control = <MentionPicker value={draft} onChange={change} />;
+  else if (['title', 'text', 'number', 'url', 'email', 'phone'].includes(field.type))
     control = (
       <input
         className="w-full"
@@ -604,9 +614,10 @@ export function FieldInput(props: FieldInputProps) {
           onCancel();
         } else if (
           e.key === 'Enter' &&
+          !e.nativeEvent.isComposing &&
           e.target instanceof HTMLInputElement &&
           e.target.type !== 'file' &&
-          !['select', 'multiSelect', 'relation', 'status'].includes(field.type)
+          !['select', 'multiSelect', 'relation', 'status', 'mention'].includes(field.type)
         ) {
           e.preventDefault();
           e.stopPropagation();

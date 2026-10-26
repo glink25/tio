@@ -1,6 +1,7 @@
 export const en = {
   'database.files': 'Files & media',
   'database.status': 'Status',
+  'database.mention': 'Mention',
   'database.url': 'URL',
   'database.email': 'Email',
   'database.phone': 'Phone',
@@ -299,6 +300,7 @@ export const en = {
 export const zh: Record<keyof typeof en, string> = {
   'database.files': '附件',
   'database.status': '状态',
+  'database.mention': '提及',
   'database.url': '链接',
   'database.email': '邮箱',
   'database.phone': '电话',

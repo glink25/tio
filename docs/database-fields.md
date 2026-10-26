@@ -23,3 +23,6 @@ Formula syntax supports JSON literals, parentheses, unary `!`/`not`/`+`/`-`, ari
 Date units are `minutes`, `hours`, `days`, `weeks`, `months`, `years`. `formatDate` supports `YYYY`, `MM`, `DD`, `HH`, `mm`, `ss`. Time-dependent calculations refresh every minute while the document is visible. This is a restricted interpreter, without JavaScript execution or complete Notion Formula 2.0 compatibility.
 
 Editors stage values locally and commit on Done/Enter; Escape cancels a cell overlay. Field types remain locked after creation. Derived fields reject writes, including null, at the registry/command boundaries. Generic record patches and checked transactions receive the same property and reference validation as direct cell edits.
+
+- Mention fields are fixed single-select references `{workspaceId, kind: 'page' | 'database', id}` or `null`. They share the asynchronous picker and current-title display with inline mentions, retain deleted references, and reject foreign-workspace values. Equality compares the full reference identity; empty/nonempty test the stored value, and display/sorting use readable target titles. They are distinct from database-specific record relations.
+- URL fields already support HTTP/HTTPS string values, URL inputs and opening a new tab with `noreferrer`; empty strings and null clear the value. Other protocols are rejected.

@@ -1,29 +1,39 @@
-import type { Block } from '@tio/core';
+import {
+  blockMentions,
+  contentMentions,
+  isMentionReference,
+  mentionKey,
+  textBlock,
+  validateValue,
+} from '@tio/core';
 import { describe, expect, it } from 'vitest';
-
-import { referencedPageIds } from '../packages/web-editor/src/references';
-
-const block = (id: string, type = 'pageReference', children: Block[] = []): Block => ({
-  id: crypto.randomUUID(),
-  type,
-  props: { pageId: id },
-  content: [],
-  children,
-});
-describe('explicit document references', () => {
-  it('preserves reading order across nested blocks and deduplicates targets', () => {
-    expect(
-      referencedPageIds([
-        block('a'),
-        block('', 'paragraph', [block('b'), block('a')]),
-        block('c'),
-        block('b'),
-      ]),
-    ).toEqual(['a', 'b', 'c']);
+const ref = { workspaceId: 'w', kind: 'page' as const, id: 'target' };
+const inline = { type: 'mention', props: ref };
+describe('structured mentions', () => {
+  it('finds direct references in nested blocks and table cells without traversing arbitrary props', () => {
+    const block = {
+      ...textBlock(''),
+      content: [inline],
+      children: [
+        {
+          ...textBlock(''),
+          type: 'table',
+          content: {
+            type: 'tableContent',
+            rows: [{ cells: [{ type: 'tableCell', content: [inline] }] }],
+          },
+        },
+      ],
+    };
+    expect(blockMentions([block])).toEqual([ref, ref]);
+    expect(contentMentions({ type: 'extension', props: { content: [inline] } })).toEqual([]);
   });
-  it('ignores empty references and unrelated blocks', () => {
-    expect(
-      referencedPageIds([block(''), block('a', 'databaseView'), block('b', 'webSlice')]),
-    ).toEqual([]);
+  it('validates single references and keeps workspace identity', () => {
+    expect(isMentionReference(ref)).toBe(true);
+    expect(isMentionReference({ ...ref, kind: 'record' })).toBe(false);
+    expect(() => validateValue({ id: 'm', name: 'Mention', type: 'mention' }, [ref])).toThrow();
+    expect(() => validateValue({ id: 'm', name: 'Mention', type: 'mention' }, null)).not.toThrow();
+    expect(mentionKey(ref)).not.toBe(mentionKey({ ...ref, workspaceId: 'other' }));
+    expect(() => contentMentions({ type: 'mention', props: { id: 'x' } })).toThrow();
   });
 });

@@ -16,12 +16,14 @@ import { newPage, newDatabase, type EditorSession } from '@tio/workspace';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
+import { createMentionService } from './mentions';
 import { memoryPermissions, type WebSliceOptions } from './web-slice/types';
 export interface EditorTarget {
   id: string;
   mode?: 'page' | 'preview';
 }
 export interface EditorSurfaceProps {
+  mentions?: import('@tio/core').MentionService;
   webSlice?: WebSliceOptions;
   views?: ViewExtensions;
   extensions?: EditorSchema;
@@ -39,6 +41,10 @@ export interface EditorSurfaceProps {
 }
 export function useEditorController(props: EditorSurfaceProps) {
   const { runtime, workspaceId, target, onNavigate } = props;
+  const mentions = useMemo(
+    () => props.mentions ?? createMentionService(runtime, workspaceId, (id) => onNavigate({ id })),
+    [props.mentions, runtime, workspaceId, onNavigate],
+  );
   const sliceStore = useMemo(() => {
     void runtime;
     return memoryPermissions();
@@ -70,7 +76,6 @@ export function useEditorController(props: EditorSurfaceProps) {
     setFieldId(null);
   };
   const [embedPicker, setEmbedPicker] = useState(false);
-  const [referencePicker, setReferencePicker] = useState(false);
   const [error, setError] = useState('');
   const resolver = useMemo(() => new AssetResolver(runtime), [runtime]);
   const resolveAsset = useCallback((url: string) => resolver.resolve(url), [resolver]);
@@ -79,7 +84,6 @@ export function useEditorController(props: EditorSurfaceProps) {
     setRecordId(null);
     setReadOnly(false);
     setFieldDb(null);
-    setReferencePicker(false);
     setEmbedPicker(false);
   }, [target.id]);
   const isVisible = visibility(objects);
@@ -173,19 +177,6 @@ export function useEditorController(props: EditorSurfaceProps) {
     );
     setEmbedPicker(false);
   }
-  function referencePage(pageId: string) {
-    if (!current) return;
-    command(() =>
-      runtime.append(current.id, {
-        id: id('block'),
-        type: 'pageReference',
-        props: { pageId },
-        content: [],
-        children: [],
-      }),
-    );
-    setReferencePicker(false);
-  }
   function addRecord(db: TioObject) {
     const field = db.fields?.find((f) => f.type === 'title');
     const record = object('record', workspaceId, {
@@ -206,6 +197,7 @@ export function useEditorController(props: EditorSurfaceProps) {
     return ref;
   };
   return {
+    mentions,
     webSlice,
     hostReadOnly: !!props.readOnly,
     runtime,
@@ -227,8 +219,6 @@ export function useEditorController(props: EditorSurfaceProps) {
     setFieldDb,
     embedPicker,
     setEmbedPicker,
-    referencePicker,
-    setReferencePicker,
     error,
     setError,
     navigate,
@@ -237,7 +227,6 @@ export function useEditorController(props: EditorSurfaceProps) {
     addDatabase,
     addRecord,
     embed,
-    referencePage,
     upload,
     resolve: resolveAsset,
     cell: (record: TioObject, field: Field, value: unknown) =>

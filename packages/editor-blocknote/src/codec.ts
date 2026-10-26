@@ -1,3 +1,4 @@
+import { isMentionReference } from '@tio/core';
 import type { Block } from '@tio/core';
 export interface ContentSchema {
   blockSchema: Record<
@@ -35,6 +36,12 @@ export function safeContent(content: unknown, schema: ContentSchema): boolean {
           typeof item.href === 'string' &&
           /^(https?:|mailto:|#)/.test(item.href) &&
           safeContent(item.content, schema)
+        );
+      if (item.type === 'mention')
+        return (
+          !!schema.inlineContentSchema.mention &&
+          keys(item, ['type', 'props']) &&
+          isMentionReference(item.props)
         );
       // Custom inline payloads require a schema codec supplied by their extension.
       return false;

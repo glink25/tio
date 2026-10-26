@@ -71,7 +71,8 @@ export interface WorkspaceRepository extends AssetStore {
   /** Explicit full traversal, reserved for export and providers which scan locally. */
   readSnapshot(): Promise<WorkspaceSnapshot>;
   storageCapabilities?: RepositoryCapabilities;
-  queryNavigation?(query: PageQuery): Promise<NavigationPage>;
+  readMetadata?(ids: string[]): Promise<WorkspaceSnapshot>;
+  queryNavigation?(query: NavigationQuery): Promise<NavigationPage>;
   queryRecords?(query: RecordQuery): Promise<ObjectPage>;
   search?(query: SearchQuery): Promise<SearchPage>;
   scan?(query: PageQuery): Promise<ObjectPage>;
@@ -114,6 +115,10 @@ export interface RepositoryCapabilities {
 export interface PageQuery {
   after?: string;
   limit: number;
+}
+export interface NavigationQuery extends PageQuery {
+  text?: string;
+  mentionsOnly?: boolean;
 }
 export interface NavigationPage {
   version: number;
