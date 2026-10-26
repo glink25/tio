@@ -45,3 +45,40 @@ it.each([1000, 10000])(
   },
   20000,
 );
+
+it('resolves a deep navigation tree without repeated workspace scans', async () => {
+  const { visibility } = await import('@tio/core');
+  const pages = Array.from({ length: 10000 }, (_, n) =>
+    object('page', 'w', {
+      id: `p${n}`,
+      parentId: n ? `p${n - 1}` : null,
+      blocks: [],
+    }),
+  );
+  const isVisible = visibility(pages);
+  expect(pages.filter(isVisible)).toHaveLength(10000);
+  expect(visibility([{ ...pages[0], deleted: true }, ...pages.slice(1)])(pages[9999])).toBe(false);
+  const orphan = { ...pages[0], parentId: 'missing' };
+  expect(visibility([orphan])(orphan)).toBe(false);
+});
+
+it('editing one object reads only changed host entries in a large workspace', async () => {
+  const { WorkspaceRuntime } = await import('@tio/workspace');
+  const store = new LocalStore('incremental', crypto.randomUUID());
+  try {
+    await store.batch(
+      Array.from({ length: 1000 }, (_, n) => object('page', 'w', { id: `p${n}`, blocks: [] })),
+    );
+    const runtime = await WorkspaceRuntime.open(store);
+    store.readSnapshot = async () => {
+      throw new Error('Unexpected whole workspace read');
+    };
+    runtime.patch('p500', { title: 'Edited' });
+    await runtime.flush();
+    expect((await store.get('p500'))?.object.title).toBe('Edited');
+    expect((await store.readChanges(1)).entries.map((entry) => entry.object.id)).toEqual(['p500']);
+    runtime.dispose();
+  } finally {
+    store.close();
+  }
+});

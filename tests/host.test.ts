@@ -15,7 +15,7 @@ it('host and sync writes retain bounded changes instead of accumulating confirme
     }
     const keys = (await (await store.db).getAllKeys('settings')).map(String);
     expect(keys.filter((key) => key.includes('/$commit/'))).toHaveLength(0);
-    expect(keys.filter((key) => key.includes('/$changes/'))).toHaveLength(1);
+    expect(keys.filter((key) => key.includes('/$changes/'))).toHaveLength(0);
     expect(keys.filter((key) => key.includes('/$watermark/'))).toHaveLength(1);
     expect((await store.readChanges(0)).entries[0].object.title).toBe('Host 19');
   } finally {
@@ -250,41 +250,17 @@ it('host enforces record and field capabilities while preserving the rejected dr
   await runtime.retry();
   runtime.dispose();
 });
-it('migration transactions use the registered path and ordinary commits cannot upgrade formats', async () => {
-  const { registry } = await import('@tio/core');
-  registry().register({
-    type: 'migrationFixture',
-    currentVersion: 2,
-    validate: (o) => o,
-    migrations: { 1: (o) => ({ ...o, schemaVersion: 2, name: 'upgraded' }) },
-  });
-  const store = new MemoryRepository();
-  const original = object('migrationFixture', 'w', { id: 'm', extra: { retain: true } });
-  await store.commit({ id: 'seed', expectedVersion: 0, changes: [original], assetIds: [] });
-  const next = registry().decode(original);
+it('host commits reject unsupported schema versions without a migration path', async () => {
+  const host = new MemoryRepository();
   await expect(
-    store.commit({ id: 'normal', expectedVersion: 1, changes: [next], assetIds: [] }),
-  ).rejects.toThrow();
-  await store.commit({
-    id: 'upgrade',
-    expectedVersion: 1,
-    changes: [next],
-    assetIds: [],
-    migration: true,
-  });
-  expect((await store.readSnapshot()).entries[0].object).toMatchObject({
-    schemaVersion: 2,
-    extra: { retain: true },
-  });
-  await expect(
-    store.commit({
-      id: 'invalid',
-      expectedVersion: 2,
-      changes: [{ ...next, name: 'unrelated' }],
+    host.commit({
+      id: 'invalid-version',
+      expectedVersion: 0,
+      changes: [object('page', 'w', { id: 'p', schemaVersion: 2, blocks: [] })],
       assetIds: [],
-      migration: true,
     }),
-  ).rejects.toThrow();
+  ).rejects.toThrow('Unsupported schema');
+  expect((await host.readSnapshot()).entries).toEqual([]);
 });
 it('read projections hide private fields and edits preserve their stored values', async () => {
   let restricted = false;
@@ -344,4 +320,102 @@ it('bridge rejects cross-workspace writes before seeding an empty repository', a
     bridge.dispose();
     stop();
   }
+});
+
+it('recovery retention is scoped to the host instance', async () => {
+  const name = crypto.randomUUID();
+  const a = new LocalStore('a', name);
+  const b = new LocalStore('b', name);
+  try {
+    await b.recover({ note: 'keep' });
+    for (let i = 0; i < 102; i++) await a.recover({ i });
+    const db = await a.db;
+    const aRows = await db.getAllFromIndex('recovery', 'instance', 'a');
+    const bRows = await db.getAllFromIndex('recovery', 'instance', 'b');
+    expect(aRows).toHaveLength(100);
+    expect(aRows[0].value).toEqual({ i: 2 });
+    expect(bRows.map((row) => row.value)).toEqual([{ note: 'keep' }]);
+  } finally {
+    a.close();
+    b.close();
+  }
+});
+
+it('asset reads enforce the same object permission as snapshots', async () => {
+  let restricted = false;
+  const access = { version: 'asset-policy', allows: () => !restricted };
+  const local = new LocalStore('assets-private', crypto.randomUUID(), access);
+  for (const host of [new MemoryRepository(access), local]) {
+    try {
+      restricted = false;
+      await host.stageAsset('asset', {
+        name: 'a.txt',
+        mime: 'text/plain',
+        bytes: new TextEncoder().encode('secret'),
+      });
+      await host.commit({
+        id: 'seed',
+        expectedVersion: 0,
+        assetIds: ['asset'],
+        changes: [
+          object('asset', 'w', {
+            id: 'asset',
+            filename: 'a.txt',
+            mime: 'text/plain',
+            byteSize: 6,
+            assetPath: 'assets/asset.txt',
+          }),
+        ],
+      });
+      restricted = true;
+      expect((await host.readSnapshot()).entries).toHaveLength(0);
+      await expect(host.readAsset('asset')).rejects.toThrow('permission');
+    } finally {
+      restricted = false;
+    }
+  }
+  local.close();
+});
+
+it('pages indexed objects with stable cursors through the bridge', async () => {
+  const local = new LocalStore('paged', crypto.randomUUID());
+  for (const host of [new MemoryRepository(), local]) {
+    const pair = createLoopback();
+    const context = { sessionId: 'paged', workspaceId: 'w' };
+    const stop = serveHost(pair.host, context, host);
+    const bridge = new BridgeRepository(pair.client, context);
+    try {
+      await bridge.connect();
+      await bridge.commit({
+        id: 'seed',
+        expectedVersion: 0,
+        assetIds: [],
+        changes: Array.from({ length: 5 }, (_, n) =>
+          object('record', 'w', {
+            id: `r${n}`,
+            databaseId: n === 4 ? 'other' : 'db',
+            properties: {},
+            blocks: [],
+          }),
+        ),
+      });
+      const first = await bridge.queryObjects({ scope: { databaseId: 'db' }, limit: 2 });
+      expect(first.entries.map((e) => e.object.id)).toEqual(['r0', 'r1']);
+      const last = await bridge.queryObjects({
+        scope: { databaseId: 'db' },
+        limit: 2,
+        after: first.next,
+      });
+      expect(last.entries.map((e) => e.object.id)).toEqual(['r2', 'r3']);
+      expect(last.next).toBeUndefined();
+      expect(
+        (await bridge.queryObjects({ scope: { type: 'record' }, limit: 10 })).entries,
+      ).toHaveLength(5);
+      await expect(bridge.queryObjects({ scope: { type: 'record' }, limit: 0 })).rejects.toThrow();
+    } finally {
+      bridge.dispose();
+      stop();
+    }
+  }
+  local.close();
 });

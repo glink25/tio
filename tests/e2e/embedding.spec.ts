@@ -182,3 +182,63 @@ test('numeric fields follow external updates and preserve decimals and clearing'
     )
     .toBeNull();
 });
+
+test('table edits retain opaque nested content in neighboring tables', async ({ page }) => {
+  const opaque = await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    const snapshot = await f.repository.readSnapshot();
+    const current = snapshot.entries.find((e: any) => e.object.id === f.target.id).object;
+    const cell = (content: any[]) => ({ type: 'tableCell', props: {}, content });
+    const text = (text: string) => ({ type: 'text', text, styles: {} });
+    const unknown = {
+      id: 'opaque-table',
+      type: 'table',
+      props: {},
+      children: [],
+      content: {
+        type: 'tableContent',
+        columnWidths: [null],
+        rows: [{ cells: [cell([{ type: 'mention', userId: 'person-1' }])] }],
+      },
+    };
+    await f.repository.commit({
+      id: crypto.randomUUID(),
+      expectedVersion: snapshot.version,
+      assetIds: [],
+      changes: [
+        {
+          ...current,
+          blocks: [
+            {
+              id: 'editable-table',
+              type: 'table',
+              props: {},
+              children: [],
+              content: {
+                type: 'tableContent',
+                columnWidths: [null, null],
+                rows: [{ cells: [cell([text('Cell A')]), cell([text('Cell B')])] }],
+              },
+            },
+            unknown,
+          ],
+        },
+      ],
+    });
+    return unknown;
+  });
+  const cell = page.locator('#one .bn-editor table').first().locator('td').first();
+  await expect(cell).toContainText('Cell A');
+  await cell.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' updated');
+  await page.evaluate(() => (window as any).fixture.one.flush());
+  const blocks = await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    const snapshot = await f.repository.readSnapshot();
+    return snapshot.entries.find((e: any) => e.object.id === f.target.id).object.blocks;
+  });
+  expect(JSON.stringify(blocks.find((b: any) => b.id === 'editable-table'))).toContain('updated');
+  expect(blocks.find((b: any) => b.id === 'opaque-table')).toEqual(opaque);
+  await expect(page.locator('#two .bn-editor table').first()).toContainText('updated');
+});

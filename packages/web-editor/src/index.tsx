@@ -1,7 +1,9 @@
-import { HostError, type AccessPolicy, type WorkspaceRepository } from '@tio/core';
+import { HostError, type Domain, type AccessPolicy, type WorkspaceRepository } from '@tio/core';
+import { EditorSchemaContext, defaultEditorSchema, type EditorSchema } from '@tio/editor-blocknote';
 import { BridgeRepository, type HostContext, type Transport } from '@tio/host-protocol';
 import { createLanguageInstance, I18nextProvider, type Language } from '@tio/i18n';
 import { ThemeContext, PortalContext, Notifications, NotificationContext } from '@tio/ui';
+import { ViewExtensionsContext, type ViewExtensions } from '@tio/views';
 import { WorkspaceRuntime, type WorkspaceState } from '@tio/workspace';
 import { useMemo, useState, useEffect, useId, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -17,10 +19,14 @@ export interface Presentation {
   readOnly: boolean;
 }
 function Environment({
+  views,
+  extensions,
   theme,
   locale,
   children,
 }: {
+  views?: ViewExtensions;
+  extensions?: EditorSchema;
   theme: 'dark' | 'light';
   locale: Language;
   children: ReactNode;
@@ -41,7 +47,11 @@ function Environment({
             {container && (
               <NotificationContext.Provider value={notificationId}>
                 <Notifications />
-                {children}
+                <EditorSchemaContext.Provider value={extensions ?? { schema: defaultEditorSchema }}>
+                  <ViewExtensionsContext.Provider value={views ?? {}}>
+                    {children}
+                  </ViewExtensionsContext.Provider>
+                </EditorSchemaContext.Provider>
               </NotificationContext.Provider>
             )}
           </PortalContext.Provider>
@@ -53,7 +63,12 @@ function Environment({
 /** React integration used by the Web shell and by mountEditor. */
 export function EditorSurface(props: EditorSurfaceProps & { presentation: Presentation }) {
   return (
-    <Environment theme={props.presentation.theme} locale={props.presentation.locale}>
+    <Environment
+      views={props.views}
+      extensions={props.extensions}
+      theme={props.presentation.theme}
+      locale={props.presentation.locale}
+    >
       <Surface {...props} readOnly={props.presentation.readOnly || props.readOnly} />
     </Environment>
   );
@@ -66,6 +81,9 @@ function Ready({ children, onReady }: { children: ReactNode; onReady?: () => voi
   return children;
 }
 export interface EditorOptions {
+  domain?: Domain;
+  views?: ViewExtensions;
+  extensions?: EditorSchema;
   repository: WorkspaceRepository;
   access?: AccessPolicy;
   workspaceId: string;
@@ -89,7 +107,7 @@ export async function mountEditor(
   container: HTMLElement,
   options: EditorOptions,
 ): Promise<EditorHandle> {
-  const runtime = await WorkspaceRuntime.open(options.repository, options.access);
+  const runtime = await WorkspaceRuntime.open(options.repository, options.access, options.domain);
   const root = createRoot(container);
   let target = options.target;
   let presentation: Presentation = {
@@ -108,6 +126,8 @@ export async function mountEditor(
       <Ready onReady={options.onReady}>
         <EditorSurface
           showSaveState
+          views={options.views}
+          extensions={options.extensions}
           runtime={runtime}
           workspaceId={options.workspaceId}
           target={target}

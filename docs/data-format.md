@@ -4,18 +4,14 @@ Canonical files are UTF-8 JSON with recursively sorted keys, two-space indentati
 
 ```text
 workspaces/<workspaceId>/
-  workspace.json
-  pages/<pageId>.json
-  dataworkspaces/<databaseId>/
-    schema.json
-    views/<viewId>.json
-    records/<recordId>.json
-  assets/<assetId>.json
+  objects/<objectId>.json
+  chunks/<hash-prefix>/<sha256>.json
   assets/<assetId>.<extension>
-  objects/<unknownObjectId>.json
 ```
 
-Every business object has `id`, `workspaceId`, `type`, `schemaVersion`, and optional `deleted: true`. A workspace object's `id` equals its `workspaceId`. Unknown top-level fields are preserved. The file path must agree with the object's identity, Workspace and database membership.
+All object types share the same stable identity path. Large objects use the shared [file storage tree](file-storage.md); database-backed object APIs need no file layout. This is a new-project format with no historical reader or migration path.
+
+Every business object has `id`, `workspaceId`, `type`, `schemaVersion`, and optional `deleted: true`. A workspace object's `id` equals its `workspaceId`. Unknown top-level fields are preserved. The file path must agree with the object's identity and workspace. Database membership is immutable but does not participate in the path.
 
 | Object    | Fields                                                                                         |
 | --------- | ---------------------------------------------------------------------------------------------- |
@@ -58,17 +54,11 @@ The host stores business snapshots/revisions, synchronization baselines, committ
 
 Complete ZIP exports contain current-format business files and assets. Import creates a new workspace ID and rewrites every object's workspaceId, preserving object IDs and internal references within the new workspace. Imports do not overwrite another workspace. No historical format compatibility, detection, conversion or warning flow is provided.
 
-## Evolution
+## Extension policy
 
-`ObjectRegistry` migrations advance exactly one version at a time and must preserve identity. Migration runs on a cloned object; repeated decoding is idempotent. Current types are v1, so no historical migration is fabricated. Unknown/newer versions retain raw fields and remain read-only when unsupported. Tombstones are not automatically removed.
+Each host owns a domain registry. Registered types accept exactly their declared version; unsupported versions fail explicitly. Unregistered object types and unknown block/field payloads retain their JSON representation without becoming editable. This opacity supports plugins, not historical formats. No migration API, alternate old layout, or old-data repair is provided.
 
-### Compatibility rules
-
-- Prefer additive optional properties, new registered types and new field/block definitions over changing the meaning of existing fields. A new optional capability does not require rewriting every object or increasing the version of unrelated types.
-- Missing optional properties get runtime defaults. Unknown properties, block payloads, field definitions and values survive roundtrips. Unsupported content is read-only, not converted to a lossy approximation.
-- A semantic breaking change needs an explicit per-type version and a tested sequential migration. Older clients must preserve newer objects without writing them. A schema version is not the application release version.
-- Stable IDs, per-object files and provider-independent payloads remain invariant. New database views share existing records; adding a field does not rewrite old records.
-- Keep regression fixtures and roundtrip tests for every historical format once one exists. These rules reduce migrations; they cannot make arbitrary future breaking changes migration-free.
+Prefer additive properties and new registered definitions instead of changing existing field meanings. Object identity and database membership cannot change during an update. New views share existing records; removing a field retains its stored values. Current-format regression fixtures cover these contracts. Tombstones and immutable chunks are not automatically removed.
 
 ## Reading export
 

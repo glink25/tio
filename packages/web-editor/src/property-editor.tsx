@@ -1,6 +1,7 @@
 import { id, type Field, type TioObject } from '@tio/core';
 import { useT, type TranslationKey } from '@tio/i18n';
 import { Button, IconButton } from '@tio/ui';
+import { useViewExtensions } from '@tio/views';
 import { Plus, X } from 'lucide-react';
 import { useState } from 'react';
 const types = ['text', 'number', 'boolean', 'date', 'select', 'multiSelect', 'relation'] as const;
@@ -18,6 +19,7 @@ export function PropertyEditor({
   close: () => void;
 }) {
   const t = useT();
+  const { fields } = useViewExtensions();
   const [draft, setDraft] = useState<Field>(field ?? { id: id('field'), name: '', type: 'text' });
   const patch = (value: Partial<Field>) => setDraft((p) => ({ ...p, ...value }));
   return (
@@ -49,6 +51,11 @@ export function PropertyEditor({
           value={draft.type}
           onChange={(e) => patch({ type: e.target.value, options: [] })}
         >
+          {Object.entries(fields ?? {}).map(([type, definition]) => (
+            <option key={type} value={type}>
+              {definition.label}
+            </option>
+          ))}
           {draft.type === 'title' && <option value="title">{t('ui.untitled')}</option>}
           {types.map((type) => (
             <option key={type} value={type}>

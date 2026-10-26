@@ -24,7 +24,7 @@ export interface CommitRequest {
   clientId?: string;
   sequence?: number;
   origin?: string;
-  migration?: boolean;
+  recovery?: unknown[];
   expectedVersion: number;
   changes: TioObject[];
   assetIds: string[];
@@ -55,8 +55,19 @@ export interface AssetStore {
   readAsset(id: string): Promise<AssetData | undefined>;
   releaseAsset(id: string): Promise<void>;
 }
+export interface ObjectQuery {
+  /** Choose one index; cursor ordering is stable object ID order, not display order. */
+  scope: { type: string } | { databaseId: string };
+  after?: string;
+  limit: number;
+}
+export interface ObjectPage extends WorkspaceSnapshot {
+  next?: string;
+}
 export interface WorkspaceRepository extends AssetStore {
+  queryObjects?(query: ObjectQuery): Promise<ObjectPage>;
   readSnapshot(): Promise<WorkspaceSnapshot>;
+  readObjects?(ids: string[]): Promise<WorkspaceSnapshot>;
   readChanges?(since: number): Promise<WorkspaceSnapshot>;
   acknowledgeCommits?(clientId: string, sequence: number): Promise<void>;
   commit(request: CommitRequest): Promise<CommitResult>;
@@ -78,7 +89,7 @@ export interface SyncRepository extends SyncStateStore {
   entries(): Promise<SyncEntry[]>;
   all(): Promise<TioObject[]>;
   get(id: string): Promise<SyncEntry | undefined>;
-  reconcile(value: TioObject, revision: number): Promise<number | null>;
+  reconcile(value: TioObject, revision: number, recovery?: unknown[]): Promise<number | null>;
   acknowledge(id: string, endpoint: string, base: TioObject, revision: number): Promise<void>;
   clearBaseline(id: string, endpoint: string): Promise<void>;
   readAsset(id: string): Promise<AssetData | undefined>;

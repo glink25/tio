@@ -5,9 +5,9 @@ import {
   type ConnectionAdapter,
   type TioObject,
 } from '@tio/core';
+import type { WorkspaceContentPort } from '@tio/core';
+import { FileWorkspaceContent } from '@tio/file-storage';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
-import { decode } from '@tio/serialization';
-import { FileWorkspaceContent, type WorkspaceContentPort } from '@tio/sync';
 export interface ConnectionBinding {
   adapter: ConnectionAdapter;
   discover(): Promise<TioObject[]>;
@@ -39,15 +39,12 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
       if (!provider) return [];
       const workspaces: TioObject[] = [];
       for (const file of await provider.list('workspaces/')) {
-        if (!/^workspaces\/[a-zA-Z0-9_-]+\/workspace\.json$/.test(file.path)) continue;
-        const bytes = await provider.read(file.path);
-        if (!bytes) continue;
-        const workspace = decode(bytes);
-        if (
-          workspace.type === 'workspace' &&
-          file.path === `workspaces/${workspace.id}/workspace.json`
-        )
-          workspaces.push(workspace);
+        const match = /^workspaces\/([a-zA-Z0-9_-]+)\/objects\/([a-zA-Z0-9_-]+)\.json$/.exec(
+          file.path,
+        );
+        if (!match || match[1] !== match[2]) continue;
+        const workspace = await new FileWorkspaceContent(provider, match[1]).read(match[2]);
+        if (workspace?.type === 'workspace') workspaces.push(workspace);
       }
       return workspaces;
     },

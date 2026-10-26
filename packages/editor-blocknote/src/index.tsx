@@ -7,6 +7,9 @@ import {
   getDefaultReactSlashMenuItems,
 } from '@blocknote/react';
 import { BlockNoteView, ShadCNDefaultComponents } from '@blocknote/shadcn';
+
+import { toEditor, fromEditor, type BlockContentCodec } from './codec';
+export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
 import { useT, useTranslation } from '@tio/i18n';
 import { EmptyNotice, useTheme, useMobile, IconButton, PortalContext } from '@tio/ui';
@@ -89,7 +92,7 @@ const OpaqueBlock = createReactBlockSpec(
     },
   },
 )();
-const schema = BlockNoteSchema.create({
+export const defaultEditorSchema = BlockNoteSchema.create({
   blockSpecs: {
     ...defaultBlockSpecs,
     databaseView: DatabaseBlock,
@@ -97,70 +100,14 @@ const schema = BlockNoteSchema.create({
     unsupported: OpaqueBlock,
   },
 });
-const blockTypes = new Set(Object.keys(schema.blockSchema));
-const styles = new Set([
-  'bold',
-  'italic',
-  'underline',
-  'strike',
-  'code',
-  'textColor',
-  'backgroundColor',
-]);
-function safeInline(content: any): boolean {
-  if (!Array.isArray(content)) return true;
-  return content.every(
-    (c) =>
-      typeof c === 'string' ||
-      (c.type === 'text' &&
-        Object.keys(c).every((k) => ['type', 'text', 'styles'].includes(k)) &&
-        Object.keys(c.styles ?? {}).every((s) => styles.has(s))) ||
-      (c.type === 'link' &&
-        Object.keys(c).every((k) => ['type', 'href', 'content'].includes(k)) &&
-        typeof c.href === 'string' &&
-        /^(https?:|mailto:|#)/.test(c.href) &&
-        safeInline(c.content)),
-  );
+export interface EditorSchema {
+  schema: BlockNoteSchema<any, any, any>;
+  codecs?: Record<string, BlockContentCodec>;
+  slashItems?: (
+    editor: Parameters<typeof getDefaultReactSlashMenuItems>[0],
+  ) => ReturnType<typeof getDefaultReactSlashMenuItems>;
 }
-export function toEditor(blocks: Block[]): any[] {
-  return blocks.map((b) =>
-    !blockTypes.has(b.type) || b.type === 'unsupported' || !safeInline(b.content)
-      ? { id: b.id, type: 'unsupported', props: { raw: JSON.stringify(b), label: b.type } }
-      : {
-          id: b.id,
-          type: b.type,
-          props: b.props,
-          ...(['databaseView', 'pageReference'].includes(b.type) ? {} : { content: b.content }),
-          children: toEditor(b.children),
-        },
-  );
-}
-export function fromEditor(blocks: any[], previous: Block[]): Block[] {
-  const originals = new Map<string, Block>();
-  const walk = (bs: Block[]) => {
-    for (const b of bs) {
-      originals.set(b.id, b);
-      walk(b.children);
-    }
-  };
-  walk(previous);
-  const convert = (b: any): Block => {
-    if (b.type === 'unsupported') {
-      const raw = JSON.parse(b.props.raw);
-      return { ...raw, id: b.id };
-    }
-    const old = originals.get(b.id);
-    return {
-      ...old,
-      id: b.id,
-      type: b.type,
-      props: { ...(old?.type === b.type ? old?.props : {}), ...b.props },
-      content: b.content ?? [],
-      children: (b.children ?? []).map(convert),
-    };
-  };
-  return blocks.map(convert);
-}
+export const EditorSchemaContext = createContext<EditorSchema>({ schema: defaultEditorSchema });
 export interface EditorProps {
   onSubpage?: () => void;
   onReference?: () => void;
@@ -186,6 +133,7 @@ export function EditorContent({
   renderPageReference,
 }: EditorProps) {
   const t = useT();
+  const { schema, codecs, slashItems } = useContext(EditorSchemaContext);
   const { i18n } = useTranslation();
   const theme = useTheme();
   const mobile = useMobile();
@@ -217,7 +165,7 @@ export function EditorContent({
   const editor = useCreateBlockNote({
     schema,
     dictionary: i18n.language === 'zh' ? zh : en,
-    initialContent: blocks.length ? toEditor(blocks) : undefined,
+    initialContent: blocks.length ? toEditor(blocks, schema, codecs) : undefined,
     uploadFile: upload,
     resolveFileUrl: resolve,
   });
@@ -228,7 +176,7 @@ export function EditorContent({
       if (cancelled) return;
       const serialized = JSON.stringify(blocks);
       if (sent.current.delete(serialized)) return;
-      const current = fromEditor(editor.document, original.current);
+      const current = fromEditor(editor.document, original.current, codecs);
       original.current = blocks;
       if (JSON.stringify(current) !== serialized) {
         applying.current = true;
@@ -246,6 +194,8 @@ export function EditorContent({
                     children: [],
                   },
                 ],
+            schema,
+            codecs,
           ),
         );
         applying.current = false;
@@ -254,7 +204,7 @@ export function EditorContent({
     return () => {
       cancelled = true;
     };
-  }, [blocks, editor]);
+  }, [blocks, editor, schema, codecs]);
   return (
     <PageContext.Provider
       value={renderPageReference ?? (() => <EmptyNotice>{t('page.missing')}</EmptyNotice>)}
@@ -274,7 +224,7 @@ export function EditorContent({
           onChange={() => {
             if (applying.current) return;
             const previous = original.current;
-            const next = fromEditor(editor.document, previous);
+            const next = fromEditor(editor.document, previous, codecs);
             original.current = next;
             sent.current.add(JSON.stringify(next));
             if (sent.current.size > 500) sent.current.delete(sent.current.values().next().value!);
@@ -287,6 +237,7 @@ export function EditorContent({
               filterSuggestionItems(
                 [
                   ...getDefaultReactSlashMenuItems(editor),
+                  ...(slashItems?.(editor) ?? []),
                   ...(onSubpage
                     ? [
                         {

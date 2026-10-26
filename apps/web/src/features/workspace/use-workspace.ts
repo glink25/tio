@@ -1,5 +1,5 @@
 import { chooseFolder } from '@tio/adapter-local-folder';
-import { id, visible, editable, type TioObject } from '@tio/core';
+import { id, visibility, editable, type TioObject } from '@tio/core';
 import type { WorkspaceSession, Connection } from '@tio/core';
 import { t, i18n, errorMessage } from '@tio/i18n';
 import { exportZip, exportMarkdownZip, importZip } from '@tio/serialization';
@@ -326,7 +326,7 @@ export function useWorkspace() {
   }
   async function importFile(file: File) {
     try {
-      const data = importZip(new Uint8Array(await file.arrayBuffer()));
+      const data = await importZip(new Uint8Array(await file.arrayBuffer()));
       const workspaceId = id('workspace');
       const s = await services.create(
         data.objects.map((o) => ({
@@ -352,12 +352,13 @@ export function useWorkspace() {
       setError(errorMessage(e));
     }
   }
+  const isVisible = visibility(objects);
   const current = selected
-    ? objects.find((o) => o.id === selected && visible(o, objects))
-    : (objects.find((o) => o.type === 'page' && visible(o, objects)) ??
-      objects.find((o) => o.type === 'database' && visible(o, objects)));
+    ? objects.find((o) => o.id === selected && isVisible(o))
+    : (objects.find((o) => o.type === 'page' && isVisible(o)) ??
+      objects.find((o) => o.type === 'database' && isVisible(o)));
   const workspace = objects.find((o) => o.type === 'workspace');
-  const nav = objects.filter((o) => ['page', 'database'].includes(o.type) && visible(o, objects));
+  const nav = objects.filter((o) => ['page', 'database'].includes(o.type) && isVisible(o));
   function favorite(o: TioObject) {
     const s = {
       ...session!,

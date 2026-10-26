@@ -54,8 +54,8 @@ test('one folder connection hosts independent spaces and synchronizes without an
         try {
           const dir = (window as any).architecture.directory;
           const spaces = await dir.getDirectoryHandle('workspaces');
-          const a = await (await spaces.getDirectoryHandle('a')).getDirectoryHandle('pages');
-          const b = await (await spaces.getDirectoryHandle('b')).getDirectoryHandle('pages');
+          const a = await (await spaces.getDirectoryHandle('a')).getDirectoryHandle('objects');
+          const b = await (await spaces.getDirectoryHandle('b')).getDirectoryHandle('objects');
           return [
             JSON.parse(await (await (await a.getFileHandle('p.json')).getFile()).text()).title,
             JSON.parse(await (await (await b.getFileHandle('p.json')).getFile()).text()).title,
@@ -149,7 +149,7 @@ for (const permission of ['prompt', 'denied']) {
       const spaces = await folder.getDirectoryHandle('workspaces');
       const result: string[] = [];
       for await (const [, space] of spaces.entries()) {
-        const pages = await (space as FileSystemDirectoryHandle).getDirectoryHandle('pages');
+        const pages = await (space as FileSystemDirectoryHandle).getDirectoryHandle('objects');
         for await (const [, file] of pages.entries())
           result.push(
             JSON.parse(await (await (file as FileSystemFileHandle).getFile()).text()).title,

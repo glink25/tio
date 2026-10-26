@@ -80,12 +80,7 @@ export function queryRecords(
     return a.id.localeCompare(b.id);
   });
 }
-export function validateValue(field: Field, value: unknown) {
-  if (value === null || value === undefined) return;
-  if (field.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value)))
-    throw new Error('请输入有效数字');
-  if (field.type === 'boolean' && typeof value !== 'boolean') throw new Error('请输入布尔值');
-}
+export { validateValue } from '@tio/core';
 export function groups(records: TioObject[], field: Field | undefined) {
   const options = field?.options ?? [];
   return [

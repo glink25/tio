@@ -15,6 +15,7 @@
     "@tio/core": "workspace:*",
     "@tio/database": "workspace:*",
     "@tio/editor-blocknote": "workspace:*",
+    "@tio/file-storage": "workspace:*",
     "@tio/i18n": "workspace:*",
     "@tio/local-store": "workspace:*",
     "@tio/merge": "workspace:*",

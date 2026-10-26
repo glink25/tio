@@ -1,7 +1,7 @@
 import { FolderConnectionAdapter } from '@tio/adapter-local-folder';
 import { object, type ConnectionAccessState, type ConnectionAdapter } from '@tio/core';
+import { FileWorkspaceContent } from '@tio/file-storage';
 import { MemoryProvider } from '@tio/provider-memory';
-import { FileWorkspaceContent } from '@tio/sync';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 
 import { WorkspaceServices } from '../apps/web/src/services/workspace-services';
@@ -88,7 +88,7 @@ it('restores local sessions without endpoint access and resumes all spaces throu
     [space, 'Offline A'],
     [bId, 'Offline B'],
   ]) {
-    const bytes = await files.read(`workspaces/${id}/pages/p.json`);
+    const bytes = await files.read(`workspaces/${id}/objects/p.json`);
     expect(JSON.parse(new TextDecoder().decode(bytes!)).title).toBe(title);
   }
   expect(runtimeB.snapshot().find((o) => o.id === 'p')?.title).toBe('Offline B');

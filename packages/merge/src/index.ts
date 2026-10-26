@@ -1,4 +1,4 @@
-import type { TioObject } from '@tio/core';
+import { createDefaultRegistry, type ObjectRegistry, type Block, type TioObject } from '@tio/core';
 import { canonical } from '@tio/serialization';
 import { diff3Merge } from 'node-diff3';
 export interface MergeResult {
@@ -15,6 +15,7 @@ export function merge(
   base: TioObject | undefined,
   local: TioObject,
   remote: TioObject,
+  types: ObjectRegistry = createDefaultRegistry(),
 ): MergeResult {
   const warnings: string[] = [];
   const recovered: unknown[] = [];
@@ -24,10 +25,23 @@ export function merge(
     local.type !== remote.type
   )
     throw new Error('对象身份不匹配');
+  const custom = types.get(local.type)?.merge;
+  if (custom) {
+    const result = custom(base, local, remote);
+    types.decode(result.merged);
+    if (
+      result.merged.id !== local.id ||
+      result.merged.workspaceId !== local.workspaceId ||
+      result.merged.type !== local.type
+    )
+      throw new Error('Merge changed identity');
+    return result;
+  }
   function visit(b: any, l: any, r: any, path: string): any {
     if (eq(l, r)) return l;
     if (eq(l, b)) return r;
     if (eq(r, b)) return l;
+    if (path === '.blocks') return mergeBlocks(b ?? [], l, r);
     if (l === undefined || r === undefined) {
       warnings.push(path + ':delete-edit');
       recovered.push(l ?? r);
@@ -101,8 +115,76 @@ export function merge(
     recovered.push({ path, local: l, remote: r });
     return winner(l, r);
   }
+  // Block identity is document-wide: moving a node must not turn its edit into a deletion.
+  function mergeBlocks(baseBlocks: Block[], localBlocks: Block[], remoteBlocks: Block[]): Block[] {
+    const index = (blocks: Block[]) => {
+      const nodes = new Map<string, { payload: Omit<Block, 'children'>; parent: string | null }>();
+      const orders = new Map<string | null, string[]>();
+      const walk = (siblings: Block[], parent: string | null) => {
+        orders.set(
+          parent,
+          siblings.map((block) => block.id),
+        );
+        for (const { children, ...payload } of siblings) {
+          nodes.set(payload.id, { payload, parent });
+          walk(children, payload.id);
+        }
+      };
+      walk(blocks, null);
+      return { nodes, orders };
+    };
+    const b = index(baseBlocks),
+      l = index(localBlocks),
+      r = index(remoteBlocks);
+    const nodes = new Map<string, { payload: Omit<Block, 'children'>; parent: string | null }>();
+    for (const id of [...new Set([...l.nodes.keys(), ...r.nodes.keys()])].sort()) {
+      const node = visit(b.nodes.get(id), l.nodes.get(id), r.nodes.get(id), '.block.' + id);
+      if (node) nodes.set(id, node);
+    }
+    // Concurrent valid moves can form a cycle. Detach its first ID deterministically.
+    for (const [id, node] of nodes) {
+      const seen = new Set([id]);
+      let parent = node.parent;
+      while (parent !== null) {
+        if (seen.has(parent) || !nodes.has(parent)) {
+          recovered.push({ id, parent: node.parent });
+          warnings.push('.block.' + id + ':parent');
+          node.parent = null;
+          break;
+        }
+        seen.add(parent);
+        parent = nodes.get(parent)!.parent;
+      }
+    }
+    const children = new Map<string | null, string[]>();
+    for (const [id, node] of nodes) {
+      const siblings = children.get(node.parent) ?? [];
+      siblings.push(id);
+      children.set(node.parent, siblings);
+    }
+    const build = (parent: string | null): Block[] => {
+      const ids = children.get(parent) ?? [];
+      const order: string[] = visit(
+        b.orders.get(parent) ?? [],
+        l.orders.get(parent) ?? [],
+        r.orders.get(parent) ?? [],
+        '.order.' + parent,
+      );
+      const positions = new Map(order.map((id, i) => [id, i]));
+      ids.sort(
+        (a, b) =>
+          (positions.get(a) ?? Infinity) - (positions.get(b) ?? Infinity) ||
+          (a < b ? -1 : a > b ? 1 : 0),
+      );
+      return ids.map((id) => ({ ...nodes.get(id)!.payload, children: build(id) }) as Block);
+    };
+    return build(null);
+  }
   let merged: TioObject;
-  if (local.deleted || remote.deleted) {
+  if (eq(local, remote)) merged = local;
+  else if (eq(local, base)) merged = remote;
+  else if (eq(remote, base)) merged = local;
+  else if (local.deleted || remote.deleted) {
     merged = structuredClone(
       winner(local.deleted ? local : remote, remote.deleted ? remote : local),
     );
@@ -112,21 +194,5 @@ export function merge(
       recovered.push(local.deleted ? remote : local);
     }
   } else merged = visit(base, local, remote, '');
-  if (merged.blocks) {
-    const seen = new Set<string>();
-    const dedupe = (blocks: NonNullable<TioObject['blocks']>): NonNullable<TioObject['blocks']> =>
-      blocks
-        .filter((b) => {
-          if (seen.has(b.id)) {
-            warnings.push('duplicate-block:' + b.id);
-            recovered.push(b);
-            return false;
-          }
-          seen.add(b.id);
-          return true;
-        })
-        .map((b) => ({ ...b, children: dedupe(b.children) }));
-    merged = { ...merged, blocks: dedupe(merged.blocks) };
-  }
   return { merged, warnings, recovered };
 }

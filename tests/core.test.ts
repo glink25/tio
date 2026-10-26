@@ -1,5 +1,6 @@
 import { id, object, textBlock, repairTree, validate } from '@tio/core';
 import { queryRecords } from '@tio/database';
+import { FileWorkspaceContent } from '@tio/file-storage';
 import { LocalStore } from '@tio/local-store';
 import { merge } from '@tio/merge';
 import { MemoryProvider } from '@tio/provider-memory';
@@ -14,7 +15,7 @@ const store = () => {
   return s;
 };
 const engine = (s: LocalStore, p: MemoryProvider) => {
-  const e = new HostSyncRunner(s, p, 'endpoint', 'base_1');
+  const e = new HostSyncRunner(s, new FileWorkspaceContent(p, 'base_1'), 'endpoint', 'base_1');
   engines.push(e);
   return e;
 };
@@ -42,7 +43,7 @@ describe('canonical objects', () => {
     });
     expect(decode(encode(p))).toEqual(p);
     expect(canonical({ b: 1, a: 2 })).toBe(canonical({ a: 2, b: 1 }));
-    expect(validate({ ...p, schemaVersion: 2 }).schemaVersion).toBe(2);
+    expect(() => validate({ ...p, schemaVersion: 2 })).toThrow('Unsupported schema');
   });
   it('rejects unsafe IDs and malformed blocks', () => {
     expect(() => validate({ ...page(), id: '../file' })).toThrow();
@@ -64,7 +65,7 @@ describe('canonical objects', () => {
       byteSize: 3,
     });
     const zip = await exportZip([base, page(), asset], async () => new TextEncoder().encode('abc'));
-    const imported = importZip(zip);
+    const imported = await importZip(zip);
     expect(imported.objects).toHaveLength(3);
     expect(new TextDecoder().decode(imported.assets.get('asset_1'))).toBe('abc');
   });
@@ -227,7 +228,9 @@ describe('persistence and synchronization', () => {
         mime: 'image/png',
         byteSize: 3,
       });
-    await s.batch([asset, page()], new Map([['asset_1', new Blob(['abc'])]]));
+    const linkedPage = page();
+    linkedPage.blocks![0].props.url = 'asset:asset_1';
+    await s.batch([asset, linkedPage], new Map([['asset_1', new Blob(['abc'])]]));
     p.beforeWrite = async (path) => {
       if (path.endsWith('.png')) throw new Error('disk full');
     };
@@ -238,10 +241,10 @@ describe('persistence and synchronization', () => {
     const s = store(),
       p = new MemoryProvider(),
       o = { ...page(), schemaVersion: 2 };
-    p.files.set(pathFor(o), encode(o));
+    p.files.set(pathFor(o), new TextEncoder().encode(canonical(o)));
     const e = engine(s, p);
     await e.sync();
-    expect((await s.get(o.id))?.object.schemaVersion).toBe(2);
+    expect(await s.get(o.id)).toBeUndefined();
     expect(e.issues.length).toBe(1);
   });
   it('queries numeric sort and field filter', () => {
@@ -257,22 +260,6 @@ describe('persistence and synchronization', () => {
   });
 });
 
-it('migrates explicitly and idempotently while preserving unknown data', async () => {
-  const { ObjectRegistry } = await import('@tio/core');
-  const registry = new ObjectRegistry();
-  registry.register({
-    type: 'custom',
-    currentVersion: 2,
-    validate: (value) => value,
-    migrations: { 1: (value) => ({ ...value, schemaVersion: 2, name: 'Migrated' }) },
-  });
-  const input = object('custom', 'base_1', { extra: { future: true } });
-  const migrated = registry.decode(input);
-  expect(migrated.schemaVersion).toBe(2);
-  expect(migrated.extra).toEqual({ future: true });
-  expect(registry.decode(migrated)).toEqual(migrated);
-  expect(input.schemaVersion).toBe(1);
-});
 it('preserves emoji graphemes when merging independent text edits', () => {
   const b = page();
   b.blocks![0].content = [{ type: 'text', text: '👨‍👩‍👧‍👦 hello world', styles: {} }];

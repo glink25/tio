@@ -1,3 +1,4 @@
+import { FileWorkspaceContent } from '@tio/file-storage';
 import type { LocalStore } from '@tio/local-store';
 import { MemoryProvider } from '@tio/provider-memory';
 import { HostSyncRunner, SyncCore } from '@tio/sync';
@@ -8,7 +9,12 @@ afterEach(() => {
   vi.useRealTimers();
 });
 function engine(run: () => Promise<void>) {
-  const e = new HostSyncRunner({} as LocalStore, new MemoryProvider(), 'timer-test', 'workspace');
+  const e = new HostSyncRunner(
+    {} as LocalStore,
+    new FileWorkspaceContent(new MemoryProvider(), 'workspace'),
+    'timer-test',
+    'workspace',
+  );
   // Isolate scheduling from IndexedDB; integration tests exercise real sync work.
   vi.spyOn((e as unknown as { core: SyncCore }).core, 'run').mockImplementation(run);
   engines.push(e);

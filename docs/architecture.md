@@ -69,7 +69,7 @@ Attachments precede referencing content. Three-way merge uses each space's endpo
 
 ## Format evolution and boundaries
 
-The shared Registry controls supported versions and editability. Ordinary commits cannot upgrade schema versions. Explicit migration transactions must exactly match a registered sequential migration and preserve identity. The current initial format has no production historical migrations. Unknown keys survive; unsupported types/versions are preserved read-only.
+Each host owns an instance-scoped domain registry used by commits and runtime commands. Registered validators accept exactly their declared schema version; updates cannot change version or identity. There is no migration transaction or historical reader. Unknown types and keys retain JSON payloads without becoming editable. See `extensions.md` for composition and `file-storage.md` for shared chunk storage.
 
 Boundary checks recursively examine pure-package sources and transitive package dependencies. The editor may depend on browser presentation adapters, but never concrete repositories or connection adapters. Documents and verification evidence are maintained under `docs/`; private original documents stay in ignored `docs/.local/`.
 

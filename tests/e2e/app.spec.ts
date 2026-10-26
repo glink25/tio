@@ -120,7 +120,7 @@ test('folder entry, background sync, external changes and fresh-cache restore', 
         const bases = await dir.getDirectoryHandle('workspaces').catch(() => null);
         if (!bases) return false;
         for await (const [, base] of (bases as any).entries()) {
-          const pages = await base.getDirectoryHandle('pages').catch(() => null);
+          const pages = await base.getDirectoryHandle('objects').catch(() => null);
           if (!pages) continue;
           for await (const [, file] of pages.entries()) {
             const data = JSON.parse(await (await file.getFile()).text());
@@ -136,7 +136,7 @@ test('folder entry, background sync, external changes and fresh-cache restore', 
     const dir = await root.getDirectoryHandle('demo-folder');
     const bases = await dir.getDirectoryHandle('workspaces');
     for await (const [, base] of (bases as any).entries()) {
-      const pages = await base.getDirectoryHandle('pages');
+      const pages = await base.getDirectoryHandle('objects');
       for await (const [, file] of pages.entries()) {
         const data = JSON.parse(await (await file.getFile()).text());
         if (data.title === '文件夹中的文档') {

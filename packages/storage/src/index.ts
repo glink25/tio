@@ -1,6 +1,6 @@
 export interface FileStorageProvider {
   canWrite?(): Promise<boolean>;
-  list(prefix: string): Promise<{ path: string }[]>;
+  list(prefix: string): Promise<{ path: string; fingerprint?: string }[]>;
   read(path: string): Promise<Uint8Array | null>;
   write(path: string, data: Uint8Array): Promise<void>;
   delete(path: string): Promise<void>;

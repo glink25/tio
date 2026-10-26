@@ -1,6 +1,7 @@
 import { prepareAsset } from '@tio/assets';
 import {
-  validate,
+  createDomain,
+  type Domain,
   fullAccess,
   assertAccess,
   resourceOf,
@@ -61,9 +62,14 @@ export class WorkspaceRuntime {
   private constructor(
     private repository: WorkspaceRepository,
     readonly access: AccessPolicy,
+    readonly domain: Domain,
   ) {}
-  static async open(repository: WorkspaceRepository, access: AccessPolicy = fullAccess) {
-    const runtime = new WorkspaceRuntime(repository, access);
+  static async open(
+    repository: WorkspaceRepository,
+    access: AccessPolicy = fullAccess,
+    domain: Domain = createDomain(),
+  ) {
+    const runtime = new WorkspaceRuntime(repository, access, domain);
     runtime.unsubscribe = repository.subscribeChanges((event) => runtime.ingest(event));
     try {
       await runtime.refresh(true);
@@ -90,7 +96,8 @@ export class WorkspaceRuntime {
   private publish() {
     try {
       const objects = this.pending.reduce(
-        (state, command) => (command.confirmed ? state : executeCommand(command.intent, state)),
+        (state, command) =>
+          command.confirmed ? state : executeCommand(command.intent, state, undefined, this.domain),
         [...this.baseline.values()].map((e) => e.object),
       );
       this.store.setState({
@@ -155,24 +162,31 @@ export class WorkspaceRuntime {
   ) {
     if (this.disposed || this.closing) throw new Error('Workspace is closed');
     const before = this.store.getState().objects;
-    const next = executeCommand(intent, before);
-    next.forEach((o) => {
-      validate(o);
-      const old = before.find((p) => p.id === o.id);
-      if (JSON.stringify(old) !== JSON.stringify(o)) {
-        try {
-          assertAccess(this.access, old, o);
-        } catch {
-          throw new HostError('permission');
-        }
+    const next = executeCommand(intent, before, undefined, this.domain);
+    const originals = new Map(before.map((o) => [o.id, o]));
+    const changed = next.filter((o) => o !== originals.get(o.id));
+    for (const o of changed) {
+      this.domain.objects.decode(o);
+      try {
+        assertAccess(this.access, originals.get(o.id), o);
+      } catch {
+        throw new HostError('permission');
       }
-    });
-    if (remember)
+    }
+    if (remember) {
       this.history.push({
         type: 'restore',
-        before: structuredClone(before),
-        after: structuredClone(next),
+        before: structuredClone(
+          changed.flatMap((o) => (originals.has(o.id) ? [originals.get(o.id)!] : [])),
+        ),
+        after: structuredClone(changed),
       });
+      while (
+        this.history.length > 100 ||
+        new TextEncoder().encode(JSON.stringify(this.history)).length > 8 * 1024 * 1024
+      )
+        this.history.shift();
+    }
     const command = { intent: structuredClone(intent), assets };
     this.pending.push(command);
     for (const [id, blob] of assets) this.blobs.set(id, blob);
@@ -218,15 +232,27 @@ export class WorkspaceRuntime {
         const receipt = await this.repository.getCommitResult(command.request.id);
         if (receipt?.status === 'committed') return receipt.entries;
       } else {
-        const snapshot = await this.repository.readSnapshot();
+        const snapshot = await (this.repository.readChanges
+          ? this.repository.readChanges(this.version)
+          : this.repository.readSnapshot());
         this.accept(snapshot.entries);
+        this.version = snapshot.version;
+        const confirmed = [...this.baseline.values()].map((entry) => entry.object);
+        const recovery: unknown[] = [];
         const next = executeCommand(
           command.intent,
-          snapshot.entries.map((e) => e.object),
+          confirmed,
+          (result) => {
+            if (result.recovered.length)
+              recovery.push({
+                objectId: 'id' in command.intent ? command.intent.id : undefined,
+                warnings: result.warnings,
+                values: result.recovered,
+              });
+          },
+          this.domain,
         );
-        const previous = new Map(
-          snapshot.entries.map((e) => [e.object.id, JSON.stringify(e.object)]),
-        );
+        const previous = new Map(confirmed.map((object) => [object.id, object]));
         for (const [id, asset] of command.assets) await this.repository.stageAsset(id, asset);
         command.request = {
           id: crypto.randomUUID(),
@@ -234,7 +260,11 @@ export class WorkspaceRuntime {
           sequence: ++this.sequence,
           origin: this.clientId,
           expectedVersion: snapshot.version,
-          changes: next.filter((o) => JSON.stringify(o) !== previous.get(o.id)),
+          recovery,
+          changes: next.filter(
+            (o) =>
+              o !== previous.get(o.id) && JSON.stringify(o) !== JSON.stringify(previous.get(o.id)),
+          ),
           assetIds: [...command.assets.keys()],
         };
       }

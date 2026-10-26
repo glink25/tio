@@ -1,5 +1,5 @@
-import { validate, registry, type TioObject } from '@tio/core';
-import { zipSync, unzipSync, strToU8 } from 'fflate';
+import { createDefaultRegistry, type ObjectRegistry, type TioObject } from '@tio/core';
+import { zip, unzip, unzipSync, strToU8, type Unzipped } from 'fflate';
 export function canonical(value: unknown): string {
   const normalize = (v: any): any =>
     Array.isArray(v)
@@ -14,37 +14,19 @@ export function canonical(value: unknown): string {
         : v;
   return JSON.stringify(normalize(value), null, 2) + '\n';
 }
-export function encode(o: TioObject) {
-  validate(o);
+export function encode(o: TioObject, types: ObjectRegistry = createDefaultRegistry()) {
+  types.decode(o);
   return new TextEncoder().encode(canonical(o));
 }
-export function decode(bytes: Uint8Array) {
-  return registry().decode(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+export function decode(bytes: Uint8Array, types: ObjectRegistry = createDefaultRegistry()) {
+  return types.decode(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
 }
 export function pathFor(o: TioObject): string {
-  const root = `workspaces/${o.workspaceId}/`;
-  switch (o.type) {
-    case 'workspace':
-      return root + 'workspace.json';
-    case 'page':
-      return root + `pages/${o.id}.json`;
-    case 'database':
-      return root + `databases/${o.id}/schema.json`;
-    case 'record':
-      return root + `databases/${o.databaseId}/records/${o.id}.json`;
-    case 'databaseView':
-      return root + `databases/${o.databaseId}/views/${o.id}.json`;
-    case 'asset':
-      return root + `assets/${o.id}.json`;
-    default:
-      return root + `objects/${o.id}.json`;
-  }
+  return `workspaces/${o.workspaceId}/objects/${o.id}.json`;
 }
 export function managedPath(path: string, workspaceId?: string): boolean {
-  const root = workspaceId ? `workspaces/${workspaceId}/` : 'workspaces/[a-zA-Z0-9_-]+/';
-  return new RegExp(
-    `^${root}(workspace\\.json|pages/[a-zA-Z0-9_-]+\\.json|objects/[a-zA-Z0-9_-]+\\.json|assets/[a-zA-Z0-9_-]+\\.json|databases/[a-zA-Z0-9_-]+/(schema\\.json|(records|views)/[a-zA-Z0-9_-]+\\.json))$`,
-  ).test(path);
+  const match = /^workspaces\/([a-zA-Z0-9_-]+)\/objects\/([a-zA-Z0-9_-]+)\.json$/.exec(path);
+  return !!match && (workspaceId === undefined || match[1] === workspaceId);
 }
 export async function exportZip(
   objects: TioObject[],
@@ -60,16 +42,53 @@ export async function exportZip(
     }
   }
   files['tio-export.json'] = strToU8(canonical({ format: 'tio', version: 1 }));
-  return zipSync(files);
+  return new Promise((resolve, reject) =>
+    zip(files, (error, bytes) => (error ? reject(error) : resolve(bytes))),
+  );
 }
-export function importZip(bytes: Uint8Array): {
+export async function importZip(bytes: Uint8Array): Promise<{
   objects: TioObject[];
   assets: Map<string, Uint8Array>;
-} {
-  if (bytes.length > 100 * 1024 * 1024) throw new Error('备份文件不能超过 100 MB');
-  const files = unzipSync(bytes, { filter: (f) => f.originalSize <= 100 * 1024 * 1024 });
-  if (Object.values(files).reduce((n, x) => n + x.length, 0) > 200 * 1024 * 1024)
-    throw new Error('解压内容过大');
+}> {
+  if (bytes.length < 22 || bytes.length > 100 * 1024 * 1024)
+    throw new Error('Invalid archive size');
+  const sizes = new Map<string, number>();
+  let total = 0;
+  // fflate's filter runs before allocation/inflation. A false-only pass reads the directory.
+  unzipSync(bytes, {
+    filter: (entry) => {
+      if (
+        sizes.has(entry.name) ||
+        entry.name
+          .split('/')
+          .some(
+            (part) =>
+              !part || part === '.' || part === '..' || part.includes('\\') || part.includes('\0'),
+          )
+      )
+        throw new Error('Invalid or duplicate archive path');
+      total += entry.originalSize;
+      if (
+        entry.originalSize > 100 * 1024 * 1024 ||
+        total > 200 * 1024 * 1024 ||
+        sizes.size >= 100_000
+      )
+        throw new Error('Archive exceeds extraction limits');
+      sizes.set(entry.name, entry.originalSize);
+      return false;
+    },
+  });
+  if (!sizes.has('tio-export.json')) throw new Error('Missing archive format');
+  const files = await new Promise<Unzipped>((resolve, reject) =>
+    unzip(bytes, (error, files) => (error ? reject(error) : resolve(files))),
+  );
+  for (const [path, data] of Object.entries(files))
+    if (data.length !== sizes.get(path)) throw new Error('Archive size mismatch');
+  const format = JSON.parse(
+    new TextDecoder('utf-8', { fatal: true }).decode(files['tio-export.json']),
+  );
+  if (format.format !== 'tio' || format.version !== 1)
+    throw new Error('Unsupported archive format');
   const objects = Object.entries(files)
     .filter(([p]) => managedPath(p))
     .map(([p, b]) => {

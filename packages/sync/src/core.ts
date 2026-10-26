@@ -1,15 +1,15 @@
 import {
   ConnectionAccessError,
   repairTree,
-  supportedFormat,
+  createDefaultRegistry,
+  type ObjectRegistry,
   assertAccess,
   HostError,
   type SyncRepository,
 } from '@tio/core';
+import type { WorkspaceContentPort, TioObject } from '@tio/core';
 import { merge } from '@tio/merge';
 import { canonical } from '@tio/serialization';
-
-import type { WorkspaceContentPort } from './content';
 export interface SyncIssue {
   id?: string;
   path: string;
@@ -25,36 +25,42 @@ export class SyncCore {
     readonly content: WorkspaceContentPort,
     readonly endpoint: string,
     readonly workspaceId: string,
+    readonly types: ObjectRegistry = createDefaultRegistry(),
   ) {}
   async run() {
     const ids = new Set(await this.content.list());
     const entries = await this.store.entries();
     for (const e of entries) ids.add(e.object.id);
-    const assets: string[] = [],
-      other: string[] = [];
+    const local = new Map(entries.map((entry) => [entry.object.id, entry]));
+    const snapshots = new Map<string, TioObject | undefined>();
     for (const id of ids) {
-      const remote = await this.content.read(id);
-      (remote?.type === 'asset' ||
-      entries.some((e) => e.object.id === id && e.object.type === 'asset')
-        ? assets
-        : other
-      ).push(id);
-    }
-    let assetsFailed = false;
-    for (const path of [...assets.sort(), ...other.sort()]) {
       if (this.stopped) return;
       try {
-        const originalRemote = await this.content.read(path);
+        snapshots.set(id, await this.content.read(id));
+      } catch (error) {
+        this.issue(id, error);
+      }
+    }
+    const ordered = [...snapshots.keys()].sort(
+      (a, b) =>
+        Number((snapshots.get(b) ?? local.get(b)?.object)?.type === 'asset') -
+          Number((snapshots.get(a) ?? local.get(a)?.object)?.type === 'asset') ||
+        a.localeCompare(b),
+    );
+    const failedAssets = new Set<string>();
+    let treeChanged = false;
+    for (const path of ordered) {
+      if (this.stopped) return;
+      try {
+        const originalRemote = snapshots.get(path);
         const remote = originalRemote;
         if (remote && (remote.workspaceId !== this.workspaceId || remote.id !== path))
           throw new Error('文件路径与对象身份不匹配');
-        if (remote && !supportedFormat(remote)) {
+        if (remote && !this.types.supports(remote)) {
           if (!(await this.store.get(remote.id))) await this.store.reconcile(remote, 0);
-          throw new Error('对象版本高于当前支持版本，保留只读');
+          throw new Error('未注册的对象类型，保留只读');
         }
-        let entry = remote
-          ? await this.store.get(remote.id)
-          : entries.find((e) => e.object.id === path);
+        let entry = remote ? await this.store.get(remote.id) : local.get(path);
         if (!remote && entry?.object.deleted && entry.sync[this.endpoint]?.base.deleted) continue;
         if (!remote && entry?.sync[this.endpoint]) {
           this.issues.push({
@@ -70,7 +76,7 @@ export class SyncCore {
         const baseline = entry?.sync[this.endpoint]?.base;
         const result =
           remote && entry
-            ? merge(baseline, entry.object, remote)
+            ? merge(baseline, entry.object, remote, this.types)
             : { merged: remote ?? entry!.object, recovered: [], warnings: [] };
         const target = result.merged;
         // Authorization is refreshed for each publication; denied local content stays intact.
@@ -82,64 +88,90 @@ export class SyncCore {
             throw new HostError('permission');
           }
         }
-        if (!supportedFormat(target)) throw new Error('对象版本不支持写入');
-        if (result.recovered.length) await this.store.recover(result.recovered);
+        if (!this.types.supports(target)) throw new Error('对象版本不支持写入');
         let assetRepaired = false;
         if (target.type === 'asset') {
           let blob = await this.store.readAsset(target.id);
-          const remoteBlob = await this.content.readAsset(target);
-          if (!blob && remoteBlob) {
-            blob = {
-              name: target.filename ?? '',
-              mime: target.mime ?? 'application/octet-stream',
-              bytes: remoteBlob,
-            };
+          if (!blob && !target.deleted) {
+            const remoteBlob = await this.content.readAsset(target);
+            if (!remoteBlob) throw new Error('Missing asset binary');
+            blob = { name: target.filename ?? '', mime: target.mime!, bytes: remoteBlob };
             await this.store.stageAsset(target.id, blob);
             assetRepaired = true;
           }
-          if (!blob && !target.deleted) throw new Error('附件二进制缺失');
-          if (blob && !remoteBlob) await this.content.writeAsset(target, blob.bytes);
-        } else if (assetsFailed) throw new Error('附件尚未完成同步，暂缓发布业务对象');
+          if (blob && !target.deleted) await this.content.writeAsset(target, blob.bytes);
+        } else {
+          for (const id of assetReferences(target))
+            if (failedAssets.has(id) || !(await this.store.readAsset(id)))
+              throw new Error(`Asset unavailable: ${id}`);
+        }
         let rev = entry?.revision ?? 0;
         if (assetRepaired || !entry || canonical(entry.object) !== canonical(target)) {
-          const applied = await this.store.reconcile(target, rev);
+          const applied = await this.store.reconcile(target, rev, result.recovered);
           if (applied === null) {
             this.onDirty();
             continue;
           }
           rev = applied;
+          if (
+            ['page', 'database'].includes(target.type) &&
+            (!entry || entry.object.parentId !== target.parentId)
+          )
+            treeChanged = true;
         }
         // Read again before writing: reduce external-editor races without claiming CAS.
         if (!remote || canonical(target) !== canonical(remote)) {
-          const latest = await this.content.read(path);
+          const latest = await this.content.read(path, { fresh: true });
           if (canonical(latest ?? null) !== canonical(originalRemote ?? null)) {
             this.onDirty();
             continue;
           }
           await this.content.write(target);
         }
-        await this.store.acknowledge(target.id, this.endpoint, target, rev);
+        if (
+          entry?.sync[this.endpoint]?.revision !== rev ||
+          canonical(baseline) !== canonical(target)
+        )
+          await this.store.acknowledge(target.id, this.endpoint, target, rev);
         const newer = await this.store.get(target.id);
         if (newer && newer.revision !== rev) this.onDirty();
-      } catch (e) {
-        if (e instanceof ConnectionAccessError || (e as Error).name === 'NotAllowedError') throw e;
-        if (assets.includes(path)) assetsFailed = true;
-        this.issues.push({
-          id: path,
-          path,
-          code: e instanceof HostError ? e.code : 'object',
-          message: (e as Error).message,
-        });
+      } catch (error) {
+        if ((snapshots.get(path) ?? local.get(path)?.object)?.type === 'asset')
+          failedAssets.add(path);
+        this.issue(path, error);
       }
     }
-    const current = await this.store.all();
-    for (const repaired of repairTree(current)) {
-      const original = current.find((x) => x.id === repaired.id)!;
-      if (canonical(original) !== canonical(repaired)) {
-        const e = await this.store.get(repaired.id);
-        if (e) await this.store.reconcile(repaired, e.revision);
+    if (treeChanged && !this.issues.length && !this.stopped) {
+      const entries = await this.store.entries();
+      const originals = new Map(entries.map((entry) => [entry.object.id, entry]));
+      for (const object of repairTree(entries.map((entry) => entry.object))) {
+        const original = originals.get(object.id)!;
+        if (object === original.object) continue;
+        await this.store.reconcile(object, original.revision, [
+          { reason: 'parent-cycle', object: original.object },
+        ]);
         this.onDirty();
       }
     }
   }
+  private issue(id: string, error: unknown) {
+    if (error instanceof ConnectionAccessError || (error as Error).name === 'NotAllowedError')
+      throw error;
+    this.issues.push({
+      id,
+      path: id,
+      code: error instanceof HostError ? error.code : 'object',
+      message: (error as Error).message,
+    });
+  }
+}
+function assetReferences(value: unknown): Set<string> {
+  const ids = new Set<string>();
+  const visit = (value: unknown) => {
+    if (typeof value === 'string' && value.startsWith('asset:')) ids.add(value.slice(6));
+    else if (Array.isArray(value)) value.forEach(visit);
+    else if (value && typeof value === 'object') Object.values(value).forEach(visit);
+  };
+  visit(value);
+  return ids;
 }

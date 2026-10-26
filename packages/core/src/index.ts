@@ -1,4 +1,7 @@
-import { ObjectRegistry } from './registry';
+import { assertJson } from './json';
+import { createDefaultRegistry } from './registry';
+export { assertJson } from './json';
+export * from './fields';
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type FieldType =
   | 'title'
@@ -53,7 +56,7 @@ export interface TioObject {
   fields?: Field[];
   databaseId?: string;
   properties?: Record<string, unknown>;
-  layout?: 'table' | 'board';
+  layout?: string;
   visibleFieldIds?: string[];
   fieldOrder?: string[];
   columnWidths?: Record<string, number>;
@@ -84,7 +87,10 @@ export function object(
 }
 const plain = (x: unknown): x is Record<string, unknown> =>
   !!x && typeof x === 'object' && !Array.isArray(x);
-export function validate(input: unknown): TioObject {
+export function validateEnvelope(input: unknown): TioObject {
+  assertJson(input);
+  if (input && typeof input === 'object' && '$storage' in input)
+    throw new Error('Reserved storage envelope');
   if (
     !plain(input) ||
     typeof input.id !== 'string' ||
@@ -102,7 +108,13 @@ export function validate(input: unknown): TioObject {
     (typeof input.databaseId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(input.databaseId))
   )
     throw new Error('非法数据库标识');
-  if (!registry().supports(input as unknown as TioObject)) return input as unknown as TioObject;
+  return input as unknown as TioObject;
+}
+export function validate(input: unknown): TioObject {
+  return createDefaultRegistry().decode(input);
+}
+export function validateBuiltin(object: TioObject): TioObject {
+  const input = object as unknown as Record<string, unknown> & { type: string };
   if (input.deleted !== undefined && typeof input.deleted !== 'boolean')
     throw new Error('非法删除状态');
   if (input.type === 'workspace' && input.id !== input.workspaceId)
@@ -233,39 +245,66 @@ export function plainText(value: unknown): string {
   }
   return '';
 }
-/** Deterministic parent repair; deleted parents retain ownership for hidden subtrees. */
+/** Resolve only proven cycles; absent parents may belong to an incomplete remote scan. */
 export function repairTree(objects: TioObject[]): TioObject[] {
-  const map = new Map(objects.map((o) => [o.id, structuredClone(o)]));
-  for (const o of [...map.values()].sort((a, b) => a.id.localeCompare(b.id))) {
-    if (!['page', 'database'].includes(o.type)) continue;
-    let p = o.parentId;
-    const seen = new Set([o.id]);
-    while (p) {
-      const parent = map.get(p);
-      if (seen.has(p) || !parent || !['page', 'database'].includes(parent.type)) {
-        o.parentId = null;
+  const byId = new Map(
+    objects.filter((o) => ['page', 'database'].includes(o.type)).map((o) => [o.id, o]),
+  );
+  const visited = new Set<string>();
+  const detached = new Set<string>();
+  for (const object of byId.values()) {
+    const path: string[] = [];
+    const positions = new Map<string, number>();
+    let current: TioObject | undefined = object;
+    while (current && !visited.has(current.id)) {
+      const position = positions.get(current.id);
+      if (position !== undefined) {
+        detached.add(path.slice(position).sort()[0]);
         break;
       }
-      seen.add(p);
-      p = parent.parentId;
+      positions.set(current.id, path.length);
+      path.push(current.id);
+      current = current.parentId ? byId.get(current.parentId) : undefined;
     }
+    for (const id of path) visited.add(id);
   }
-  return [...map.values()];
+  return objects.map((o) => (detached.has(o.id) ? { ...o, parentId: null } : o));
 }
-export function visible(o: TioObject, objects: TioObject[]): boolean {
-  if (o.type === 'record') {
-    const db = objects.find((x) => x.id === o.databaseId);
-    if (!db || !visible(db, objects)) return false;
-  }
-  const map = new Map(objects.map((x) => [x.id, x]));
-  let x: TioObject | undefined = o;
-  const seen = new Set();
-  while (x) {
-    if (x.deleted || seen.has(x.id)) return false;
-    seen.add(x.id);
-    x = x.parentId ? map.get(x.parentId) : undefined;
-  }
-  return true;
+/** Build once per immutable projection; resolve each ancestry chain only once. */
+export function visibility(objects: TioObject[]): (object: TioObject) => boolean {
+  const byId = new Map(objects.map((object) => [object.id, object]));
+  const resolved = new Map<string, boolean>();
+  return (object) => {
+    const chain: string[] = [];
+    const visiting = new Set<string>();
+    let current: TioObject | undefined = object;
+    let result = true;
+    while (current) {
+      const cached = resolved.get(current.id);
+      if (cached !== undefined) {
+        result = cached;
+        break;
+      }
+      if (current.deleted || visiting.has(current.id)) {
+        result = false;
+        break;
+      }
+      visiting.add(current.id);
+      chain.push(current.id);
+      const parent = current.type === 'record' ? current.databaseId : current.parentId;
+      if (!parent) break;
+      current = byId.get(parent);
+      if (!current) {
+        result = false;
+        break;
+      }
+    }
+    for (const id of chain) resolved.set(id, result);
+    return result;
+  };
+}
+export function visible(object: TioObject, objects: TioObject[]): boolean {
+  return visibility(objects)(object);
 }
 
 /** Safe representation for unknown field values; never renders [object Object]. */
@@ -281,17 +320,17 @@ export function valueText(value: unknown): string {
       return value == null ? '' : (JSON.stringify(value) ?? '');
   }
 }
-export { ObjectRegistry, createDefaultRegistry, type ObjectTypeDefinition } from './registry';
-let sharedRegistry: ObjectRegistry | undefined;
-export function registry() {
-  if (!sharedRegistry) {
-    sharedRegistry = new ObjectRegistry();
-    for (const type of knownTypes) sharedRegistry.register({ type, currentVersion: 1, validate });
-  }
-  return sharedRegistry;
-}
-export const supportedFormat = (o: TioObject) => registry().supports(o);
+export {
+  ObjectRegistry,
+  createDefaultRegistry,
+  createDomain,
+  type Domain,
+  type ObjectTypeDefinition,
+} from './registry';
+export const supportedFormat = (o: TioObject) => createDefaultRegistry().supports(o);
 export * from './repository';
 export { applyCommit } from './commit';
 export * from './host';
 export * from './connection';
+
+export * from './content';

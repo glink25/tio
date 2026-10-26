@@ -61,10 +61,14 @@ Optional system extensions are declared by name/version at handshake. Calendar, 
 
 ## Verification
 
-`tests/host.test.ts` exercises memory and IndexedDB repositories, compacted receipts, concurrent fields, undo, permissions, migration transactions and JSON bridge recovery. `tests/sync-host.test.ts` covers binary-only repair and denied publication. Browser architecture tests verify multiple spaces and headless synchronization; embedding tests disable IndexedDB in the editor and exercise two independent presentations, external updates and failures.
+`tests/host.test.ts` exercises memory and IndexedDB repositories, compacted receipts, concurrent fields, undo, permissions, registered-type validation and unsupported-version rejection and JSON bridge recovery. `tests/sync-host.test.ts` covers binary-only repair and denied publication. Browser architecture tests verify multiple spaces and headless synchronization; embedding tests disable IndexedDB in the editor and exercise two independent presentations, external updates and failures.
 
 ## Restoring expired connections
 
 Restore cached workspace content and navigation before checking remote authorization. Implement the host-only `ConnectionAdapter` contract separately from the editor repository and resource `AccessPolicy`. Silent checks must not open dialogs; only an explicit user action may invoke `reauthorize`. Report credential expiry using `ConnectionAccessError` with connection/workspace scope, and report a resource permission denial separately. The host preserves offline drafts and suspends publication while credentials are unavailable.
 
 A successful reauthorization means the original identity and endpoint were restored. If the login flow selects another account/repository, fail recovery without rebinding or publishing cached content. Cancellation leaves the local session usable. Invalidate outstanding authorization results when disconnecting. Web folder permission prompts require the request to be invoked directly during the click event, before any asynchronous save or discovery operation.
+
+## Paged reads
+
+Hosts may expose `queryObjects({ scope: { type } | { databaseId }, after?, limit })`. It returns `{ version, entries, next? }` in stable object-ID order, with 1–1000 entries requested per page. The bridge reports `unsupported` if the host lacks this operation. Each page is transactionally consistent with its returned version; multiple pages are not a frozen snapshot. Restart a scan when a consistent export is required and versions differ. Tombstones remain in the result so consumers can maintain a projection. IndexedDB uses the type/database indexes; the memory host is the reference implementation.

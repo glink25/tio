@@ -11,11 +11,11 @@ Final run: `pnpm check` passed (54 unit/contract tests, type checks, formatting,
 - Oxfmt formatting, import ordering and Tailwind class ordering.
 - Dependency boundary checks for pure business packages and `workspace:*` links.
 - Production Vite 8 build and generated PWA service worker.
-- Vitest (54 tests): trailing debounce across foreground polls, retained requests during in-flight work, canonical/unknown data preservation, sequential migration, merge determinism, text/grapheme Diff3, delete conflicts, revision CAS, two-store synchronization, upload-time edits, failed writes, invalid/missing files, attachments-first ordering, higher-version preservation, ZIP roundtrip, Markdown reading-export links and assets, i18n parity/pluralization, synthetic 1k/10k record queries plus 100-page persistence, synchronous keystroke projection, persistence failure/retry, external-field preservation, cyclic-move rejection, command-level future-format preservation, and bounded receipts for repeated host/sync writes.
+- Vitest (85 tests, architecture repair run): trailing debounce across foreground polls, retained requests during in-flight work, canonical/unknown data preservation, unsupported-version rejection, merge determinism, text/grapheme Diff3, delete conflicts, revision CAS, two-store synchronization, upload-time edits, failed writes, invalid/missing files, attachments-first ordering, unknown-type preservation, ZIP roundtrip, Markdown reading-export links and assets, i18n parity/pluralization, synthetic 1k/10k record queries plus 100-page persistence, synchronous keystroke projection, persistence failure/retry, external-field preservation, cyclic-move rejection, command-level future-format preservation, and bounded receipts for repeated host/sync writes.
 
 ## Browser scenarios
 
-17 browser tests cover the following flows, including independent embedding:
+21 browser tests (including the new table roundtrip case) cover the following flows, including independent embedding:
 
 1. Offline document editing (including Chinese text), reload recovery, table/board navigation, record editing and JSON/Markdown ZIP downloads.
 2. A 390×844 viewport: mobile list, full-screen record detail, edit persistence and no document overflow.
@@ -31,7 +31,7 @@ Final run: `pnpm check` passed (54 unit/contract tests, type checks, formatting,
 11. Host sidebar/body/header and editor computed CSS colors follow explicit presentation and remain correct after reload.
 12. Standalone production editor with IndexedDB disabled: two themes/locales, host-native writes, scoped portals, focused input updates, failed persistence retry and numeric field updates.
 
-Additional repository contracts cover field-level permissions, hidden-field preservation, deleted-object undo, concurrent schema edits, compacted receipts, close failure/retry, migration transactions and cross-workspace bridge rejection. Sync contracts cover binary-only repair after staging cleanup and remote permission denial preserving local drafts.
+Additional repository contracts cover field-level permissions, hidden-field preservation, deleted-object undo, concurrent schema edits, compacted receipts, close failure/retry, registered-type validation and cross-workspace bridge rejection. Sync contracts cover binary-only repair after staging cleanup and remote permission denial preserving local drafts.
 
 The directory tests exercise real browser file APIs and actual writes in browser-owned storage. **They do not test the native OS picker, user-visible directory authorization, or ordinary disk-folder permission persistence.** The picker substitution is confined to the test context and does not ship in the app.
 
@@ -77,3 +77,7 @@ Removed component-local persistence drafts from title, record-field and query in
 `pnpm check` and the full 17-test browser suite passed. Added contracts cover a simulated non-folder adapter, no endpoint access during local restoration, A/B draft synchronization after reauthorization, concurrent-click coalescing, late authorization after disconnect, immediate folder permission requests, cancellation, discovery/network failure, local flush failure, and authentication expiry during publication.
 
 Browser regressions override permission results on genuine OPFS handles: both `prompt` and `denied` after reload retain the selected document, allow continued edits and another reload, avoid automatic permission prompts, preserve the editor after denial, and publish drafts after a successful click. A connection with no cached spaces retains its recovery action in the selector. These tests do not substitute for the native OS permission-dialog checklist above.
+
+## Architecture repair evidence
+
+The repair adds shared file chunk/index budgets and failure injection, per-instance domain validation, recursive table opacity, archive preflight, object-isolated sync, incremental host reads, and a 10,000-level navigation projection. See `repair-progress.md`, `file-storage.md` and `extensions.md`. Synthetic operation tests do not establish real-device latency or memory guarantees.

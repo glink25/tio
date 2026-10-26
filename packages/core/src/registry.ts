@@ -1,10 +1,14 @@
-import { knownTypes, validate, type TioObject } from './index';
+import { createFieldRegistry } from './fields';
+import { knownTypes, validateEnvelope, validateBuiltin, type TioObject } from './index';
 export interface ObjectTypeDefinition {
   type: string;
   currentVersion: number;
   validate: (value: TioObject) => TioObject;
-  /** A migration at key N transforms version N into N + 1, preserving unknown fields. */
-  migrations?: Record<number, (value: TioObject) => TioObject>;
+  merge?: (
+    base: TioObject | undefined,
+    local: TioObject,
+    remote: TioObject,
+  ) => { merged: TioObject; warnings: string[]; recovered: unknown[] };
 }
 export class ObjectRegistry {
   private types = new Map<string, ObjectTypeDefinition>();
@@ -13,33 +17,30 @@ export class ObjectRegistry {
       throw new Error(`Type already registered: ${definition.type}`);
     this.types.set(definition.type, definition);
   }
+  get(type: string) {
+    return this.types.get(type);
+  }
   supports(value: TioObject) {
     return this.types.get(value.type)?.currentVersion === value.schemaVersion;
   }
   decode(input: unknown): TioObject {
-    let value = validate(input);
+    const value = validateEnvelope(input);
     const definition = this.types.get(value.type);
-    if (!definition || value.schemaVersion > definition.currentVersion) return value;
-    const original = { id: value.id, workspaceId: value.workspaceId, type: value.type };
-    while (value.schemaVersion < definition.currentVersion) {
-      const version = value.schemaVersion;
-      const migrate = definition.migrations?.[version];
-      if (!migrate) throw new Error(`Missing migration: ${value.type} v${version}`);
-      const next = migrate(structuredClone(value));
-      if (
-        next.schemaVersion !== version + 1 ||
-        next.id !== original.id ||
-        next.workspaceId !== original.workspaceId ||
-        next.type !== original.type
-      )
-        throw new Error('Migration changed identity or skipped a version');
-      value = validate(next);
-    }
+    if (!definition) return value;
+    if (value.schemaVersion !== definition.currentVersion)
+      throw new Error(`Unsupported schema: ${value.type} v${value.schemaVersion}`);
     return definition.validate(value);
   }
 }
 export function createDefaultRegistry() {
   const registry = new ObjectRegistry();
-  for (const type of knownTypes) registry.register({ type, currentVersion: 1, validate });
+  for (const type of knownTypes)
+    registry.register({ type, currentVersion: 1, validate: validateBuiltin });
   return registry;
 }
+
+/** A host and its editor share this instance; separate hosts never share plugin state. */
+export function createDomain() {
+  return { objects: createDefaultRegistry(), fields: createFieldRegistry() };
+}
+export type Domain = ReturnType<typeof createDomain>;

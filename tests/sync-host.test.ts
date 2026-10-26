@@ -1,7 +1,8 @@
 import { fullAccess, object, type AccessPolicy } from '@tio/core';
+import { FileWorkspaceContent } from '@tio/file-storage';
 import { LocalStore } from '@tio/local-store';
 import { MemoryProvider } from '@tio/provider-memory';
-import { FileWorkspaceContent, HostSyncRunner } from '@tio/sync';
+import { HostSyncRunner } from '@tio/sync';
 import { WorkspaceRuntime } from '@tio/workspace';
 import { it, expect } from 'vitest';
 it('repaired binary is promoted even when metadata is unchanged and survives staging cleanup', async () => {
@@ -13,7 +14,7 @@ it('repaired binary is promoted even when metadata is unchanged and survives sta
     mime: 'application/octet-stream',
     byteSize: 3,
   });
-  const engine = new HostSyncRunner(host, files, 'folder', 'w');
+  const engine = new HostSyncRunner(host, new FileWorkspaceContent(files, 'w'), 'folder', 'w');
   try {
     await host.batch([asset], new Map([['asset', new Blob(['abc'])]]));
     await engine.sync();

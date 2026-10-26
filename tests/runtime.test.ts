@@ -128,10 +128,7 @@ describe('workspace command persistence', () => {
       title: 'Future',
       payload: { version: 8 },
     });
-    runtime.create([future]);
-    expect(() => runtime.patch(future.id, { title: 'Must not overwrite' })).toThrow(
-      'Object is not editable',
-    );
+    expect(() => runtime.create([future])).toThrow('Unsupported schema');
     const opaque = {
       id: 'opaque',
       type: 'futureBlock',
@@ -142,7 +139,7 @@ describe('workspace command persistence', () => {
     runtime.append(page.id, opaque);
     runtime.patch(page.id, { title: 'Current format rename' });
     await runtime.flush();
-    expect((await store.get(future.id))?.object).toEqual(future);
+    expect(await store.get(future.id)).toBeUndefined();
     expect((await store.get(page.id))?.object.blocks?.at(-1)).toEqual(opaque);
   });
 });
@@ -164,4 +161,47 @@ it('closing rejects new edits, coalesces callers and permits retry after flush f
   expect(runtime.state.getState().lifecycle).toBe('closed');
   expect((await host.get('p'))?.object.title).toBe('Keep draft');
   host.close();
+});
+
+it('automatically resolves concurrent body edits, durably records recovery, and drains later edits', async () => {
+  const { MemoryRepository } = await import('@tio/provider-memory');
+  const host = new MemoryRepository();
+  const page = object('page', 'w', { id: 'p', blocks: [textBlock('original')] });
+  await host.commit({ id: 'seed', expectedVersion: 0, changes: [page], assetIds: [] });
+  const runtime = await WorkspaceRuntime.open(host);
+  let release!: () => void, started!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const entered = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  const commit = host.commit.bind(host);
+  vi.spyOn(host, 'commit').mockImplementationOnce(async (request) => {
+    started();
+    await gate;
+    return commit(request);
+  });
+  const block = page.blocks![0];
+  runtime.blocks(
+    'p',
+    [{ ...block, content: [{ type: 'text', text: 'local', styles: {} }] }],
+    page.blocks!,
+  );
+  await entered;
+  await commit({
+    id: 'other',
+    expectedVersion: 1,
+    changes: [
+      { ...page, blocks: [{ ...block, content: [{ type: 'text', text: 'remote', styles: {} }] }] },
+    ],
+    assetIds: [],
+  });
+  runtime.patch('p', { title: 'After conflict' });
+  release();
+  await runtime.flush();
+  expect(runtime.state.getState().status).toBe('saved');
+  expect(host.recovery.length).toBeGreaterThan(0);
+  expect((await host.readSnapshot()).entries[0].object.title).toBe('After conflict');
+  await runtime.close();
 });

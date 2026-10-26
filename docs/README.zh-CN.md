@@ -15,7 +15,7 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm dev
 ```
 
-打开 `http://localhost:5173`。选择离线模式，或选择本地文件夹并授权读写。
+打开 `http://localhost:6789`。选择离线模式，或选择本地文件夹并授权读写。
 
 验证生产版离线重开：
 

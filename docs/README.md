@@ -15,7 +15,7 @@ corepack pnpm install --frozen-lockfile
 corepack pnpm dev
 ```
 
-Open `http://localhost:5173`. If your global `pnpm` is older, use `corepack pnpm` as shown; no global package-manager replacement is required.
+Open `http://localhost:6789`. If your global `pnpm` is older, use `corepack pnpm` as shown; no global package-manager replacement is required.
 
 For the production PWA:
 

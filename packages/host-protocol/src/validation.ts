@@ -57,6 +57,16 @@ export function requestPayload(method: string | undefined, p: any) {
     (typeof p.id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(p.id))
   )
     throw new HostError('invalid');
+  if (
+    method === 'queryObjects' &&
+    (!record(p.scope) ||
+      (typeof p.scope.type === 'string') === (typeof p.scope.databaseId === 'string') ||
+      !integer(p.limit) ||
+      p.limit < 1 ||
+      p.limit > 1000 ||
+      (p.after !== undefined && typeof p.after !== 'string'))
+  )
+    throw new HostError('invalid');
   if (method === 'readChanges' && !integer(p.since)) throw new HostError('invalid');
   if (method === 'acknowledgeCommits' && (typeof p.clientId !== 'string' || !integer(p.sequence)))
     throw new HostError('invalid');

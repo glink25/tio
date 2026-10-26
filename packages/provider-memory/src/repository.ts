@@ -1,6 +1,9 @@
 import {
   applyCommit,
+  createDomain,
+  type Domain,
   fullAccess,
+  resourceOf,
   assertAccess,
   readableObject,
   preservePrivateFields,
@@ -12,15 +15,21 @@ import {
   type CommitResult,
   type WorkspaceRepository,
   type WorkspaceSnapshot,
+  type ObjectQuery,
 } from '@tio/core';
 /** Reference host implementation. Only this host owns durable state in embedding tests. */
 export class MemoryRepository implements WorkspaceRepository {
   private snapshot: WorkspaceSnapshot = { version: 0, entries: [] };
+  private changedAt = new Map<string, number>();
   private receipts = new Map<string, { signature: string; result: CommitResult }>();
+  readonly recovery: unknown[] = [];
   private staged = new Map<string, AssetData>();
   private assets = new Map<string, AssetData>();
   private listeners = new Set<(event: WorkspaceEvent) => void>();
-  constructor(readonly access: AccessPolicy = fullAccess) {}
+  constructor(
+    readonly access: AccessPolicy = fullAccess,
+    readonly domain: Domain = createDomain(),
+  ) {}
   private watermarks = new Map<string, number>();
   async acknowledgeCommits(clientId: string, sequence: number) {
     this.watermarks.set(clientId, Math.max(sequence, this.watermarks.get(clientId) ?? 0));
@@ -35,6 +44,43 @@ export class MemoryRepository implements WorkspaceRepository {
       entries: this.snapshot.entries.flatMap((entry) => {
         const object = readableObject(this.access, entry.object);
         return object ? [{ ...entry, object: structuredClone(object) }] : [];
+      }),
+    };
+  }
+  async queryObjects(query: ObjectQuery) {
+    if (!Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > 1000)
+      throw new HostError('invalid', 'Query limit must be 1..1000');
+    const snapshot = await this.readSnapshot();
+    const matched = snapshot.entries
+      .filter(
+        ({ object }) =>
+          ('type' in query.scope
+            ? object.type === query.scope.type
+            : object.databaseId === query.scope.databaseId) &&
+          (!query.after || object.id > query.after),
+      )
+      .sort((a, b) => (a.object.id < b.object.id ? -1 : a.object.id > b.object.id ? 1 : 0));
+    const entries = matched.slice(0, query.limit);
+    return {
+      version: snapshot.version,
+      entries,
+      next: matched.length > entries.length ? entries[entries.length - 1].object.id : undefined,
+    };
+  }
+  async readObjects(ids: string[]): Promise<WorkspaceSnapshot> {
+    const selected = new Set(ids);
+    return this.selectEntries((id) => selected.has(id));
+  }
+  async readChanges(since: number): Promise<WorkspaceSnapshot> {
+    return this.selectEntries((id) => (this.changedAt.get(id) ?? 0) > since);
+  }
+  private selectEntries(select: (id: string) => boolean): WorkspaceSnapshot {
+    return {
+      version: this.snapshot.version,
+      entries: this.snapshot.entries.flatMap((entry) => {
+        if (!select(entry.object.id)) return [];
+        const object = readableObject(this.access, entry.object);
+        return object ? [{ object: structuredClone(object), revision: entry.revision }] : [];
       }),
     };
   }
@@ -94,7 +140,7 @@ export class MemoryRepository implements WorkspaceRepository {
     }
     if (request.expectedVersion !== this.snapshot.version)
       return { status: 'conflict', version: this.snapshot.version };
-    const entries = applyCommit(this.snapshot, effective);
+    const entries = applyCommit(this.snapshot, effective, this.domain);
     const assets = new Map(this.assets);
     for (const id of request.assetIds) {
       const data = this.staged.get(id) ?? assets.get(id);
@@ -105,7 +151,9 @@ export class MemoryRepository implements WorkspaceRepository {
       if (o.type === 'asset' && !o.deleted && !assets.has(o.id))
         throw new HostError('invalid', 'Missing asset');
     this.snapshot = { version: this.snapshot.version + 1, entries };
+    for (const object of request.changes) this.changedAt.set(object.id, this.snapshot.version);
     this.assets = assets;
+    this.recovery.push(...structuredClone(request.recovery ?? []));
     request.assetIds.forEach((id) => this.staged.delete(id));
     const result: CommitResult = {
       status: 'committed',
@@ -131,6 +179,9 @@ export class MemoryRepository implements WorkspaceRepository {
     this.staged.set(id, structuredClone(asset));
   }
   async readAsset(id: string) {
+    const entry = this.snapshot.entries.find((entry) => entry.object.id === id);
+    if (entry && !this.access.allows(resourceOf(entry.object), 'read'))
+      throw new HostError('permission');
     return structuredClone(this.assets.get(id));
   }
   async releaseAsset(id: string) {

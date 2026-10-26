@@ -1,0 +1,17 @@
+{
+  "name": "@tio/file-storage",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tio/core": "workspace:*",
+    "@tio/serialization": "workspace:*",
+    "@tio/storage": "workspace:*"
+  }
+}

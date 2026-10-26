@@ -6,6 +6,8 @@ import {
   type CommitResult,
   type WorkspaceRepository,
   type WorkspaceSnapshot,
+  type ObjectQuery,
+  type ObjectPage,
 } from '@tio/core';
 
 import {
@@ -131,6 +133,12 @@ export class BridgeRepository implements WorkspaceRepository {
       }
     });
   }
+  async queryObjects(query: ObjectQuery): Promise<ObjectPage> {
+    const page = await this.request('queryObjects', query);
+    const snapshot = parseSnapshot(page);
+    if (page.next !== undefined && typeof page.next !== 'string') throw new HostError('invalid');
+    return { ...snapshot, next: page.next };
+  }
   async readSnapshot(): Promise<WorkspaceSnapshot> {
     return parseSnapshot(await this.request('readSnapshot'));
   }
@@ -238,12 +246,15 @@ export function serveHost(
         } else {
           if (!ready) throw new HostError('unsupported', 'Handshake required');
           switch (request.method) {
+            case 'queryObjects':
+              if (!repository.queryObjects)
+                throw new HostError('unsupported', 'Paged queries unavailable');
+              result = await repository.queryObjects(p);
+              break;
             case 'readSnapshot':
               result = await repository.readSnapshot();
               break;
             case 'commit':
-              if (p.migration)
-                throw new HostError('permission', 'Migrations require a host transaction');
               if (p.changes.some((object: any) => object.workspaceId !== context.workspaceId))
                 throw new HostError('permission', 'Workspace mismatch');
               result = await repository.commit({ ...p, origin: 'editor:' + context.sessionId });

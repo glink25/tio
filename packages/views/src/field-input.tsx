@@ -1,6 +1,8 @@
 import { valueText } from '@tio/core';
 import type { Field, TioObject } from '@tio/core';
 import { useT } from '@tio/i18n';
+
+import { useViewExtensions } from './extensions';
 export function FieldInput({
   field,
   value,
@@ -13,6 +15,8 @@ export function FieldInput({
   objects: TioObject[];
 }) {
   const t = useT();
+  const Custom = useViewExtensions().fields?.[field.type]?.Input;
+  if (Custom) return <Custom field={field} value={value} objects={objects} onChange={onChange} />;
   const string = value == null ? '' : valueText(value);
   if (
     field.type === 'date' &&

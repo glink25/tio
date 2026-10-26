@@ -3,13 +3,15 @@ import {
   id,
   object,
   textBlock,
-  visible,
+  visibility,
   editable,
   type TioObject,
   type Field,
   type Block,
 } from '@tio/core';
+import type { EditorSchema } from '@tio/editor-blocknote';
 import { useT, useTranslation } from '@tio/i18n';
+import type { ViewExtensions } from '@tio/views';
 import { newPage, newDatabase, type EditorSession } from '@tio/workspace';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
@@ -18,6 +20,8 @@ export interface EditorTarget {
   mode?: 'page' | 'preview';
 }
 export interface EditorSurfaceProps {
+  views?: ViewExtensions;
+  extensions?: EditorSchema;
   runtime: EditorSession;
   workspaceId: string;
   target: EditorTarget;
@@ -61,8 +65,9 @@ export function useEditorController(props: EditorSurfaceProps) {
     setReferencePicker(false);
     setEmbedPicker(false);
   }, [target.id]);
-  const current = objects.find((o) => o.id === target.id && visible(o, objects));
-  const nav = objects.filter((o) => ['page', 'database'].includes(o.type) && visible(o, objects));
+  const isVisible = visibility(objects);
+  const current = objects.find((o) => o.id === target.id && isVisible(o));
+  const nav = objects.filter((o) => ['page', 'database'].includes(o.type) && isVisible(o));
   const record = objects.find(
     (o) => o.id === (recordId ?? (current?.type === 'record' ? current.id : null)) && !o.deleted,
   );

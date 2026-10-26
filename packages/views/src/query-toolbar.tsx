@@ -14,10 +14,12 @@ import {
   List,
 } from 'lucide-react';
 
+import { useViewExtensions } from './extensions';
 import { FieldInput } from './field-input';
 import type { RowsProps } from './types';
 export function QueryToolbar(p: RowsProps) {
   const t = useT();
+  const { layouts } = useViewExtensions();
   const { database, view, rows, onView, onFields, onAdd, readOnly } = p;
   const fields = database.fields ?? [];
   const filters = view.filters ?? [];
@@ -300,10 +302,15 @@ export function QueryToolbar(p: RowsProps) {
                 <select
                   aria-label={t('ui.layout')}
                   value={view.layout ?? 'table'}
-                  onChange={(e) => onView({ layout: e.target.value as 'table' | 'board' })}
+                  onChange={(e) => onView({ layout: e.target.value })}
                 >
                   <option value="table">{t('database.table')}</option>
                   <option value="board">{t('database.board')}</option>
+                  {Object.entries(layouts ?? {}).map(([id, layout]) => (
+                    <option key={id} value={id}>
+                      {layout.label}
+                    </option>
+                  ))}
                 </select>
               </label>
               {view.layout === 'board' && (

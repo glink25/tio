@@ -1,7 +1,4 @@
-import { FileWorkspaceContent, type WorkspaceContentPort } from './content';
-export { FileWorkspaceContent, type WorkspaceContentPort } from './content';
-import type { SyncRepository } from '@tio/core';
-import type { FileStorageProvider } from '@tio/storage';
+import type { ObjectRegistry, SyncRepository, WorkspaceContentPort } from '@tio/core';
 
 import { SyncCore, type SyncIssue } from './core';
 export { SyncCore, type SyncIssue } from './core';
@@ -19,10 +16,11 @@ export class HostSyncRunner {
   private unsubscribe?: () => void;
   constructor(
     readonly store: SyncRepository,
-    readonly provider: FileStorageProvider | WorkspaceContentPort,
+    readonly provider: WorkspaceContentPort,
     readonly endpoint: string,
     readonly workspaceId: string,
     private host: {
+      types?: ObjectRegistry;
       beforeSync?: () => Promise<boolean>;
       onError?: (error: unknown) => void;
       isActive?: () => boolean;
@@ -30,12 +28,7 @@ export class HostSyncRunner {
       lock?: (name: string, work: () => Promise<void>) => Promise<void>;
     } = {},
   ) {
-    this.core = new SyncCore(
-      store,
-      'readAsset' in provider ? provider : new FileWorkspaceContent(provider, workspaceId),
-      endpoint,
-      workspaceId,
-    );
+    this.core = new SyncCore(store, provider, endpoint, workspaceId, host.types);
     this.core.onDirty = () => this.schedule();
   }
   private core: SyncCore;

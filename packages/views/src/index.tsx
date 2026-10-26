@@ -5,7 +5,8 @@ import { Plus } from 'lucide-react';
 import { useState, lazy, Suspense } from 'react';
 
 import { BoardView } from './board-view';
-import { displayValue } from './display-value';
+import { useDisplayValue } from './display-value';
+import { useViewExtensions } from './extensions';
 import { MobileView } from './mobile-view';
 import { QueryToolbar } from './query-toolbar';
 import type { ViewProps } from './types';
@@ -13,6 +14,9 @@ const GridView = lazy(() => import('./grid-view').then((m) => ({ default: m.Grid
 export { FieldInput } from './field-input';
 export function DatabaseView(props: ViewProps) {
   const t = useT();
+  const displayValue = useDisplayValue();
+  const { layouts } = useViewExtensions();
+  const Custom = layouts?.[props.view.layout ?? 'table']?.Component;
   useTranslation();
   const { database, view, objects, onAdd } = props;
   const [searchQuery, setSearchQuery] = useState('');
@@ -66,7 +70,11 @@ export function DatabaseView(props: ViewProps) {
   return (
     <div className="min-w-0 bg-panel font-normal">
       <QueryToolbar {...childProps} />
-      {view.layout === 'board' ? (
+      {Custom ? (
+        <Custom {...childProps} />
+      ) : view.layout && !['table', 'board'].includes(view.layout) ? (
+        <div className="p-4 text-muted">Unsupported view: {view.layout}</div>
+      ) : view.layout === 'board' ? (
         <BoardView {...childProps} />
       ) : mobile && !mobileTable ? (
         <MobileView {...childProps} />
@@ -88,3 +96,11 @@ export function DatabaseView(props: ViewProps) {
 }
 
 export { displayValue, useDisplayValue } from './display-value';
+
+export {
+  ViewExtensionsContext,
+  useViewExtensions,
+  type ViewExtensions,
+  type FieldInputProps,
+} from './extensions';
+export type { ViewProps, RowsProps } from './types';
