@@ -123,7 +123,9 @@ export class SliceBroker {
     if (o.type === 'record') {
       const db = this.readable(this.db(o.databaseId!));
       const allowed = new Set(
-        db.fields?.filter((f) => !['formula', 'rollup'].includes(f.type)).map((f) => f.id),
+        db.fields
+          ?.filter((f) => !['formula', 'rollup', 'createdTime', 'lastEditedTime'].includes(f.type))
+          .map((f) => f.id),
       );
       return {
         id: o.id,
@@ -401,7 +403,8 @@ export class SliceBroker {
       if (typeof values !== 'object' || Array.isArray(values)) fail('INVALID_INPUT');
       for (const [key, value] of Object.entries(values)) {
         const field = readableDb.fields?.find((f) => f.id === key) ?? fail('PERMISSION_DENIED');
-        if (['formula', 'rollup'].includes(field.type)) fail('INVALID_INPUT');
+        if (['formula', 'rollup', 'createdTime', 'lastEditedTime'].includes(field.type))
+          fail('INVALID_INPUT');
         validateValue(field, value);
       }
       const next = old
@@ -413,7 +416,9 @@ export class SliceBroker {
           }
         : object('record', db.workspaceId, { databaseId: db.id, properties: values, blocks: [] });
       await this.commit([db, ...(old ? [old] : [])], [next]);
-      return method === 'records.delete' ? null : this.output(next);
+      return method === 'records.delete'
+        ? null
+        : this.output(this.objects().find((o) => o.id === next.id) ?? next);
     }
     if (method.startsWith('fields.')) {
       this.checkVersion(db, p.version);
@@ -430,7 +435,7 @@ export class SliceBroker {
       }
       const next = { ...db, fields: nextFields };
       await this.commit([db], [next]);
-      return this.output(next);
+      return this.output(this.objects().find((o) => o.id === next.id) ?? next);
     }
     if (method.startsWith('views.')) {
       const old =

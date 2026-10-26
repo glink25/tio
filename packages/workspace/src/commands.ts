@@ -1,5 +1,7 @@
 import {
   createDomain,
+  isDerivedField,
+  validateFieldReference,
   type Domain,
   HostError,
   type Block,
@@ -7,6 +9,7 @@ import {
   type TioObject,
   type WorkspaceMutation,
 } from '@tio/core';
+import { compileFormula } from '@tio/database';
 import { merge, type MergeResult } from '@tio/merge';
 const defaults = (): Domain => createDomain();
 const editable = (o: TioObject, domain: Domain) => domain.objects.supports(o) && !o.deleted;
@@ -210,7 +213,7 @@ export function inverse(
 }
 
 /** Serializable editing intents; closures are implementation details of the executor only. */
-export type WorkspaceCommand =
+export type WorkspaceCommand = { timestamp?: string } & (
   | { type: 'checked'; expected: TioObject[]; changes: TioObject[] }
   | { type: 'undelete'; id: string }
   | { type: 'patch'; id: string; changes: Partial<TioObject> }
@@ -220,8 +223,9 @@ export type WorkspaceCommand =
   | { type: 'cell'; id: string; fieldId: string; value: unknown }
   | { type: 'fields'; id: string; operations: FieldOperation[] }
   | { type: 'move'; id: string; parentId: string | null; order: number }
-  | { type: 'restore'; before: TioObject[]; after: TioObject[] };
-export function executeCommand(
+  | { type: 'restore'; before: TioObject[]; after: TioObject[] }
+);
+function executeIntent(
   command: WorkspaceCommand,
   objects: TioObject[],
   onMerge?: (result: MergeResult) => void,
@@ -306,4 +310,71 @@ export function executeCommand(
     case 'restore':
       return inverse(command.before, command.after, domain)(objects);
   }
+}
+
+/** Validate every write path, including generic patches and checked/native transactions. */
+export function executeCommand(
+  command: WorkspaceCommand,
+  objects: TioObject[],
+  onMerge?: (result: MergeResult) => void,
+  domain = defaults(),
+): TioObject[] {
+  const originals = new Map(objects.map((o) => [o.id, o]));
+  const next = executeIntent(command, objects, onMerge, domain).map((item) => {
+    const old = originals.get(item.id);
+    if (item.type !== 'database' || item === old) return item;
+    for (const field of item.fields ?? []) {
+      const previous = old?.fields?.find((f) => f.id === field.id);
+      if (previous && previous.type !== field.type)
+        throw new Error('Property types cannot be changed');
+    }
+    return {
+      ...item,
+      fields: item.fields?.map((field) =>
+        field.type === 'formula' &&
+        field.formula &&
+        field.formula !== old?.fields?.find((f) => f.id === field.id)?.formula
+          ? { ...field, formula: compileFormula(field.formula, item.fields ?? []) }
+          : field,
+      ),
+    };
+  });
+  const before = new Map(objects.map((o) => [o.id, o]));
+  return next.map((record) => {
+    const old = before.get(record.id);
+    if (record.type !== 'record' || record === old) return record;
+    const database = next.find(
+      (o) =>
+        o.id === record.databaseId &&
+        o.type === 'database' &&
+        o.workspaceId === record.workspaceId &&
+        !o.deleted,
+    );
+    if (!database && !record.deleted) throw new Error('Database unavailable');
+    for (const [key, value] of Object.entries(record.properties ?? {})) {
+      if (old && same(value, old.properties?.[key])) continue;
+      const field = database?.fields?.find((f) => f.id === key);
+      if (!field) {
+        if (command.type === 'restore') continue;
+        throw new Error('Field unavailable');
+      }
+      if (isDerivedField(field)) throw new Error(`Read-only field: ${key}`);
+      domain.fields.validate(field, value);
+      validateFieldReference(field, value, record, next);
+    }
+    if (
+      old &&
+      command.type !== 'restore' &&
+      (record.createdAt !== old.createdAt || record.updatedAt !== old.updatedAt)
+    )
+      throw new Error('System timestamps are read-only');
+    if (!command.timestamp) return record;
+    const changed =
+      !old || !same(record.properties, old.properties) || !same(record.blocks, old.blocks);
+    return {
+      ...record,
+      createdAt: old?.createdAt ?? record.createdAt ?? command.timestamp,
+      updatedAt: changed ? command.timestamp : (record.updatedAt ?? command.timestamp),
+    };
+  });
 }

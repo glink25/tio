@@ -5,13 +5,14 @@ import { Plus } from 'lucide-react';
 import { useState, lazy, Suspense } from 'react';
 
 import { BoardView } from './board-view';
-import { useDisplayValue } from './display-value';
+import { useDisplayValue, useFieldEvaluator } from './display-value';
 import { useViewExtensions } from './extensions';
 import { MobileView } from './mobile-view';
 import { QueryToolbar } from './query-toolbar';
 import type { ViewProps } from './types';
 const GridView = lazy(() => import('./grid-view').then((m) => ({ default: m.GridView })));
-export { FieldInput } from './field-input';
+export { FieldInput, FieldValue } from './field-input';
+export { useFieldEvaluator } from './display-value';
 export function DatabaseView(props: ViewProps) {
   const t = useT();
   const displayValue = useDisplayValue();
@@ -19,6 +20,7 @@ export function DatabaseView(props: ViewProps) {
   const Custom = layouts?.[props.view.layout ?? 'table']?.Component;
   useTranslation();
   const { database, view, objects, onAdd } = props;
+  const evaluator = useFieldEvaluator(objects);
   const [searchQuery, setSearchQuery] = useState('');
   const preferenceKey = `tio.mobile-table.${database.workspaceId}.${database.id}`;
   const [tablePreferences, setTablePreferences] = useState<Record<string, boolean>>({});
@@ -30,7 +32,7 @@ export function DatabaseView(props: ViewProps) {
   }
   const mobileTable = tablePreferences[preferenceKey] ?? storedTable;
   const mobile = useMobile();
-  const rows = queryRecords(objects, database, view).filter(
+  const rows = queryRecords(objects, database, view, evaluator).filter(
     (record) =>
       !searchQuery ||
       database.fields?.some((field) =>

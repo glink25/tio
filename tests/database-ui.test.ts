@@ -2,7 +2,7 @@ import { object, validate } from '@tio/core';
 import { queryRecords } from '@tio/database';
 import { newDatabase } from '@tio/workspace';
 import { expect, it } from 'vitest';
-it('keeps named view configurations independent and compatible with older data', () => {
+it('keeps named view configurations independent', () => {
   const [db, view] = newDatabase('ws');
   const title = db.fields![0].id;
   const records = [
@@ -42,19 +42,19 @@ it('evaluates typed date equality and excludes empty multiselects from notEmpty'
     object('record', 'ws', {
       id: 'a',
       databaseId: db.id,
-      properties: { date: { date: '2026-10-23' }, tags: [] },
+      properties: { date: { start: '2026-10-23' }, tags: [] },
     }),
     object('record', 'ws', {
       id: 'b',
       databaseId: db.id,
-      properties: { date: { date: '2026-10-23' }, tags: ['one'] },
+      properties: { date: { start: '2026-10-23' }, tags: ['one'] },
     }),
   ];
   expect(
     queryRecords(records, db, {
       ...view,
       filters: [
-        { fieldId: 'date', op: 'eq', value: { date: '2026-10-23' } },
+        { fieldId: 'date', op: 'eq', value: { start: '2026-10-23' } },
         { fieldId: 'tags', op: 'notEmpty' },
       ],
     }).map((r) => r.id),

@@ -22,6 +22,7 @@ export const Button = forwardRef<
   return (
     <button
       ref={ref}
+      data-variant={variant}
       className={cn(
         'tio-button inline-flex shrink-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:pointer-events-none disabled:opacity-40',
         variant === 'primary'

@@ -24,11 +24,11 @@ export function sampleWorkspace(language: 'zh' | 'en' = 'zh'): TioObject[] {
       {
         id: 'status',
         name: tr('状态', 'Status'),
-        type: 'select',
+        type: 'status',
         options: [
-          { id: 'todo', label: tr('待开始', 'To do') },
-          { id: 'doing', label: tr('进行中', 'In progress') },
-          { id: 'done', label: tr('已完成', 'Done') },
+          { id: 'todo', label: tr('待开始', 'To do'), color: 'gray', group: 'todo' },
+          { id: 'doing', label: tr('进行中', 'In progress'), color: 'blue', group: 'doing' },
+          { id: 'done', label: tr('已完成', 'Done'), color: 'green', group: 'done' },
         ],
       },
       {
@@ -36,8 +36,8 @@ export function sampleWorkspace(language: 'zh' | 'en' = 'zh'): TioObject[] {
         name: tr('优先级', 'Priority'),
         type: 'select',
         options: [
-          { id: 'high', label: tr('重要', 'High') },
-          { id: 'normal', label: tr('普通', 'Normal') },
+          { id: 'high', label: tr('重要', 'High'), color: 'red' },
+          { id: 'normal', label: tr('普通', 'Normal'), color: 'gray' },
         ],
       },
       { id: 'date', name: tr('日期', 'Date'), type: 'date' },
@@ -71,6 +71,8 @@ export function sampleWorkspace(language: 'zh' | 'en' = 'zh'): TioObject[] {
         status: ['done', 'doing', 'todo'][i],
         priority: i === 1 ? 'high' : 'normal',
       },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       blocks: [
         textBlock(
           tr('在这里记录背景、想法和下一步。', 'Capture context, ideas, and next steps here.'),
@@ -121,10 +123,11 @@ export function newDatabase(workspaceId: string, parentId: string | null = null)
       {
         id: id('field'),
         name: '状态',
-        type: 'select',
+        type: 'status',
         options: [
-          { id: id('option'), label: '待开始' },
-          { id: id('option'), label: '已完成' },
+          { id: id('option'), label: '待开始', color: 'gray', group: 'todo' },
+          { id: id('option'), label: '进行中', color: 'blue', group: 'doing' },
+          { id: id('option'), label: '已完成', color: 'green', group: 'done' },
         ],
       },
     ],

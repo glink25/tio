@@ -59,7 +59,8 @@
     <ul id="rows"></ul>
     <script>
       let db,
-        busy = false;
+        busy = false,
+        refreshGeneration = 0;
       const el = (id) => document.getElementById(id);
       el('date').value = new Date().toISOString().slice(0, 10);
       function report(e) {
@@ -67,9 +68,12 @@
         el('status').textContent = e.message || String(e);
       }
       async function refresh() {
+        const generation = ++refreshGeneration;
         const context = await tio.context.get();
         const writable = context.permissions.data === 'readWrite';
-        db = (await tio.databases.list()).find((d) => d.name === 'Web Slice Ledger');
+        const database = (await tio.databases.list()).find((d) => d.name === 'Web Slice Ledger');
+        if (generation !== refreshGeneration) return;
+        db = database;
         el('init').hidden = !!db;
         el('init').disabled = !writable;
         el('entry').querySelector('button').disabled = !db || !writable || busy;
@@ -84,16 +88,17 @@
           rows.push(...result.records);
           cursor = result.nextCursor;
         } while (cursor);
+        if (generation !== refreshGeneration) return;
         el('rows').replaceChildren();
         let total = 0;
         const months = {};
         for (const row of rows) {
           const p = row.properties;
           total += Number(p.amount || 0);
-          const month = (p.date?.date || '').slice(0, 7);
+          const month = (p.date?.start || '').slice(0, 7);
           months[month] = (months[month] || 0) + Number(p.amount || 0);
           const li = document.createElement('li');
-          li.textContent = (p.date?.date || '') + ' · ' + p.amount + ' · ' + (p.note || '');
+          li.textContent = (p.date?.start || '') + ' · ' + p.amount + ' · ' + (p.note || '');
           el('rows').appendChild(li);
         }
         el('total').textContent = '合计 / Total: ' + total.toFixed(2);
@@ -140,7 +145,7 @@
           await tio.databases.get(db.id).records.create({
             note: el('note').value,
             amount: Number(el('amount').value),
-            date: { date: el('date').value },
+            date: { start: el('date').value },
           });
           el('amount').value = '';
           await refresh();

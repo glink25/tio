@@ -1,9 +1,9 @@
-import { valueText } from '@tio/core';
 import { groups } from '@tio/database';
 import { useT } from '@tio/i18n';
-import { Button } from '@tio/ui';
+import { Button, Popover } from '@tio/ui';
 
 import { useDisplayValue } from './display-value';
+import { FieldInput, FieldValue } from './field-input';
 import type { RowsProps } from './types';
 export function BoardView({
   database,
@@ -14,12 +14,15 @@ export function BoardView({
   canEdit,
   readOnly,
   onFields,
+  fields,
+  objects,
+  resolve,
 }: RowsProps) {
   const t = useT();
   const displayValue = useDisplayValue();
   const field =
-    database.fields?.find((f) => f.id === view.groupBy && f.type === 'select') ??
-    database.fields?.find((f) => f.type === 'select');
+    database.fields?.find((f) => f.id === view.groupBy && ['select', 'status'].includes(f.type)) ??
+    database.fields?.find((f) => ['select', 'status'].includes(f.type));
   return (
     <div className="board flex min-h-52 gap-3 overflow-x-auto bg-surface/50 p-4">
       {!field && (
@@ -46,7 +49,7 @@ export function BoardView({
           </h4>
           {group.records.map((record) => (
             <div
-              className="my-2 rounded-md border border-line bg-panel p-2 shadow-xs"
+              className="board-record my-2 rounded-md border border-line bg-panel p-2 shadow-xs"
               key={record.id}
               draggable={!readOnly && !!field && canEdit?.(record, field) !== false}
               onDragStart={(e) => e.dataTransfer.setData('record', record.id)}
@@ -60,22 +63,52 @@ export function BoardView({
                   { id: '', name: '', type: 'text' },
                 ) || t('common.untitled')}
               </Button>
-              {field && (
-                <select
-                  disabled={readOnly || canEdit?.(record, field) === false}
-                  aria-label={t('database.cardStatus')}
-                  className="max-w-full border-0! bg-surface! px-2! py-1! text-[10px]!"
-                  value={valueText(record.properties?.[field.id] ?? '')}
-                  onChange={(e) => onCell(record, field, e.target.value || null)}
-                >
-                  <option value="">{t('database.ungrouped')}</option>
-                  {field.options?.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-              )}
+              {fields
+                .filter((f) => f.type !== 'title' && f.id !== field?.id)
+                .map((f) => (
+                  <div className="my-1 min-w-0 text-xs text-muted" key={f.id}>
+                    <FieldValue
+                      field={f}
+                      value={record.properties?.[f.id]}
+                      objects={objects}
+                      resolve={resolve}
+                      onOpen={onOpen}
+                    />
+                  </div>
+                ))}
+              {field &&
+                (readOnly || canEdit?.(record, field) === false ? (
+                  <FieldValue
+                    field={field}
+                    value={record.properties?.[field.id]}
+                    objects={objects}
+                  />
+                ) : (
+                  <Popover
+                    label={field.name}
+                    className="w-64"
+                    trigger={
+                      <Button
+                        className="max-w-full px-1 py-1 text-xs"
+                        aria-label={t('database.cardStatus')}
+                      >
+                        <FieldValue
+                          field={field}
+                          value={record.properties?.[field.id]}
+                          objects={objects}
+                        />
+                      </Button>
+                    }
+                  >
+                    <FieldInput
+                      key={`${record.id}:${JSON.stringify(record.properties?.[field.id])}`}
+                      field={field}
+                      value={record.properties?.[field.id]}
+                      objects={objects}
+                      onChange={(value) => onCell(record, field, value)}
+                    />
+                  </Popover>
+                ))}
             </div>
           ))}
         </section>

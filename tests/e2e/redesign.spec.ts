@@ -55,7 +55,7 @@ test('named views persist independent layouts, filters and properties', async ({
   await page.getByRole('button', { name: '添加筛选条件' }).click();
   await page.getByLabel('筛选内容').fill('探索');
   await page.keyboard.press('Escape');
-  await expect(page.locator('.board-column').getByRole('button')).toHaveCount(1);
+  await expect(page.locator('.board-record')).toHaveCount(1);
   await page.getByRole('tab', { name: '全部项目', exact: true }).click();
   await expect(page.locator('canvas').first()).toBeVisible();
   await expect(page.getByRole('button', { name: '清空', exact: true })).toHaveCount(0);
@@ -65,7 +65,7 @@ test('named views persist independent layouts, filters and properties', async ({
     'aria-selected',
     'true',
   );
-  await expect(page.locator('.board-column').getByRole('button')).toHaveCount(1);
+  await expect(page.locator('.board-record')).toHaveCount(1);
   await viewSettings(page);
   await page.getByRole('button', { name: '字段', exact: true }).click();
   await page.getByRole('button', { name: '添加字段', exact: true }).click();
@@ -97,6 +97,7 @@ test('mobile nested panels close one level at a time and records remain editable
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: '新建', exact: true }).click();
   await page.getByLabel('名称', { exact: true }).fill('手机上新增');
+  await page.getByLabel('名称', { exact: true }).press('Enter');
   await page.goBack();
   await expect(page.locator('.mobile-records')).toContainText('手机上新增');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

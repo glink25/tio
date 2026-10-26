@@ -8,6 +8,12 @@ export interface FieldInputProps {
   value: unknown;
   onChange: (value: unknown) => void;
   objects: TioObject[];
+  record?: TioObject;
+  readOnly?: boolean;
+  onCancel?: () => void;
+  upload?: (file: File) => Promise<string>;
+  resolve?: (ref: string) => Promise<string>;
+  onOpen?: (record: TioObject) => void;
 }
 export interface ViewExtensions {
   fields?: Record<

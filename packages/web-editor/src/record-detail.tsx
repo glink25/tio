@@ -3,7 +3,7 @@ import { Editor } from '@tio/editor-blocknote';
 import { useT } from '@tio/i18n';
 import { Drawer, IconButton, EmptyNotice } from '@tio/ui';
 import { useDisplayValue } from '@tio/views';
-import { FieldInput } from '@tio/views';
+import { FieldInput, useFieldEvaluator } from '@tio/views';
 import { Trash2, Maximize2 } from 'lucide-react';
 
 import type { EditorController } from './controller';
@@ -46,11 +46,12 @@ export function RecordDetail({ model: m }: { model: EditorController }) {
 export function RecordContent({ model: m }: { model: EditorController }) {
   const t = useT();
   const displayValue = useDisplayValue();
+  const evaluator = useFieldEvaluator(m.objects);
   const record = m.record,
     db = m.activeDb;
   if (!record || !db) return null;
   return (
-    <div className="p-6 sm:px-10 sm:py-9">
+    <div className={m.current?.type === 'record' ? 'py-6' : 'p-6 sm:px-10 sm:py-9'}>
       <h1 className="mb-6 text-3xl font-semibold">
         {displayValue(record.properties?.[db.fields?.find((f) => f.type === 'title')?.id ?? ''], {
           id: '',
@@ -58,21 +59,30 @@ export function RecordContent({ model: m }: { model: EditorController }) {
           type: 'text',
         }) || t('database.recordTitle')}
       </h1>
-      <fieldset disabled={m.readOnly || !editable(record) || !editable(db)}>
+      <div>
         {db.fields?.map((f) => (
-          <fieldset disabled={!m.can(record, f.id)} key={f.id}>
-            <label className="my-3 grid grid-cols-[90px_1fr] items-center gap-4" key={f.id}>
+          <div key={f.id}>
+            <div
+              className="my-3 grid min-w-0 grid-cols-1 items-start gap-1.5 sm:grid-cols-[90px_minmax(0,1fr)] sm:gap-4"
+              key={f.id}
+            >
               <span className="text-xs text-muted">{f.name}</span>
               <FieldInput
+                key={`${record.id}:${f.id}:${JSON.stringify(record.properties?.[f.id])}`}
                 field={f}
-                value={record.properties?.[f.id]}
+                record={record}
+                readOnly={m.readOnly || !editable(record) || !editable(db) || !m.can(record, f.id)}
+                upload={m.upload}
+                resolve={m.resolve}
+                onOpen={(r) => m.setRecordId(r.id)}
+                value={evaluator.value(record, f)}
                 onChange={(v) => m.cell(record, f, v)}
                 objects={m.objects}
               />
-            </label>
-          </fieldset>
+            </div>
+          </div>
         ))}
-      </fieldset>
+      </div>
       <hr className="my-8 border-line" />
       {editable(record) ? (
         <Editor

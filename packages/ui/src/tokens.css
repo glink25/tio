@@ -119,3 +119,8 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 }
+
+/* Keep button foregrounds explicit at the independently mounted editor boundary. */
+.tio-editor .tio-button[data-variant='primary'] {
+  color: var(--color-on-accent);
+}

@@ -33,7 +33,12 @@ test('offline editing, database, board, persistence and backup', async ({ page }
   await page.getByLabel('名称', { exact: true }).pressSequentially('Record input');
   await expect(page.getByLabel('名称', { exact: true })).toHaveValue('Record input');
   await page.getByLabel('名称', { exact: true }).fill('编辑记录测试');
-  await page.getByLabel('状态', { exact: true }).selectOption('doing');
+  await page.getByLabel('名称', { exact: true }).press('Enter');
+  await page.getByRole('option', { name: '进行中', exact: true }).click();
+  await page
+    .getByRole('group', { name: '状态 editor', exact: true })
+    .getByRole('button', { name: '完成', exact: true })
+    .click();
   await page.getByLabel('关闭记录').click();
   await expect(page.getByRole('button', { name: '编辑记录测试', exact: true })).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
@@ -58,6 +63,7 @@ test('mobile layout can create and edit a record', async ({ page }) => {
   await page.getByRole('button', { name: '新建', exact: true }).click();
   await expect(page.getByLabel('名称', { exact: true })).toBeVisible();
   await page.getByLabel('名称', { exact: true }).fill('手机记录');
+  await page.getByLabel('名称', { exact: true }).press('Enter');
   await page.getByLabel('关闭记录').click();
   await expect(page.locator('.mobile-records')).toContainText('手机记录');
   await page.screenshot({ path: 'test-results/mobile-document.png', fullPage: true });

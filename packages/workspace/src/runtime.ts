@@ -166,6 +166,7 @@ export class WorkspaceRuntime {
     receipt?: Pick<PendingCommand, 'guard' | 'complete' | 'reject'>,
   ) {
     if (this.disposed || this.closing) throw new Error('Workspace is closed');
+    intent = { ...intent, timestamp: intent.timestamp ?? new Date().toISOString() };
     const before = this.store.getState().objects;
     const next = executeCommand(intent, before, undefined, this.domain);
     const originals = new Map(before.map((o) => [o.id, o]));
@@ -350,7 +351,7 @@ export class WorkspaceRuntime {
     this.dispatch({ type: 'blocks', id, next, previous });
   }
   cell(id: string, fieldId: string, value: unknown) {
-    this.dispatch({ type: 'cell', id, fieldId, value });
+    this.dispatch({ type: 'cell', id, fieldId, value }, true);
   }
   fields(
     id: string,

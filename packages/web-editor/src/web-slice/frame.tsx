@@ -78,7 +78,15 @@ export function Frame({
           block.id,
         ]);
         const grant = settings.permissionStore?.get(key) ?? defaultPermission;
-        return preview || live.current.m.hostReadOnly ? { ...grant, data: 'read' } : grant;
+        // Revocations apply immediately. Permission expansion belongs to the new iframe
+        // session; the outgoing frame must not enable controls just before replacement.
+        return {
+          data:
+            preview || live.current.m.hostReadOnly || permission.data !== 'readWrite'
+              ? 'read'
+              : grant.data,
+          allowExternalResources: permission.allowExternalResources && grant.allowExternalResources,
+        };
       },
       readOnly: () => live.current.m.hostReadOnly,
       context: () => ({
@@ -185,7 +193,19 @@ export function Frame({
       window.removeEventListener('message', receive);
       frame?.removeEventListener('load', load);
     };
-  }, [token, m.runtime, page.id, page.workspaceId, block.id, html, preview, theme, i18n.language]);
+  }, [
+    token,
+    m.runtime,
+    page.id,
+    page.workspaceId,
+    block.id,
+    html,
+    preview,
+    theme,
+    i18n.language,
+    permission.data,
+    permission.allowExternalResources,
+  ]);
   return (
     <iframe
       key={token}

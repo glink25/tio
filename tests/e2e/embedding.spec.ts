@@ -140,6 +140,7 @@ test('numeric fields follow external updates and preserve decimals and clearing'
   const amount = page.locator('#one').getByLabel('Amount', { exact: true });
   await expect(amount).toHaveValue('12');
   await amount.fill('1.5');
+  await amount.press('Enter');
   await page.evaluate(async () => {
     await (window as any).fixture.one.flush();
   });
@@ -164,12 +165,15 @@ test('numeric fields follow external updates and preserve decimals and clearing'
   });
   await expect(amount).toHaveValue('42');
   await amount.fill('');
+  await amount.press('Enter');
   await amount.pressSequentially('-2.5');
+  await amount.press('Enter');
   await expect(amount).toHaveValue('-2.5');
   await page.evaluate(async () => {
     await (window as any).fixture.one.flush();
   });
   await amount.fill('');
+  await amount.press('Enter');
   await page.evaluate(async () => {
     await (window as any).fixture.one.flush();
   });

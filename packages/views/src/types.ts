@@ -1,6 +1,8 @@
 import type { Field, TioObject } from '@tio/core';
 export interface ViewProps {
   readOnly?: boolean;
+  upload?: (file: File) => Promise<string>;
+  resolve?: (ref: string) => Promise<string>;
   views?: TioObject[];
   onSelectView?: (id: string) => void;
   onCreateView?: () => void;

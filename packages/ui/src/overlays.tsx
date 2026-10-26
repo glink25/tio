@@ -122,6 +122,8 @@ export function Popover({
   onOpenChange,
   className,
   label,
+  modal = false,
+  restoreFocus,
 }: {
   trigger: ReactNode;
   children: ReactNode;
@@ -129,6 +131,8 @@ export function Popover({
   onOpenChange?: (open: boolean) => void;
   className?: string;
   label?: string;
+  modal?: boolean;
+  restoreFocus?: () => void;
 }) {
   const container = useContext(PortalContext);
   const mobile = useMobile();
@@ -152,10 +156,18 @@ export function Popover({
       </>
     );
   return (
-    <PopoverPrimitive.Root open={active} onOpenChange={change}>
+    <PopoverPrimitive.Root modal={modal} open={active} onOpenChange={change}>
       <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal container={container}>
         <PopoverPrimitive.Content
+          onCloseAutoFocus={
+            restoreFocus
+              ? (event) => {
+                  event.preventDefault();
+                  restoreFocus();
+                }
+              : undefined
+          }
           aria-label={label}
           align="start"
           sideOffset={6}

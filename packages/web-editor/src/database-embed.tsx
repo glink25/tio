@@ -114,6 +114,8 @@ export function DatabaseEmbed({
         readOnly={!writable}
         canEdit={(record, field) => m.can(record, field.id)}
         onCell={m.cell}
+        upload={m.upload}
+        resolve={m.resolve}
         onOpen={(r) => m.setRecordId(r.id)}
         onAdd={() => m.addRecord(db)}
         onView={(p) => m.patch(view, p)}

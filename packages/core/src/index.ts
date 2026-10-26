@@ -1,3 +1,4 @@
+import { validDatePart, validateFieldDefinition } from './fields';
 import { assertJson } from './json';
 import { createDefaultRegistry } from './registry';
 export { assertJson } from './json';
@@ -13,12 +14,39 @@ export type FieldType =
   | 'multiSelect'
   | 'relation'
   | 'formula'
-  | 'rollup';
+  | 'rollup'
+  | 'files'
+  | 'status'
+  | 'url'
+  | 'email'
+  | 'phone'
+  | 'createdTime'
+  | 'lastEditedTime';
+export interface DateValue {
+  start: string;
+  end?: string;
+  timeZone?: string;
+}
+export type RollupOperation =
+  | 'values'
+  | 'unique'
+  | 'count'
+  | 'countNotEmpty'
+  | 'sum'
+  | 'average'
+  | 'min'
+  | 'max'
+  | 'earliest'
+  | 'latest';
 export interface Field {
   id: string;
   name: string;
   type: FieldType | (string & {});
-  options?: { id: string; label: string }[];
+  options?: { id: string; label: string; color?: string; group?: 'todo' | 'doing' | 'done' }[];
+  numberFormat?: 'number' | 'percent' | 'currency';
+  currency?: string;
+  formula?: string;
+  rollup?: { relationFieldId: string; targetFieldId: string; operation: RollupOperation };
   targetDatabaseId?: string;
   multiple?: boolean;
   [key: string]: unknown;
@@ -33,7 +61,8 @@ export interface Block {
 }
 export interface Filter {
   fieldId: string;
-  op: 'contains' | 'eq' | 'notEmpty';
+  op: 'contains' | 'eq' | 'notEmpty' | 'empty' | 'gt' | 'gte' | 'lt' | 'lte' | 'between';
+  endValue?: unknown;
   value?: unknown;
 }
 export interface Sort {
@@ -56,6 +85,8 @@ export interface TioObject {
   fields?: Field[];
   databaseId?: string;
   properties?: Record<string, unknown>;
+  createdAt?: string;
+  updatedAt?: string;
   layout?: string;
   visibleFieldIds?: string[];
   fieldOrder?: string[];
@@ -129,6 +160,13 @@ export function validateBuiltin(object: TioObject): TioObject {
   if (['page', 'record'].includes(input.type)) validateBlocks(input.blocks);
   if (['record', 'databaseView'].includes(input.type) && typeof input.databaseId !== 'string')
     throw new Error('缺少数据库引用');
+  for (const key of ['createdAt', 'updatedAt'])
+    if (
+      input.type === 'record' &&
+      input[key] !== undefined &&
+      (typeof input[key] !== 'string' || !input[key].includes('T') || !validDatePart(input[key]))
+    )
+      throw new Error('Invalid record timestamp');
   if (input.type === 'record' && !plain(input.properties)) throw new Error('非法记录字段');
   if (input.type === 'database') {
     if (!Array.isArray(input.fields)) throw new Error('缺少字段定义');
@@ -142,6 +180,7 @@ export function validateBuiltin(object: TioObject): TioObject {
         ids.has(f.id)
       )
         throw new Error('非法或重复字段');
+      validateFieldDefinition(f as unknown as Field);
       ids.add(f.id);
       if (
         f.options !== undefined &&
@@ -183,7 +222,9 @@ export function validateBuiltin(object: TioObject): TioObject {
         (f) =>
           plain(f) &&
           typeof f.fieldId === 'string' &&
-          ['contains', 'eq', 'notEmpty'].includes(String(f.op)),
+          ['contains', 'eq', 'notEmpty', 'empty', 'gt', 'gte', 'lt', 'lte', 'between'].includes(
+            String(f.op),
+          ),
       ) ||
       !input.sorts.every(
         (s) =>

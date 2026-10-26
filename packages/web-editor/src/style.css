@@ -68,7 +68,7 @@
   }
   .tio-editor input:not([type='checkbox']):not([type='file']),
   .tio-editor select {
-    @apply min-w-0 rounded-md border border-line bg-panel px-2.5 py-2 text-sm;
+    @apply min-w-0 rounded-md border border-line bg-panel px-2.5 py-2 text-sm text-ink;
   }
   .tio-editor input[type='checkbox'] {
     @apply size-4 justify-self-start accent-accent;

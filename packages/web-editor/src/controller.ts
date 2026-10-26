@@ -13,7 +13,7 @@ import type { EditorSchema } from '@tio/editor-blocknote';
 import { useT, useTranslation } from '@tio/i18n';
 import type { ViewExtensions } from '@tio/views';
 import { newPage, newDatabase, type EditorSession } from '@tio/workspace';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
 import { memoryPermissions, type WebSliceOptions } from './web-slice/types';
@@ -68,6 +68,7 @@ export function useEditorController(props: EditorSurfaceProps) {
   const [referencePicker, setReferencePicker] = useState(false);
   const [error, setError] = useState('');
   const resolver = useMemo(() => new AssetResolver(runtime), [runtime]);
+  const resolveAsset = useCallback((url: string) => resolver.resolve(url), [resolver]);
   useEffect(() => () => resolver.dispose(), [resolver]);
   useEffect(() => {
     setRecordId(null);
@@ -185,7 +186,10 @@ export function useEditorController(props: EditorSurfaceProps) {
   }
   const upload = async (file: File) => {
     if (readOnly) throw new Error('Read only');
-    return runtime.upload(workspaceId, await fileData(file));
+    if (runtime.state.getState().error) await runtime.retry();
+    const ref = runtime.upload(workspaceId, await fileData(file));
+    await runtime.flush();
+    return ref;
   };
   return {
     webSlice,
@@ -221,7 +225,7 @@ export function useEditorController(props: EditorSurfaceProps) {
     embed,
     referencePage,
     upload,
-    resolve: (url: string) => resolver.resolve(url),
+    resolve: resolveAsset,
     cell: (record: TioObject, field: Field, value: unknown) =>
       command(() => runtime.cell(record.id, field.id, value)),
     changeFields: (db: TioObject, fields: Field[]) =>

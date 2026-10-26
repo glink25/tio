@@ -1,4 +1,6 @@
-import { valueText } from '@tio/core';
+import { isDateValue, isDerivedField, valueText, type Field } from '@tio/core';
+import { createEvaluator } from '@tio/database';
+import type { TranslationKey } from '@tio/i18n';
 import { useT } from '@tio/i18n';
 import { Button, IconButton, Menu, MenuItem, Popover, cn } from '@tio/ui';
 import {
@@ -126,14 +128,28 @@ export function QueryToolbar(p: RowsProps) {
                         })
                       }
                     >
-                      {(['contains', 'eq', 'notEmpty'] as const).map((op) => (
+                      {(
+                        [
+                          'contains',
+                          'eq',
+                          'notEmpty',
+                          'empty',
+                          'gt',
+                          'gte',
+                          'lt',
+                          'lte',
+                          'between',
+                        ] as const
+                      ).map((op) => (
                         <option key={op} value={op}>
                           {t(
                             op === 'eq'
                               ? 'ui.equals'
                               : op === 'contains'
                                 ? 'ui.contains'
-                                : 'ui.notEmpty',
+                                : op === 'notEmpty'
+                                  ? 'ui.notEmpty'
+                                  : `database.filter.${op}`,
                           )}
                         </option>
                       ))}
@@ -145,15 +161,12 @@ export function QueryToolbar(p: RowsProps) {
                     >
                       <X size={15} />
                     </IconButton>
-                    {filter.op !== 'notEmpty' && (
+                    {!['notEmpty', 'empty'].includes(filter.op) && (
                       <div className="col-span-3">
-                        {filter.op === 'eq' && field ? (
+                        {filter.op !== 'contains' && field ? (
                           <FieldInput
-                            field={{
-                              ...field,
-                              type: field.type === 'multiSelect' ? 'select' : field.type,
-                              multiple: false,
-                            }}
+                            key={`${field.id}:${JSON.stringify(filter.value)}:${filter.op}`}
+                            field={queryField(field, p)}
                             value={filter.value}
                             objects={p.objects}
                             onChange={(value) =>
@@ -175,6 +188,23 @@ export function QueryToolbar(p: RowsProps) {
                               })
                             }
                           />
+                        )}
+                        {filter.op === 'between' && field && (
+                          <div className="mt-2">
+                            <FieldInput
+                              key={`${field.id}:end:${JSON.stringify(filter.endValue)}`}
+                              field={{ ...queryField(field, p), name: t('database.end') }}
+                              value={filter.endValue}
+                              objects={p.objects}
+                              onChange={(endValue) =>
+                                onView({
+                                  filters: filters.map((f, n) =>
+                                    n === i ? { ...f, endValue } : f,
+                                  ),
+                                })
+                              }
+                            />
+                          </div>
                         )}
                       </div>
                     )}
@@ -324,14 +354,14 @@ export function QueryToolbar(p: RowsProps) {
                   >
                     <option value="">{t('ui.group')}</option>
                     {fields
-                      .filter((f) => f.type === 'select')
+                      .filter((f) => ['select', 'status'].includes(f.type))
                       .map((f) => (
                         <option key={f.id} value={f.id}>
                           {f.name}
                         </option>
                       ))}
                   </select>
-                  {!fields.some((f) => f.type === 'select') && (
+                  {!fields.some((f) => ['select', 'status'].includes(f.type)) && (
                     <Button className="mt-2 text-xs" onClick={onFields}>
                       {t('ui.noGroup')}
                     </Button>
@@ -396,7 +426,15 @@ export function QueryToolbar(p: RowsProps) {
               onClick={() => onView({ filters: filters.filter((_, n) => n !== i) })}
             >
               {fields.find((x) => x.id === f.fieldId)?.name} ·{' '}
-              {t(f.op === 'eq' ? 'ui.equals' : f.op === 'contains' ? 'ui.contains' : 'ui.notEmpty')}{' '}
+              {t(
+                (f.op === 'eq'
+                  ? 'ui.equals'
+                  : f.op === 'contains'
+                    ? 'ui.contains'
+                    : f.op === 'notEmpty'
+                      ? 'ui.notEmpty'
+                      : `database.filter.${f.op}`) as TranslationKey,
+              )}{' '}
               <X size={12} />
             </Button>
           ))}
@@ -429,4 +467,28 @@ export function QueryToolbar(p: RowsProps) {
       )}
     </>
   );
+}
+
+function queryField(field: Field, props: RowsProps): Field {
+  let type = field.type;
+  if (type === 'createdTime' || type === 'lastEditedTime') type = 'date';
+  else if (isDerivedField(field)) {
+    const record = props.objects.find(
+      (o) => o.type === 'record' && o.databaseId === props.database.id && !o.deleted,
+    );
+    const value = record ? createEvaluator(props.objects).read(record, field).value : undefined;
+    type =
+      typeof value === 'number'
+        ? 'number'
+        : typeof value === 'boolean'
+          ? 'boolean'
+          : isDateValue(value)
+            ? 'date'
+            : 'text';
+  }
+  return {
+    ...field,
+    type: type === 'multiSelect' ? 'select' : type === 'files' ? 'text' : type,
+    multiple: false,
+  };
 }
