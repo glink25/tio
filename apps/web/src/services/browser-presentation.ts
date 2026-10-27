@@ -1,7 +1,7 @@
 import { i18n, setLanguage, type Language } from '@tio/i18n';
 import { useSyncExternalStore } from 'react';
 type Preference = { theme: 'light' | 'dark'; locale: Language; readOnly: boolean };
-let state: Preference = { theme: 'dark', locale: 'zh', readOnly: false };
+let state: Preference = { theme: 'light', locale: 'zh', readOnly: false };
 const listeners = new Set<() => void>();
 export function setPresentation(next: Partial<Preference>) {
   state = { ...state, ...next };
@@ -25,7 +25,7 @@ export function initializePresentation() {
   }
   const value = saved as Partial<Preference>;
   setPresentation({
-    theme: value.theme === 'light' ? 'light' : 'dark',
+    theme: value.theme === 'dark' ? 'dark' : 'light',
     locale: value.locale === 'en' ? 'en' : 'zh',
   });
 }

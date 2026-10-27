@@ -1,10 +1,12 @@
-export function Brand({ small = false }: { small?: boolean }) {
+import logo from '../brand/logo.svg?raw';
+
+export function Brand({ small = false, hero = false }: { small?: boolean; hero?: boolean }) {
   return (
     <span
-      aria-label="Tio"
-      className={`inline-flex shrink-0 items-center justify-center rounded-lg bg-accent font-serif font-bold text-on-accent ${small ? 'size-8 text-2xl' : 'size-9 text-3xl'}`}
+      className={`brand-mark shrink-0 ${hero ? 'brand-mark--hero' : small ? 'size-8' : 'size-9'}`}
     >
-      t
+      <span className="sr-only">tio</span>
+      <span className="contents" aria-hidden="true" dangerouslySetInnerHTML={{ __html: logo }} />
     </span>
   );
 }

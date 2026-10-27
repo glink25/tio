@@ -1,8 +1,9 @@
 import { titleOf } from '@tio/core';
 import { t, errorMessage } from '@tio/i18n';
 import { Button, Modal } from '@tio/ui';
-import { FileText, Trash2 } from 'lucide-react';
+import { FileText } from 'lucide-react';
 
+import { EmptyStateIllustration } from '../components/empty-state-illustration';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { SearchDialog } from './search-dialog';
 import { SettingsDialog } from './settings-dialog';
@@ -76,8 +77,8 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
               </div>
             ))}
           {!m.objects.some((o) => o.deleted && ['page', 'database', 'record'].includes(o.type)) && (
-            <div className="flex justify-center py-12 text-muted" aria-label={t('ui.emptyTrash')}>
-              <Trash2 size={32} aria-hidden="true" />
+            <div className="flex justify-center py-12">
+              <EmptyStateIllustration kind="trash" />
             </div>
           )}
         </Modal>

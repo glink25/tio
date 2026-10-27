@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test('typed content and title survive a full browser reload', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('button', { name: '本机', exact: true }).click();
-  await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await page.getByRole('button', { name: '仅此浏览器', exact: true }).click();
+  await page.getByRole('button', { name: '创建工作空间', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '新建工作空间', exact: true });
   await dialog.getByRole('textbox').fill('持久化测试');
   await dialog.getByRole('button', { name: '新建', exact: true }).click();

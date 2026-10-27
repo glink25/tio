@@ -1,22 +1,35 @@
-import { supported } from '@tio/adapter-local-folder';
 import { t } from '@tio/i18n';
 import { Button, IconButton } from '@tio/ui';
-import {
-  ArrowLeft,
-  FolderOpen,
-  HardDrive,
-  KeyRound,
-  LoaderCircle,
-  Plus,
-  Layers,
-} from 'lucide-react';
+import { ArrowLeft, LoaderCircle, Plus } from 'lucide-react';
+import { useRef, useState } from 'react';
 
 import { Brand } from '../components/brand';
+import { EmptyStateIllustration } from '../components/empty-state-illustration';
 import { Identity } from '../components/identity';
+import { LoginHero } from '../components/login-hero';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
-import { authOrigin } from '../services/github-auth';
+import { connectionEntries } from '../services/connection-entry';
 
 export function WelcomePage({ model: m }: { model: WorkspaceController }) {
+  const starting = useRef(false);
+  const [startingEntry, setStartingEntry] = useState(false);
+  const entries = connectionEntries({
+    github: () => m.github(),
+    token: () => m.setGithubOpen(true),
+    device: m.offline,
+    folder: m.folder,
+  });
+  async function start(run: () => void | Promise<void>) {
+    if (starting.current || m.busy) return;
+    starting.current = true;
+    setStartingEntry(true);
+    try {
+      await run();
+    } finally {
+      starting.current = false;
+      setStartingEntry(false);
+    }
+  }
   if (m.connection || m.loading || m.loadError)
     return (
       <main className="mx-auto flex h-dvh w-full max-w-xl flex-col gap-8 p-6 md:py-16">
@@ -57,94 +70,109 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
                 {t('common.retry')}
               </Button>
             </div>
-          ) : !m.sessions.length ? (
-            <div className="flex flex-1 items-center justify-center">
-              <div className="flex size-24 items-center justify-center rounded-3xl bg-surface text-muted">
-                <Layers size={38} strokeWidth={1.25} aria-label={t('workspace.noSpaces')} />
-              </div>
-            </div>
           ) : (
             <>
-              <h1 className="mb-4 text-lg font-medium">{t('workspace.name')}</h1>
-              {m.sessions.map((s) => (
-                <Button
-                  disabled={m.busy}
-                  key={s.id}
-                  className="w-full justify-between py-4 text-left"
-                  onClick={() => void m.activate(s)}
-                >
-                  <span className="truncate">{s.name}</span>
-                  {m.recent === s.id && (
-                    <span className="shrink-0 rounded bg-surface-hover px-2 py-1 text-xs text-muted">
-                      {t('ui.recent')}
-                    </span>
-                  )}
-                </Button>
-              ))}
+              <h1 className="mb-4 text-lg font-medium">{t('workspace.choose')}</h1>
+              {!m.sessions.length ? (
+                <div className="flex min-h-0 flex-1 items-center justify-center">
+                  <EmptyStateIllustration kind="workspaces" />
+                </div>
+              ) : (
+                m.sessions.map((s) => (
+                  <Button
+                    disabled={m.busy}
+                    key={s.id}
+                    variant="outline"
+                    className="w-full justify-between py-4 text-left"
+                    onClick={() => void m.activate(s)}
+                  >
+                    <span className="truncate">{s.name}</span>
+                    {m.recent === s.id && (
+                      <span className="shrink-0 rounded bg-surface-hover px-2 py-1 text-xs text-muted">
+                        {t('ui.recent')}
+                      </span>
+                    )}
+                  </Button>
+                ))
+              )}
             </>
           )}
         </div>
         {m.connection && !m.loading && !m.loadError && (
           <Button
-            variant="outline"
+            variant="primary"
             disabled={m.busy}
             className="w-full shrink-0 py-3"
             onClick={() => m.setCreating(true)}
           >
             <Plus size={18} />
-            {t('workspace.new')}
+            {t(m.sessions.length ? 'workspace.new' : 'workspace.create')}
           </Button>
         )}
       </main>
     );
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-panel p-6">
-      <div className="flex w-full max-w-3xl flex-col items-center gap-12 md:flex-row md:justify-between md:gap-24">
-        <div className="flex items-center gap-4 text-4xl font-semibold">
-          <Brand />
-          <h1>Tio</h1>
+    <main className="login-page">
+      <LoginHero />
+      <section className="login-auth" aria-label={t('welcome.connections')}>
+        <div className="login-actions">
+          {entries.map(({ id, label, buttons }) => (
+            <div key={id} className="flex flex-col gap-2">
+              <fieldset className="flex gap-3" aria-label={t(label)}>
+                {buttons.map(
+                  ({
+                    id: buttonId,
+                    label: buttonLabel,
+                    icon: Icon,
+                    emphasis,
+                    available,
+                    hint,
+                    run,
+                    iconOnly,
+                  }) =>
+                    iconOnly ? (
+                      <Button
+                        key={buttonId}
+                        aria-label={t(buttonLabel)}
+                        title={t(buttonLabel)}
+                        variant={emphasis === 'primary' ? 'primary' : 'outline'}
+                        className="size-[54px] [&>svg]:size-[19px]"
+                        disabled={m.busy || startingEntry || !available}
+                        onClick={() => void start(run)}
+                      >
+                        <Icon />
+                      </Button>
+                    ) : (
+                      <Button
+                        key={buttonId}
+                        variant={emphasis === 'primary' ? 'primary' : 'outline'}
+                        className={
+                          buttons.length > 1
+                            ? 'min-h-[54px] flex-1 py-3 [&>svg]:size-[19px]'
+                            : 'connection-button'
+                        }
+                        disabled={m.busy || startingEntry || !available}
+                        aria-describedby={hint ? `${buttonId}-hint` : undefined}
+                        onClick={() => void start(run)}
+                      >
+                        <Icon />
+                        <span>{t(buttonLabel)}</span>
+                      </Button>
+                    ),
+                )}
+              </fieldset>
+              {buttons.map(
+                ({ id: buttonId, hint }) =>
+                  hint && (
+                    <p key={buttonId} id={`${buttonId}-hint`} className="text-xs text-muted">
+                      {t(hint)}
+                    </p>
+                  ),
+              )}
+            </div>
+          ))}
         </div>
-        <div className="flex w-full max-w-sm flex-col gap-3">
-          <fieldset className="flex" aria-label="GitHub">
-            <Button
-              variant="primary"
-              className="flex-1 rounded-r-none py-3"
-              disabled={m.busy || !authOrigin}
-              onClick={() => void m.github()}
-            >
-              {t('welcome.github')}
-            </Button>
-            <IconButton
-              label={t('welcome.token')}
-              className="rounded-l-none border border-line px-4"
-              disabled={m.busy}
-              onClick={() => m.setGithubOpen(true)}
-            >
-              <KeyRound size={18} />
-            </IconButton>
-          </fieldset>
-          {!authOrigin && <p className="text-xs text-muted">{t('welcome.oauthUnavailable')}</p>}
-          <Button
-            variant="outline"
-            className="justify-start py-3"
-            disabled={m.busy}
-            onClick={() => void m.offline()}
-          >
-            <HardDrive size={18} />
-            {t('welcome.offline')}
-          </Button>
-          <Button
-            variant="outline"
-            className="justify-start py-3"
-            disabled={m.busy || !supported()}
-            onClick={() => void m.folder()}
-          >
-            <FolderOpen size={18} />
-            {t('welcome.folder')}
-          </Button>
-          {!supported() && <p className="text-xs text-muted">{t('welcome.unsupported')}</p>}
-        </div>
-      </div>
+      </section>
     </main>
   );
 }

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <ellipse cx="64" cy="113" rx="43" ry="5" fill="currentColor" opacity=".07"/>
+  <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M30 57 64 43 98 57 64 72Z" fill="currentColor" fill-opacity=".025"/>
+    <path d="M30 57v36l34 15V72Z" fill="currentColor" fill-opacity=".055"/>
+    <path d="M64 72v36l34-15V57Z" fill="currentColor" fill-opacity=".1"/>
+    <path d="m30 57-14-15 34-14 14 15Z" fill="currentColor" fill-opacity=".04"/>
+    <path d="m64 43 14-15 34 14-14 15Z" fill="currentColor" fill-opacity=".04"/>
+    <path d="m30 57-14 14 34 15 14-14Z" fill="var(--color-panel, #fff)"/>
+    <path d="m64 72 14 14 34-15-14-14Z" fill="var(--color-panel, #fff)"/>
+    <path d="M64 48v13" stroke-dasharray="2 4" opacity=".4"/>
+  </g>
+</svg>
