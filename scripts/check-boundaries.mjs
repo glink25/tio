@@ -11,7 +11,7 @@ const pure = [
   'host-protocol',
 ];
 const forbidden =
-  /^(react|react-dom|@blocknote\/|@glideapps\/|@tio\/(ui|i18n|editor-blocknote|views|provider-local-folder|adapter-local-folder|local-store))/;
+  /^(react|react-dom|@blocknote\/|@glideapps\/|@tio\/(ui|i18n|editor-blocknote|views|provider-[^/]+|adapter-[^/]+|local-store))/;
 for (const name of pure) {
   const pkg = JSON.parse(readFileSync(join('packages', name, 'package.json'), 'utf8'));
   for (const dependency of Object.keys(pkg.dependencies ?? {})) {

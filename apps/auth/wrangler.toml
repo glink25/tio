@@ -1,0 +1,14 @@
+name = "tio-auth"
+main = "src/index.ts"
+compatibility_date = "2026-10-27"
+# Configure GITHUB_APP_SLUG, FRONTEND_ORIGIN and exact REDIRECT_URI_ALLOWLIST.
+# Deploy GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET and STATE_SECRET as secrets.
+
+[[routes]]
+pattern = "tio-api.linkai.work"
+custom_domain = true
+
+[vars]
+GITHUB_APP_SLUG = "tio-personal-editor"
+FRONTEND_ORIGIN = "https://tio.linkai.work,http://localhost:6789"
+REDIRECT_URI_ALLOWLIST = "https://tio.linkai.work/,http://localhost:6789/"

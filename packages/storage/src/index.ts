@@ -1,4 +1,5 @@
 export interface FileStorageProvider {
+  snapshot?(): Promise<FileSnapshot>;
   canWrite?(): Promise<boolean>;
   list(prefix: string): Promise<{ path: string; fingerprint?: string }[]>;
   read(path: string): Promise<Uint8Array | null>;
@@ -18,4 +19,11 @@ export function segments(path: string): string[] {
   if (!path || s.some((x) => !x || x === '.' || x === '..' || x.includes('\\') || x.includes('\0')))
     throw new StorageError('invalid', '非法路径');
   return s;
+}
+
+/** Stable read snapshot with explicit atomic publication; ordinary writes remain durable. */
+export interface FileSnapshot {
+  revision: string;
+  files: FileStorageProvider;
+  publish(changes: Map<string, Uint8Array | null>): Promise<boolean>;
 }

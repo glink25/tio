@@ -1,6 +1,7 @@
 import { FolderConnectionAdapter } from '@tio/adapter-local-folder';
 import { object, type ConnectionAccessState, type ConnectionAdapter } from '@tio/core';
 import { FileWorkspaceContent } from '@tio/file-storage';
+import { LocalStore } from '@tio/local-store';
 import { MemoryProvider } from '@tio/provider-memory';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 
@@ -18,7 +19,7 @@ afterEach(async () => {
   for (const service of services.splice(0)) await service.dispose();
   vi.unstubAllGlobals();
 });
-function fixture() {
+function fixture(create?: (id: string) => Promise<void>) {
   const files = new MemoryProvider();
   let code: ConnectionAccessState['code'] = 'reauthorization-required';
   let listener: ((state: ConnectionAccessState) => void) | undefined;
@@ -41,8 +42,15 @@ function fixture() {
   const discover = vi.fn(async () => []);
   const service = new WorkspaceServices(() => ({
     adapter,
+    create,
+    repository: (_id, instance) => new LocalStore(instance),
     discover,
     content: (id) => new FileWorkspaceContent(files, id),
+    sync: (id, repository) => ({
+      store: repository as LocalStore,
+      content: new FileWorkspaceContent(files, id),
+      endpoint: 'device',
+    }),
   }));
   services.push(service);
   return {
@@ -184,4 +192,19 @@ it('keeps the current workspace usable when switching cannot flush pending chang
   expect(next.snapshot().find((o) => o.id === 'b-page')?.title).toBe('B');
   const restored = await service.open(a);
   expect(restored.snapshot().find((o) => o.id === 'a-page')?.title).toBe('Still editing A');
+});
+
+it('uses the new workspace identity after creation fails', async () => {
+  const create = vi.fn(async (_id: string) => {});
+  create.mockRejectedValueOnce(new TypeError('network lost'));
+  const { service } = fixture(create);
+  await service.connect('device');
+  service.connection = { id: 'github-' + crypto.randomUUID(), kind: 'github', name: 'GitHub' };
+  const workspaceId = crypto.randomUUID();
+  await expect(
+    service.create([object('workspace', workspaceId, { id: workspaceId })]),
+  ).rejects.toThrow('network lost');
+  const other = crypto.randomUUID();
+  await service.create([object('workspace', other, { id: other })]);
+  expect(create.mock.calls.map(([id]) => id)).toEqual([workspaceId, other]);
 });

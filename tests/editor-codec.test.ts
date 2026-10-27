@@ -88,3 +88,16 @@ it('roundtrips code source, display modes and unknown props without converting l
     expect(fromEditor(toEditor([block], configured), [block])).toEqual([block]);
   }
 });
+
+it('does not persist BlockNote undefined content on atomic mentions', () => {
+  const configured = { ...schema, inlineContentSchema: { mention: {} } };
+  const mention = {
+    type: 'mention',
+    props: { workspaceId: 'w', kind: 'page', id: 'p' },
+    content: undefined,
+  };
+  const source = [{ ...textBlock(''), content: [mention] }, table([mention])];
+  const saved = fromEditor(source, []);
+  expect(Object.keys((saved[0].content as object[])[0])).toEqual(['type', 'props']);
+  expect(toEditor(saved, configured).map((block) => block.type)).toEqual(['paragraph', 'table']);
+});

@@ -15,6 +15,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 
+import {
+  connectToken,
+  finishGitHubLogin,
+  credentials,
+  loginGitHub,
+} from '../../services/github-auth';
 import { readRoute, writeRoute } from '../../services/navigation';
 import { WorkspaceServices } from '../../services/workspace-services';
 const emptyStore = createStore(() => emptyWorkspaceState);
@@ -37,6 +43,7 @@ export function useWorkspace() {
   const [syncStatus, setSyncStatus] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [githubOpen, setGithubOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -71,8 +78,12 @@ export function useWorkspace() {
     services.onChange = () => {
       if (!disposed) void refreshSessions().catch((e) => setError(errorMessage(e)));
     };
-    void services
-      .initialize()
+    void (async () => {
+      const loggedIn = await finishGitHubLogin();
+      await services.initialize();
+      if (loggedIn && services.connection?.id !== `github-${credentials()?.userId}`)
+        await services.connect('github');
+    })()
       .then(async () => {
         setConnection(services.connection);
         services.startSync(setSyncStatus);
@@ -249,6 +260,32 @@ export function useWorkspace() {
       setBusy(false);
     }
   }
+  async function github(token?: string) {
+    try {
+      setBusy(true);
+      const expected =
+        services.connection?.kind === 'github'
+          ? Number(services.connection.id.replace('github-', ''))
+          : undefined;
+      if (!token) {
+        await runtimeRef.current?.flush();
+        await loginGitHub(expected);
+        return;
+      }
+      await connectToken(token, expected);
+      if (!services.connection) await services.connect('github');
+      else if (services.connection.kind === 'github') await services.credentialsChanged();
+      setConnection(services.connection);
+      services.startSync(setSyncStatus);
+      await services.refreshRemote();
+      await refreshSessions();
+      setGithubOpen(false);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function folder() {
     try {
       const { handle } = await chooseFolder();
@@ -265,6 +302,10 @@ export function useWorkspace() {
     }
   }
   async function authorize() {
+    if (services.connection?.kind === 'github' && credentials()?.mode !== 'app') {
+      setGithubOpen(true);
+      return;
+    }
     await services.authorize();
     if (!runtimeRef.current && services.access?.code === 'available') {
       const active = await services.setting('active');
@@ -427,6 +468,9 @@ export function useWorkspace() {
     }
   };
   return {
+    github,
+    githubOpen,
+    setGithubOpen,
     settingsOpen,
     setSettingsOpen,
     trashOpen,

@@ -240,9 +240,11 @@ test('nested pages, references, workspace rename and dark theme persist', async 
   await page.getByLabel('页面标题').fill('父页面');
   await createChild(page, '子页面');
   await createChild(page, '孙页面');
-  await page.locator('header').getByRole('button', { name: '更多操作', exact: true }).click();
-  await page.getByRole('menuitem', { name: '引用页面', exact: true }).click();
-  await page.getByRole('dialog').getByRole('button', { name: '随手记', exact: true }).click();
+  await page.locator('.bn-editor').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.insertText('@');
+  await expect(page.locator('.bn-suggestion-menu')).toContainText('随手记');
+  await page.locator('.bn-suggestion-menu').getByText('随手记', { exact: true }).click();
   await expect(page.locator('.bn-editor').getByRole('button', { name: '随手记' })).toBeVisible();
   await page.getByRole('button').filter({ hasText: '我的工作空间' }).first().click();
   await page.getByRole('button', { name: '重命名工作空间' }).click();
@@ -268,10 +270,7 @@ test('nested pages, references, workspace rename and dark theme persist', async 
   await expect(page.getByLabel('页面标题')).toHaveValue('随手记');
   await expect(page.locator('main .tio-page-references')).toHaveCount(0);
   await page.locator('nav').getByRole('button', { name: '孙页面', exact: true }).click();
-  await expect(page.locator('.tio-page-references')).toContainText('引用的文档');
-  await expect(
-    page.locator('.tio-page-references').getByRole('button', { name: '随手记' }),
-  ).toBeVisible();
+  await expect(page.locator('.bn-editor').getByRole('button', { name: '随手记' })).toBeVisible();
   await setLight(page);
   await expect(page.locator('html')).not.toHaveClass('dark');
 });

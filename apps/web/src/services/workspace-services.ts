@@ -8,7 +8,7 @@ import {
   type ConnectionAccessState,
   type WorkspaceRepository,
 } from '@tio/core';
-import { LocalStore, LocalCatalog } from '@tio/local-store';
+import { LocalCatalog } from '@tio/local-store';
 import { HostSyncRunner } from '@tio/sync';
 import { WorkspaceRuntime } from '@tio/workspace';
 
@@ -17,6 +17,7 @@ import {
   type ConnectionBinding,
   type ConnectionFactory,
 } from './connection-adapters';
+import { credentials, clearCredentials } from './github-auth';
 export class WorkspaceServices {
   constructor(private factory: ConnectionFactory = createConnectionBinding) {}
   private binding?: ConnectionBinding;
@@ -102,20 +103,23 @@ export class WorkspaceServices {
   private timer?: ReturnType<typeof setInterval>;
   private startPolling() {
     if (this.timer) return;
-    this.timer = setInterval(() => {
-      if (this.polling || !this.active || document.visibilityState !== 'visible') return;
-      this.polling = true;
-      void this.checkAccess(this.active.session.workspaceId)
-        .then((allowed) => {
-          if (allowed) return this.active?.runtime.poll();
-        })
-        .catch((error) => {
-          if (this.binding) this.setAccess(this.binding.adapter.classifyError(error));
-        })
-        .finally(() => {
-          this.polling = false;
-        });
-    }, 5000);
+    this.timer = setInterval(
+      () => {
+        if (this.polling || !this.active || document.visibilityState !== 'visible') return;
+        this.polling = true;
+        void this.checkAccess(this.active.session.workspaceId)
+          .then((allowed) => {
+            if (allowed) return this.active?.runtime.poll();
+          })
+          .catch((error) => {
+            if (this.binding) this.setAccess(this.binding.adapter.classifyError(error));
+          })
+          .finally(() => {
+            this.polling = false;
+          });
+      },
+      this.connection?.kind === 'github' ? 60000 : 5000,
+    );
   }
   async initialize() {
     const saved = await this.catalog.setting('connection');
@@ -123,10 +127,19 @@ export class WorkspaceServices {
       this.connection = saved.connection;
       this.handle = saved.handle;
       this.bind();
+      if (this.binding?.sync) for (const session of await this.sessions()) this.repository(session);
     }
   }
   async connect(kind: Connection['kind'], handle?: FileSystemDirectoryHandle) {
-    await this.disconnect();
+    await this.disconnect(kind !== 'github');
+    if (kind === 'github') {
+      const auth = credentials();
+      if (!auth) throw new Error('GitHub credentials missing');
+      this.connection = { id: `github-${auth.userId}`, kind, name: auth.login };
+      this.bind();
+      await this.catalog.setting('connection', { connection: this.connection });
+      return;
+    }
     const previous = await this.catalog.setting('folderIdentity');
     const same = handle && previous?.handle && (await handle.isSameEntry(previous.handle));
     this.connection = {
@@ -164,7 +177,11 @@ export class WorkspaceServices {
     if (generation !== this.generation) return;
     const saved = await this.sessions();
     for (const workspace of discovered) {
-      if (saved.some((s) => s.workspaceId === workspace.id)) continue;
+      const existing = saved.find((s) => s.workspaceId === workspace.id);
+      if (existing) {
+        if (binding.sync) this.repository(existing);
+        continue;
+      }
       const session = {
         id: this.connection!.id + '_' + workspace.id,
         workspaceId: workspace.id,
@@ -172,11 +189,7 @@ export class WorkspaceServices {
         name: workspace.name ?? '',
       };
       await this.catalog.saveSession(session);
-      // Discovery updates the catalog only. The provider remains authoritative.
-      if (!binding.repository) {
-        const { repository } = this.repository(session);
-        if (repository instanceof LocalStore) await repository.put(workspace);
-      }
+      if (binding.sync) this.repository(session);
     }
     this.onChange();
   }
@@ -189,25 +202,20 @@ export class WorkspaceServices {
   private repository(session: WorkspaceSession) {
     let entry = this.repositories.get(session.id);
     if (!entry) {
-      const repository =
-        this.binding?.repository?.(session.workspaceId, session.id) ?? new LocalStore(session.id);
+      if (!this.binding) throw new Error('Connection is not initialized');
+      const repository = this.binding.repository(session.workspaceId, session.id);
       entry = { repository };
       this.repositories.set(session.id, entry);
-      const content = this.binding?.adapter.supportsSync
-        ? this.binding.content(session.workspaceId)
-        : undefined;
-      if (
-        content &&
-        this.connection &&
-        !this.binding?.repository &&
-        repository instanceof LocalStore
-      ) {
+      const synchronization = this.binding?.sync?.(session.workspaceId, repository);
+      const content = synchronization?.content;
+      if (content && synchronization) {
         const runner = new HostSyncRunner(
-          repository,
+          synchronization.store,
           content,
-          this.connection.id,
+          synchronization.endpoint,
           session.workspaceId,
           {
+            pollMs: synchronization?.pollMs,
             beforeSync: async () => {
               const allowed = await this.checkAccess(session.workspaceId);
               const access = this.accessFor(session.workspaceId);
@@ -216,12 +224,22 @@ export class WorkspaceServices {
               return allowed;
             },
             onError: (error) => {
-              if (this.binding) this.setAccess(this.binding.adapter.classifyError(error));
+              if (!this.binding) return;
+              const state = this.binding.adapter.classifyError(error);
+              this.setAccess(
+                state.code === 'forbidden'
+                  ? { ...state, scope: { ...state.scope, workspaceId: session.workspaceId } }
+                  : state,
+              );
             },
             isActive: () => document.visibilityState === 'visible',
             onActive: (listener) => {
               document.addEventListener('visibilitychange', listener);
-              return () => document.removeEventListener('visibilitychange', listener);
+              globalThis.window?.addEventListener('online', listener);
+              return () => {
+                document.removeEventListener('visibilitychange', listener);
+                globalThis.window?.removeEventListener('online', listener);
+              };
             },
             lock: (_name, work) => {
               const job = this.queue.then(() =>
@@ -233,7 +251,10 @@ export class WorkspaceServices {
           },
         );
         entry.runner = runner;
-        runner.onStatus = () => this.status();
+        runner.onStatus = () => {
+          if (runner.status === 'synced') synchronization?.onComplete?.();
+          this.status();
+        };
         entry.unsubscribe = repository.subscribeChanges((event) => {
           if (event.origin !== 'sync') runner.schedule();
         });
@@ -245,6 +266,7 @@ export class WorkspaceServices {
   async create(objects: TioObject[], assets = new Map<string, AssetData>()) {
     if (!this.connection) await this.connect('device');
     const workspace = objects.find((o) => o.type === 'workspace')!;
+    await this.binding?.create?.(workspace.id);
     const session: WorkspaceSession = {
       id: this.connection!.id + '_' + workspace.id,
       workspaceId: workspace.id,
@@ -295,15 +317,30 @@ export class WorkspaceServices {
       onStatus(
         this.access && this.access.code !== 'available'
           ? this.access.code
-          : (this.runner?.status ?? 'idle'),
+          : this.runner?.status === 'syncing' && this.runner.progress
+            ? `syncing:${this.runner.progress.loaded}/${this.runner.progress.total}`
+            : (this.runner?.status ?? 'idle'),
       );
     this.status();
   }
   private get runner() {
-    return this.active && this.repositories.get(this.active.session.id)?.runner;
+    return this.active
+      ? this.repositories.get(this.active.session.id)?.runner
+      : [...this.repositories.values()].find((entry) => entry.runner?.status === 'syncing')?.runner;
   }
   get issues() {
     return this.runner?.issues ?? [];
+  }
+  async credentialsChanged() {
+    this.accessStates.clear();
+    if (await this.checkAccess()) {
+      await this.refreshRemote();
+      await Promise.all(
+        [...this.repositories.values()].flatMap((entry) =>
+          entry.runner ? [entry.runner.sync()] : [],
+        ),
+      );
+    }
   }
   authorize() {
     if (this.authorization) return this.authorization;
@@ -365,7 +402,7 @@ export class WorkspaceServices {
     this.unsubscribeAccess = undefined;
     this.authorization = undefined;
   }
-  disconnect() {
+  disconnect(clearAuth = true) {
     this.invalidateConnection();
     return this.transition(async () => {
       await this.closeActive();
@@ -377,6 +414,7 @@ export class WorkspaceServices {
         }),
       );
       this.repositories.clear();
+      if (clearAuth && this.connection?.kind === 'github') clearCredentials();
       this.connection = null;
       this.binding = undefined;
       this.accessStates.clear();

@@ -48,6 +48,15 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
             <Button
               variant="outline"
               className="justify-start py-3"
+              onClick={() => m.setGithubOpen(true)}
+            >
+              GitHub
+            </Button>
+          )}
+          {!m.connection && (
+            <Button
+              variant="outline"
+              className="justify-start py-3"
               disabled={m.busy || !supported()}
               onClick={() => void m.folder()}
             >

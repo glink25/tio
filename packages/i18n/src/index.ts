@@ -61,6 +61,7 @@ const errorKeys: Record<string, TranslationKey> = {
   请输入有效数字: 'errors.number',
 };
 export function translateStatus(status: string) {
+  if (status.startsWith('syncing:')) return `${t('status.syncing')} ${status.slice(8)}`;
   const keys: Record<string, TranslationKey> = {
     idle: 'status.saved',
     syncing: 'status.syncing',

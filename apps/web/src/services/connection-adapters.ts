@@ -11,10 +11,23 @@ import { WorkerSearch } from '@tio/database/search-browser';
 import { FileWorkspaceContent, FileRepository, type FileJournalState } from '@tio/file-storage';
 import { LocalStore, RecoveryJournal } from '@tio/local-store';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
+
+import { githubBinding } from './github-binding';
 export interface ConnectionBinding {
   adapter: ConnectionAdapter;
-  repository?(workspaceId: string, instanceId: string): WorkspaceRepository & { close(): void };
+  repository(workspaceId: string, instanceId: string): WorkspaceRepository & { close(): void };
   discover(): Promise<TioObject[]>;
+  create?(workspaceId: string): Promise<void>;
+  sync?(
+    workspaceId: string,
+    repository: WorkspaceRepository,
+  ): {
+    store: import('@tio/core').SyncRepository;
+    content: WorkspaceContentPort;
+    endpoint: string;
+    pollMs?: number;
+    onComplete?: () => void;
+  };
   content(workspaceId: string): WorkspaceContentPort | undefined;
 }
 export type ConnectionFactory = (
@@ -32,6 +45,7 @@ function searchable<T extends WorkspaceRepository & { close(): void }>(repositor
   return repository;
 }
 export const createConnectionBinding: ConnectionFactory = (connection, handle) => {
+  if (connection.kind === 'github') return githubBinding(connection);
   if (connection.kind === 'device')
     return {
       adapter: {

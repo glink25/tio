@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tio/adapter-github": "workspace:*",
     "@tio/adapter-local-folder": "workspace:*",
     "@tio/assets": "workspace:*",
     "@tio/core": "workspace:*",
@@ -19,6 +20,7 @@
     "@tio/i18n": "workspace:*",
     "@tio/local-store": "workspace:*",
     "@tio/merge": "workspace:*",
+    "@tio/provider-github": "workspace:*",
     "@tio/provider-local-folder": "workspace:*",
     "@tio/provider-memory": "workspace:*",
     "@tio/serialization": "workspace:*",

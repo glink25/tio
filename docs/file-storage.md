@@ -30,8 +30,12 @@ A bad object is diagnosed independently. Unrelated valid objects continue synchr
 
 ## Executable evidence
 
-`tests/file-storage.test.ts` covers Unicode/large payloads, bounded data and index files, interrupted chunk/head publication, retry, corruption and chunk reuse. `tests/architecture-review.test.ts` covers independent invalid-object handling and read counts. Browser tests exercise the same layout through genuine OPFS directory handles. GitHub/WebDAV production integrations and native disk permissions require their own endpoint tests; they are not implied by the in-memory and OPFS results.
+`tests/file-storage.test.ts` covers Unicode/large payloads, bounded data and index files, interrupted chunk/head publication, retry, corruption and chunk reuse. `tests/architecture-review.test.ts` covers independent invalid-object handling and read counts. Browser tests exercise the same layout through genuine OPFS directory handles. Live GitHub authorization, WebDAV integrations and native disk permissions require their own endpoint tests; they are not implied by the in-memory and OPFS results.
 
 ## Direct folder repository
 
 The Web folder connection uses `FileRepository` over this codec instead of synchronizing an IndexedDB replica. It scans existing object files for navigation; no navigation index or new object layout is introduced. Hash/revision bookkeeping and unfinished writes live in a minimal browser recovery journal. See [provider-owned data access](async-provider-access.md) for recovery and best-effort commit guarantees. `SyncCore` remains an optional replica-provider component.
+
+## Optional atomic batches
+
+FileStorageProvider.snapshot returns immutable read primitives and an explicit publication function. FileWorkspaceContent exposes the equivalent object-level capability, encoding all changed heads, chunks and attachment bytes into one file batch. GitHub implements this with a Git commit and non-forced ref update. A false publication result indicates a concurrent remote revision; no upload is acknowledged until successful publication. Ordinary write/delete methods remain durable and direct-folder behavior is unchanged.

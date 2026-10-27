@@ -2,7 +2,7 @@
 
 ## Ownership
 
-The application has one active **Connection**, containing multiple **Workspaces**. A workspace is the largest content-sharing boundary and has exactly one synchronization endpoint. A connection is an authorization/discovery entry, not a shared document or an ACL container. This implementation includes device-local and local-folder connections. GitHub, custom servers and native platforms are not implemented.
+The application has one active **Connection**, containing multiple **Workspaces**. A workspace is the largest content-sharing boundary and has exactly one synchronization endpoint. A connection is an authorization/discovery entry, not a shared document or an ACL container. This implementation includes device-local, local-folder and GitHub connections. GitHub uses a text replica and an optional stateless authorization Worker; custom servers and native platforms are not implemented.
 
 The host owns connection authorization, the workspace catalog, navigation, local repositories, preferences, access policy and synchronization. The editor owns rich-text/database interactions and transient selection, focus and dialogs. `EditorSession` is the shared editor-facing interface used by Web composition and independent embedding.
 
@@ -28,7 +28,7 @@ flowchart TD
 
 ## Connection and workspace lifecycle
 
-Selecting a root folder establishes a connection and shows its workspace catalog. It does not automatically create a workspace. Users create, rename and switch spaces under that connection. The device connection follows the same flow. Folder manifests are discovered under `workspaces/<workspaceId>/workspace.json`; there is no second authoritative on-disk catalog.
+Selecting a root folder establishes a connection and shows its workspace catalog. It does not automatically create a workspace. Users create, rename and switch spaces under that connection. The device connection follows the same flow. Folder manifests are discovered under `workspaces/<workspaceId>/objects/<workspaceId>.json`; there is no second authoritative on-disk catalog.
 
 `WorkspaceDescriptor` holds identity and connection ownership. `WorkspacePreferences` holds local selected-page/favorite state. `LocalCatalog` stores descriptors and personal preferences separately. File handles belong to the connection record, never to business objects.
 
@@ -84,10 +84,14 @@ Restoration follows provider capabilities. Device restoration does not depend on
 
 The folder adapter owns permission queries and requests. Requests execute immediately in the user's click stack, before flushing or awaiting other operations. Background tasks never prompt. For replica providers the host gates queued synchronization and retains local drafts. For direct folder repositories it checks access before opening, makes an open editor read-only on detected access loss, and retains unfinished journal operations until authorization succeeds. Concurrent authorization clicks share a promise; disconnect invalidates late results. Reauthorization must restore the same endpoint and identity: an adapter must return failure for an identity mismatch and must never silently retarget cached drafts.
 
-The device implementation has no remote capability. The Web UI checks capabilities instead of folder-specific connection kinds. Future OAuth adapters can implement the connection contract and supply their own repository/cache policy without changing editor sessions. No OAuth/GitHub implementation is included.
+The device implementation has no remote capability. The Web UI checks capabilities instead of folder-specific connection kinds. Future OAuth adapters can implement the connection contract and supply their own repository/cache policy without changing editor sessions. The GitHub adapter implements this contract; see [GitHub storage](github-storage.md).
 
 ## Mentions
 
 A mention is an atomic inline reference or a single database property value containing `workspaceId`, `kind` (`page` or `database`) and `id`. Titles are resolved from current metadata and are never copied into source content. The host provides an instance-scoped `MentionService` for asynchronous candidate queries, batched resolution, change subscriptions and navigation. `EditorSurface`, `mountEditor` and bridged mounting accept an optional service; the default service uses the editor session's provider-backed metadata operations. It never opens storage or loads target bodies for display. Foreign-workspace references remain inert after paste.
 
 Web Slice derives additional authority only from the containing body's mentions and the containing record's readable mention fields. It does not follow references recursively or scan embedded database records for mentions. Target writes remain subject to Slice permissions, host read-only state and resource access policies; every queued commit rechecks scope. See `web-slice.md` for the SDK.
+
+## GitHub publication
+
+GitHub uses an explicit optional snapshot/batch capability through the file codec. SyncCore stages a batch against one immutable revision and defers ACK until non-forced Git ref publication succeeds. Connection bindings explicitly supply their repository and optional synchronization descriptor; repository presence does not disable synchronization. GitHub text replicas and on-demand binary caches are provider policy, not editor assumptions. See [GitHub storage](github-storage.md) for identity, recovery and deployment.

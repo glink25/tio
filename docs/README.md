@@ -28,7 +28,7 @@ corepack pnpm preview --port 4175
 
 Open `http://localhost:4175` once while online, wait for the application to finish loading, then reopen offline. Production deployments need HTTPS. Folder access depends on browser support.
 
-## Two storage modes
+## Storage modes
 
 | Mode         | Entry                                                    | Persistence                                                                            |
 | ------------ | -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -36,6 +36,8 @@ Open `http://localhost:4175` once while online, wait for the application to fini
 | Local Folder | Connect a root folder, then create or select a workspace | Direct files in `workspaces/<workspaceId>/`, with an unfinished-write recovery journal |
 
 Local Folder supports reopening existing workspaces, multiple independent workspaces in one connection, external JSON edits, explicit missing-file restoration, and permission recovery. The application manages its recognized business files only. Revoking access blocks folder writes; unfinished commits remain recoverable.
+
+GitHub adds one repository per workspace, complete local text replicas, on-demand attachments, PAT access and optional GitHub App sign-in. See [GitHub storage and setup](github-storage.md).
 
 ## Features
 

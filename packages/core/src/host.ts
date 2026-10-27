@@ -1,7 +1,7 @@
 import type { TioObject } from './index';
 export interface Connection {
   id: string;
-  kind: 'device' | 'folder';
+  kind: 'device' | 'folder' | 'github';
   name: string;
 }
 export interface WorkspaceDescriptor {

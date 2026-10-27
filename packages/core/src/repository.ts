@@ -95,6 +95,7 @@ export interface SyncStateStore {
   recover(value: unknown): Promise<void>;
 }
 export interface SyncRepository extends SyncStateStore {
+  readonly assetPolicy?: 'eager' | 'on-demand';
   entries(): Promise<SyncEntry[]>;
   all(): Promise<TioObject[]>;
   get(id: string): Promise<SyncEntry | undefined>;

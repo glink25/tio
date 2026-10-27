@@ -21,11 +21,43 @@ export class FileWorkspaceContent implements WorkspaceContentPort {
   private types: ObjectRegistry;
   private tree: ChunkTree;
   readonly maxFileBytes: number;
+  snapshot?: () => Promise<import('@tio/core').ContentSnapshot>;
   constructor(
     private files: FileStorageProvider,
     private workspaceId: string,
     options: { maxFileBytes?: number; types?: ObjectRegistry } = {},
   ) {
+    if (files.snapshot)
+      this.snapshot = async () => {
+        const snapshot = await files.snapshot!();
+        const content = new FileWorkspaceContent(snapshot.files, workspaceId, options);
+        return {
+          content,
+          revision: snapshot.revision,
+          publish: async (objects, assets) => {
+            const changes = new Map<string, Uint8Array | null>();
+            const overlay: FileStorageProvider = {
+              canWrite: () => files.canWrite?.() ?? Promise.resolve(true),
+              list: (prefix) => snapshot.files.list(prefix),
+              read: (path) =>
+                changes.has(path) ? Promise.resolve(changes.get(path)!) : snapshot.files.read(path),
+              write: async (path, bytes) => {
+                changes.set(path, bytes);
+              },
+              delete: async (path) => {
+                changes.set(path, null);
+              },
+            };
+            const writer = new FileWorkspaceContent(overlay, workspaceId, options);
+            for (const object of objects) {
+              const bytes = assets.get(object.id);
+              if (bytes) await writer.writeAsset(object, bytes);
+              await writer.write(object);
+            }
+            return snapshot.publish(changes);
+          },
+        };
+      };
     this.types = options.types ?? createDefaultRegistry();
     this.maxFileBytes = options.maxFileBytes ?? 512 * 1024;
     this.tree = new ChunkTree(files, `workspaces/${workspaceId}/chunks`, this.maxFileBytes);

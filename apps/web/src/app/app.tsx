@@ -5,6 +5,7 @@ import { useEffect, lazy, Suspense } from 'react';
 import { useWorkspace } from '../features/workspace/use-workspace';
 import { WelcomePage } from '../pages/welcome-page';
 import { usePresentation } from '../services/browser-presentation';
+import { GitHubDialog } from './github-dialog';
 const WorkspacePage = lazy(() =>
   import('../pages/workspace-page').then((m) => ({ default: m.WorkspacePage })),
 );
@@ -31,6 +32,7 @@ export function App() {
   return (
     <ThemeContext.Provider value={presentation.theme}>
       <Notifications />
+      {model.githubOpen && <GitHubDialog model={model} />}
       <input
         ref={model.importRef}
         className="hidden"

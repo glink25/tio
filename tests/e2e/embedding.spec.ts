@@ -69,7 +69,7 @@ test('isolated editor uses only host persistence and isolates instances', async 
   });
   await expect(page.locator('#one .bn-editor')).toContainText('Written by native host');
   await page.locator('#one').getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.locator('#one').getByRole('menuitem', { name: 'Link to page', exact: true }).click();
+  await page.locator('#one').getByRole('menuitem', { name: 'Database', exact: true }).click();
   await expect(page.locator('#one').getByRole('dialog')).toBeVisible();
   await expect(page.locator('#two').getByRole('dialog')).toHaveCount(0);
   await page.keyboard.press('Escape');
@@ -202,7 +202,7 @@ test('table edits retain opaque nested content in neighboring tables', async ({ 
       content: {
         type: 'tableContent',
         columnWidths: [null],
-        rows: [{ cells: [cell([{ type: 'mention', userId: 'person-1' }])] }],
+        rows: [{ cells: [cell([{ type: 'externalPerson', userId: 'person-1' }])] }],
       },
     };
     await f.repository.commit({

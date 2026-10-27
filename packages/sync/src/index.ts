@@ -5,6 +5,7 @@ export { SyncCore, type SyncIssue } from './core';
 export class HostSyncRunner {
   issues: SyncIssue[] = [];
   status = 'idle';
+  progress?: { loaded: number; total: number };
   onStatus = () => {};
   private running: Promise<void> | null = null;
   private debounce?: ReturnType<typeof setTimeout>;
@@ -12,6 +13,7 @@ export class HostSyncRunner {
   private poll?: ReturnType<typeof setInterval>;
   private retry?: ReturnType<typeof setTimeout>;
   private attempts = 0;
+  private retryAt = 0;
   private disposed = false;
   private unsubscribe?: () => void;
   constructor(
@@ -21,6 +23,7 @@ export class HostSyncRunner {
     readonly workspaceId: string,
     private host: {
       types?: ObjectRegistry;
+      pollMs?: number;
       beforeSync?: () => Promise<boolean>;
       onError?: (error: unknown) => void;
       isActive?: () => boolean;
@@ -30,6 +33,10 @@ export class HostSyncRunner {
   ) {
     this.core = new SyncCore(store, provider, endpoint, workspaceId, host.types);
     this.core.onDirty = () => this.schedule();
+    this.core.onProgress = (loaded, total) => {
+      this.progress = { loaded, total };
+      this.onStatus();
+    };
   }
   private core: SyncCore;
   private state(s: string) {
@@ -41,7 +48,7 @@ export class HostSyncRunner {
     this.core.stopped = false;
     this.poll = setInterval(() => {
       if (this.host.isActive?.() !== false) void this.backgroundSync();
-    }, 10000);
+    }, this.host.pollMs ?? 10000);
     this.unsubscribe = this.host.onActive?.(() => {
       if (this.host.isActive?.() !== false) void this.backgroundSync();
     });
@@ -69,7 +76,7 @@ export class HostSyncRunner {
     await this.running;
   }
   async sync() {
-    if (this.disposed) return;
+    if (this.disposed || this.retryAt > Date.now()) return;
     if (this.running) {
       this.rerun = true;
       return this.running;
@@ -92,6 +99,7 @@ export class HostSyncRunner {
           this.state(this.debounce || this.rerun ? 'pending' : 'synced');
         }
       } catch (e) {
+        this.retryAt = (e as { retryAt?: number }).retryAt ?? 0;
         this.host.onError?.(e);
         const err = e as Error;
         this.issues.push({ path: '', code: err.name, message: err.message });
@@ -106,7 +114,10 @@ export class HostSyncRunner {
           clearTimeout(this.retry);
           this.retry = setTimeout(
             () => void this.backgroundSync(),
-            Math.min(60000, 1000 * 2 ** this.attempts++) + Math.random() * 300,
+            Math.max(
+              Math.min(60000, 1000 * 2 ** this.attempts++) + Math.random() * 300,
+              this.retryAt - Date.now(),
+            ),
           );
         }
       }

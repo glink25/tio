@@ -1,0 +1,122 @@
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+function toBase64Url(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
+  const padded = value
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(value.length / 4) * 4, '=');
+  const binary = atob(padded);
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+async function keyFromSecret(secret: string): Promise<CryptoKey> {
+  if (!secret) throw new Error('STATE_SECRET must not be empty');
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(secret));
+  return crypto.subtle.importKey('raw', digest, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+
+export async function encryptJson(value: unknown, secret: string): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    await keyFromSecret(secret),
+    encoder.encode(JSON.stringify(value)),
+  );
+  return `${toBase64Url(iv)}.${toBase64Url(new Uint8Array(encrypted))}`;
+}
+
+export async function decryptJson<T>(value: string, secret: string): Promise<T> {
+  const [ivPart, encryptedPart, extra] = value.split('.');
+  if (!ivPart || !encryptedPart || extra) throw new Error('Invalid encrypted payload');
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: fromBase64Url(ivPart) },
+    await keyFromSecret(secret),
+    fromBase64Url(encryptedPart),
+  );
+  return JSON.parse(decoder.decode(decrypted)) as T;
+}
+
+export interface PendingGitHubToken {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+  refresh_token_expires_in?: number;
+  scope?: string;
+  token_type?: string;
+}
+
+export interface OAuthState {
+  redirect_uri: string;
+  client_state: string;
+  client_challenge: string;
+  github_verifier: string;
+  exp: number;
+  /** Present only while diverting the user through App installation. */
+  pending_token?: PendingGitHubToken;
+}
+
+export interface AuthorizationGrant {
+  state: string;
+  challenge: string;
+  token: PendingGitHubToken;
+  exp: number;
+}
+
+export function encryptState(state: OAuthState, secret: string): Promise<string> {
+  return encryptJson({ ...state, purpose: 'oauth-state' }, secret);
+}
+
+export async function decryptState(
+  encrypted: string,
+  secret: string,
+  now = Date.now(),
+): Promise<OAuthState> {
+  const state = await decryptJson<OAuthState & { purpose: string }>(encrypted, secret);
+  if (
+    state.purpose !== 'oauth-state' ||
+    !state.redirect_uri ||
+    !state.client_state ||
+    !state.client_challenge ||
+    !state.github_verifier ||
+    !Number.isFinite(state.exp)
+  )
+    throw new Error('Invalid OAuth state');
+  if (state.exp <= now) throw new Error('OAuth state has expired');
+  if (state.pending_token && !state.pending_token.access_token) {
+    throw new Error('Invalid OAuth pending_token');
+  }
+  return state;
+}
+
+export function encryptAuthorizationGrant(
+  grant: AuthorizationGrant,
+  secret: string,
+): Promise<string> {
+  return encryptJson({ ...grant, purpose: 'authorization-grant' }, secret);
+}
+
+export async function decryptAuthorizationGrant(
+  encrypted: string,
+  secret: string,
+  now = Date.now(),
+): Promise<AuthorizationGrant> {
+  const grant = await decryptJson<AuthorizationGrant & { purpose: string }>(encrypted, secret);
+  if (
+    grant.purpose !== 'authorization-grant' ||
+    !grant.state ||
+    !grant.challenge ||
+    !grant.token?.access_token ||
+    !Number.isFinite(grant.exp)
+  ) {
+    throw new Error('Invalid authorization code');
+  }
+  if (grant.exp <= now) throw new Error('Authorization code has expired');
+  return grant;
+}

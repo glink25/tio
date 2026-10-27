@@ -180,9 +180,25 @@ export function fromEditor(
       id: block.id,
       type: block.type,
       props: { ...(old && old.type === block.type ? old.props : {}), ...block.props },
-      content,
+      content: codec ? content : normalizeInlineContent(content),
       children: (block.children ?? []).map(convert),
     };
   };
   return blocks.map(convert);
+}
+
+/** BlockNote adds an undefined content field to atomic inline nodes. Do not persist it. */
+function normalizeInlineContent(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeInlineContent);
+  if (!record(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(
+        ([key, item]) => !(value.type === 'mention' && key === 'content' && item === undefined),
+      )
+      .map(([key, item]) => [
+        key,
+        ['content', 'rows', 'cells'].includes(key) ? normalizeInlineContent(item) : item,
+      ]),
+  );
 }

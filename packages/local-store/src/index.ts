@@ -30,6 +30,16 @@ export interface Entry {
   sync: Record<string, { base: TioObject; revision: number }>;
 }
 export class LocalStore {
+  /** Enabled only by replica providers; user commits still require local asset bytes. */
+  remoteAssets = false;
+  get assetPolicy(): 'eager' | 'on-demand' {
+    return this.remoteAssets ? 'on-demand' : 'eager';
+  }
+  async cacheAsset(id: string, asset: AssetData) {
+    await (
+      await this.db
+    ).put('assets', new Blob([asset.bytes as BlobPart], { type: asset.mime }), this.key(id));
+  }
   readonly storageCapabilities: RepositoryCapabilities = {
     persistence: 'atomic',
     offline: true,
@@ -243,6 +253,7 @@ export class LocalStore {
         if (
           object.type === 'asset' &&
           !object.deleted &&
+          !(this.remoteAssets && (request.origin === 'sync' || originals.has(object.id))) &&
           !(await tx.objectStore('assets').get(this.key(object.id)))
         )
           throw new HostError('invalid', 'Missing asset');
@@ -320,7 +331,10 @@ export class LocalStore {
       throw new HostError('invalid');
     await (await this.db).put('settings', asset, this.key('$asset/' + id));
   }
-  async readAsset(id: string): Promise<AssetData | undefined> {
+  readAsset(id: string): Promise<AssetData | undefined> {
+    return this.readCachedAsset(id);
+  }
+  async readCachedAsset(id: string): Promise<AssetData | undefined> {
     const entry = await this.get(id);
     if (entry && !this.access.allows(resourceOf(entry.object), 'read'))
       throw new HostError('permission');
@@ -395,7 +409,7 @@ export class LocalStore {
       return null;
     const asset =
       value.type === 'asset'
-        ? ((await this.readAsset(value.id)) ??
+        ? ((await this.readCachedAsset(value.id)) ??
           (await (await this.db).get('settings', this.key('$asset/' + value.id))))
         : undefined;
     const result = await this.internalCommit({

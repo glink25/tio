@@ -20,6 +20,7 @@ export class SyncCore {
   issues: SyncIssue[] = [];
   stopped = false;
   onDirty = () => {};
+  onProgress = (_loaded: number, _total: number) => {};
   constructor(
     readonly store: SyncRepository,
     readonly content: WorkspaceContentPort,
@@ -28,11 +29,59 @@ export class SyncCore {
     readonly types: ObjectRegistry = createDefaultRegistry(),
   ) {}
   async run() {
+    if (this.content.snapshot) {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const snapshot = await this.content.snapshot();
+        const objects = new Map<string, TioObject>();
+        const assets = new Map<string, Uint8Array>();
+        const acknowledgements: Parameters<SyncRepository['acknowledge']>[] = [];
+        const store = new Proxy(this.store, {
+          get: (target, key) => {
+            if (key === 'acknowledge')
+              return async (...args: Parameters<SyncRepository['acknowledge']>) => {
+                acknowledgements.push(args);
+              };
+            const value = Reflect.get(target, key);
+            return typeof value === 'function' ? value.bind(target) : value;
+          },
+        });
+        const content: WorkspaceContentPort = {
+          authorize: () => snapshot.content.authorize(),
+          list: () => snapshot.content.list(),
+          read: (id, options) => snapshot.content.read(id, options),
+          readAsset: (object) => snapshot.content.readAsset(object),
+          writeAsset: async (object, bytes) => {
+            assets.set(object.id, bytes);
+          },
+          write: async (object) => {
+            objects.set(object.id, object);
+          },
+        };
+        const pass = new SyncCore(store, content, this.endpoint, this.workspaceId, this.types);
+        pass.lazyAssets = this.store.assetPolicy === 'on-demand';
+        pass.onDirty = this.onDirty;
+        pass.onProgress = this.onProgress;
+        await pass.run();
+        this.issues = pass.issues;
+        if (this.stopped) return;
+        if (await snapshot.publish([...objects.values()], assets)) {
+          for (const args of acknowledgements) await this.store.acknowledge(...args);
+          return;
+        }
+      }
+      throw new Error('Remote version changed repeatedly; synchronization will retry');
+    }
+    return this.runDirect();
+  }
+  private lazyAssets = false;
+  private async runDirect() {
     const ids = new Set(await this.content.list());
     const entries = await this.store.entries();
     for (const e of entries) ids.add(e.object.id);
     const local = new Map(entries.map((entry) => [entry.object.id, entry]));
     const snapshots = new Map<string, TioObject | undefined>();
+    let loaded = 0;
+    this.onProgress(loaded, ids.size);
     for (const id of ids) {
       if (this.stopped) return;
       try {
@@ -40,6 +89,7 @@ export class SyncCore {
       } catch (error) {
         this.issue(id, error);
       }
+      this.onProgress(++loaded, ids.size);
     }
     const ordered = [...snapshots.keys()].sort(
       (a, b) =>
@@ -92,17 +142,24 @@ export class SyncCore {
         let assetRepaired = false;
         if (target.type === 'asset') {
           let blob = await this.store.readAsset(target.id);
-          if (!blob && !target.deleted) {
+          if (!blob && !target.deleted && !this.lazyAssets) {
             const remoteBlob = await this.content.readAsset(target);
             if (!remoteBlob) throw new Error('Missing asset binary');
             blob = { name: target.filename ?? '', mime: target.mime!, bytes: remoteBlob };
             await this.store.stageAsset(target.id, blob);
             assetRepaired = true;
           }
-          if (blob && !target.deleted) await this.content.writeAsset(target, blob.bytes);
+          if (blob && !target.deleted && (!this.lazyAssets || !remote))
+            await this.content.writeAsset(target, blob.bytes);
+          if (this.lazyAssets && !remote && !target.deleted && !blob)
+            throw new Error('Missing local asset binary');
         } else {
           for (const id of assetReferences(target))
-            if (failedAssets.has(id) || !(await this.store.readAsset(id)))
+            if (
+              failedAssets.has(id) ||
+              (!this.lazyAssets && !(await this.store.readAsset(id))) ||
+              (this.lazyAssets && !snapshots.get(id) && !(await this.store.readAsset(id)))
+            )
               throw new Error(`Asset unavailable: ${id}`);
         }
         let rev = entry?.revision ?? 0;
@@ -155,6 +212,7 @@ export class SyncCore {
     }
   }
   private issue(id: string, error: unknown) {
+    if ((error as { retryAt?: number }).retryAt) throw error;
     if (error instanceof ConnectionAccessError || (error as Error).name === 'NotAllowedError')
       throw error;
     this.issues.push({

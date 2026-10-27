@@ -1,6 +1,6 @@
 # Asynchronous provider-owned data access
 
-The host selects a provider repository. Device workspaces use IndexedDB as their authoritative store; folder workspaces read and write their files directly. The editor never chooses a cache, opens IndexedDB, or assumes that a complete workspace is resident in memory. GitHub, WebDAV and server providers are not implemented.
+The host selects a provider repository. Device workspaces use IndexedDB as their authoritative store; folder workspaces read and write their files directly. The editor never chooses a cache, opens IndexedDB, or assumes that a complete workspace is resident in memory. GitHub uses a complete text replica with on-demand binary caching; WebDAV and server providers are not implemented.
 
 ## Read contracts
 
@@ -16,7 +16,7 @@ The browser provider supplies Worker search. Permission-filtered batches are sen
 
 ## Provider capabilities
 
-`storageCapabilities` declares `persistence: atomic | recoverable`, `offline`, and `prefetch: none | all`. Capabilities describe guarantees; UI code must not infer guarantees from connection names. Both current providers choose no automatic full-body prefetch. The host keeps authorization, lifecycle, catalog, preferences and background scheduling. Optional synchronization components remain available for future providers that need an offline replica.
+`storageCapabilities` declares `persistence: atomic | recoverable`, `offline`, and `prefetch: none | all`. Capabilities describe guarantees; UI code must not infer guarantees from connection names. Device and folder providers choose no automatic full-body prefetch. The GitHub replica declares full text prefetch and blocks search/export until its initial synchronization is complete. The host keeps authorization, lifecycle, catalog, preferences and background scheduling. Optional synchronization components remain available for future providers that need an offline replica.
 
 The scanning query implementation is reusable. File providers do not require an additional navigation index or a metadata/body split. Folder navigation and query discovery can read every object; this implementation deliberately does not promise workspace-size-independent startup. Chunk storage remains unchanged.
 

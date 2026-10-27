@@ -209,8 +209,13 @@ importers:
         specifier: 5.0.5
         version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(terser@5.51.2))
 
+  apps/auth: {}
+
   apps/web:
     dependencies:
+      '@tio/adapter-github':
+        specifier: workspace:*
+        version: link:../../packages/adapter-github
       '@tio/adapter-local-folder':
         specifier: workspace:*
         version: link:../../packages/adapter-local-folder
@@ -238,6 +243,9 @@ importers:
       '@tio/merge':
         specifier: workspace:*
         version: link:../../packages/merge
+      '@tio/provider-github':
+        specifier: workspace:*
+        version: link:../../packages/provider-github
       '@tio/provider-local-folder':
         specifier: workspace:*
         version: link:../../packages/provider-local-folder
@@ -299,6 +307,15 @@ importers:
       workbox-build:
         specifier: ^7.4.1
         version: 7.4.1
+
+  packages/adapter-github:
+    dependencies:
+      '@tio/core':
+        specifier: workspace:*
+        version: link:../core
+      '@tio/provider-github':
+        specifier: workspace:*
+        version: link:../provider-github
 
   packages/adapter-local-folder:
     dependencies:
@@ -421,6 +438,12 @@ importers:
       node-diff3:
         specifier: 3.2.1
         version: 3.2.1
+
+  packages/provider-github:
+    dependencies:
+      '@tio/storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/provider-local-folder:
     dependencies:

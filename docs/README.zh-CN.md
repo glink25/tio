@@ -63,3 +63,7 @@ Local Folder 以桌面 Chrome/Edge 为目标；其他环境通过能力检测决
 原始三份设计/调研文档保存在 `docs/.local/`，已加入 `.gitignore`。文件夹保存等待文件写入完成；中断提交保留最小恢复日志，授权失效后停止写入，不保存完整 IndexedDB 正文副本。
 
 See [provider-owned asynchronous access](async-provider-access.md) for storage guarantees and loading behavior.
+
+## GitHub 仓库存储
+
+支持 PAT 接入及可选的 GitHub App 一键登录，一个仓库对应一个空间，自动发现 `tio-*` 和 `<owner>.github.io`。文本保留本地副本，附件按需读取。部署及权限说明见 [GitHub 存储](github-storage.md)。

@@ -6,6 +6,7 @@ export type ConnectionAccessCode =
   | 'forbidden';
 export interface ConnectionAccessState {
   code: ConnectionAccessCode;
+  retryAt?: number;
   scope: { connectionId: string; workspaceId?: string };
 }
 /** Interactive authorization is host-only; background calls must never prompt. */
@@ -18,8 +19,10 @@ export interface ConnectionAdapter {
 }
 /** Adapters use this for endpoint failures, distinct from resource-level AccessPolicy denial. */
 export class ConnectionAccessError extends Error {
+  readonly retryAt?: number;
   constructor(readonly state: ConnectionAccessState) {
     super(state.code);
+    this.retryAt = state.retryAt;
     this.name = 'ConnectionAccessError';
   }
 }
