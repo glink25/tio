@@ -515,6 +515,77 @@ for (const development of [true, false]) {
       );
       await expect(page.locator('#one .bn-editor')).toHaveAttribute('contenteditable', 'false');
     });
+    test('mention labels remain stable while typing and refreshing slow metadata', async ({
+      page,
+    }) => {
+      const label = page.locator('#one .bn-block-outer[data-id="ref"] button');
+      await expect(label).toHaveText('Explicit target');
+      await page.evaluate(() => {
+        const fixture = (window as any).chromeFixture;
+        const read = fixture.repository.readMetadata.bind(fixture.repository);
+        fixture.metadataReads = 0;
+        fixture.repository.readMetadata = async (...args: any[]) => {
+          fixture.metadataReads++;
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          return read(...args);
+        };
+        fixture.labelChanges = [];
+        const root = document.querySelector('#one .bn-block-outer[data-id="ref"]')!;
+        fixture.observer = new MutationObserver(() => {
+          fixture.labelChanges.push(root.querySelector('button')?.textContent);
+        });
+        fixture.observer.observe(root, { subtree: true, childList: true, characterData: true });
+      });
+      await page.locator('#one [data-id="select"] .bn-inline-content').click();
+      await page.keyboard.press('End');
+      await page.keyboard.type(' continued editing without flickering', { delay: 80 });
+      await page.evaluate(() => (window as any).chromeFixture.one.flush());
+      await expect
+        .poll(() => page.evaluate(() => (window as any).chromeFixture.metadataReads))
+        .toBeGreaterThan(0);
+      await page.waitForTimeout(600);
+      await expect(label).toHaveText('Explicit target');
+      const changes = await page.evaluate(() => {
+        const f = (window as any).chromeFixture;
+        f.observer.disconnect();
+        return f.labelChanges;
+      });
+      expect(changes.every((title: string) => title === 'Explicit target')).toBe(true);
+    });
+    test('background failures preserve the title and allow explicit retry', async ({ page }) => {
+      const label = page.locator('#one .bn-block-outer[data-id="ref"] button');
+      await expect(label).toHaveText('Explicit target');
+      await page.evaluate(async () => {
+        const f = (window as any).chromeFixture;
+        const r = f.repository;
+        f.originalMetadataRead = r.readMetadata.bind(r);
+        r.readMetadata = async () => {
+          throw new Error('metadata unavailable');
+        };
+        const snapshot = await r.readSnapshot();
+        await r.commit({
+          id: crypto.randomUUID(),
+          expectedVersion: snapshot.version,
+          assetIds: [],
+          changes: [
+            {
+              ...snapshot.entries.find((e: any) => e.object.id === 'target').object,
+              title: 'Recovered title',
+            },
+          ],
+        });
+      });
+      await expect(label).toHaveAttribute('data-refresh-error', 'true');
+      await expect(label).toHaveText('Explicit target');
+      await page.evaluate(() => {
+        const f = (window as any).chromeFixture;
+        f.repository.readMetadata = f.originalMetadataRead;
+      });
+      await label.click();
+      await expect(label).toHaveText('Recovered title');
+      await expect(label).not.toHaveAttribute('data-refresh-error');
+      await expect(page.locator('#one').getByLabel('Page title')).toHaveValue('Editor chrome');
+    });
     test('mention titles refresh and deleted targets keep an inert reference', async ({ page }) => {
       const label = page.locator('#one .bn-block-outer[data-id="ref"] button');
       await expect(label).toHaveText('Explicit target');

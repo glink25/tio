@@ -12,6 +12,32 @@ export function createMentionService(
   workspaceId: string,
   navigate: (id: string) => void,
 ): MentionService {
+  const listeners = new Set<() => void>();
+  let unsubscribe: (() => void) | undefined;
+  let delay: ReturnType<typeof setTimeout> | undefined;
+  let maximum: ReturnType<typeof setTimeout> | undefined;
+  const clearTimers = () => {
+    clearTimeout(delay);
+    clearTimeout(maximum);
+    delay = maximum = undefined;
+  };
+  const notify = () => {
+    clearTimers();
+    if (inflight.size) refreshAfterRead = true;
+    for (const listener of listeners) listener();
+  };
+  const signature = () => {
+    const state = runtime.state.getState();
+    return JSON.stringify([
+      state.version,
+      state.status,
+      state.objects
+        .filter((o) => ['page', 'database'].includes(o.type))
+        .map((o) => [o.id, o.title, o.name, o.deleted, runtime.can(o, 'read')]),
+    ]);
+  };
+  const inflight = new Map<string, Promise<MentionResolution>>();
+  let refreshAfterRead = false;
   let pending: {
     reference: MentionReference;
     resolve(value: MentionResolution): void;
@@ -77,45 +103,75 @@ export function createMentionService(
     },
     resolve(references) {
       return Promise.all(
-        references.map(
-          (reference) =>
-            new Promise<MentionResolution>((resolve, reject) => {
-              pending.push({ reference, resolve, reject });
-              if (!scheduled) {
-                scheduled = true;
-                queueMicrotask(() => {
-                  void flush();
-                });
-              }
-            }),
-        ),
+        references.map((reference) => {
+          const known = runtime.state.getState().objects.find((o) => o.id === reference.id);
+          if (reference.workspaceId !== workspaceId || (known && !runtime.can(known, 'read')))
+            return Promise.resolve<MentionResolution>({ reference, status: 'denied' });
+          const key = mentionKey(reference);
+          const existing = inflight.get(key);
+          if (existing) return existing;
+          const promise = new Promise<MentionResolution>((resolve, reject) => {
+            pending.push({ reference, resolve, reject });
+            if (!scheduled) {
+              scheduled = true;
+              queueMicrotask(() => {
+                void flush();
+              });
+            }
+          }).finally(() => {
+            inflight.delete(key);
+            if (!inflight.size && refreshAfterRead) {
+              refreshAfterRead = false;
+              queueMicrotask(() => {
+                if (listeners.size) notify();
+              });
+            }
+          });
+          inflight.set(key, promise);
+          return promise;
+        }),
       );
     },
     subscribe(listener) {
-      let signature = '';
-      return runtime.state.subscribe((state) => {
-        const next = JSON.stringify([
-          state.version,
-          state.status,
-          state.objects
-            .filter((o) => ['page', 'database'].includes(o.type))
-            .map((o) => [
-              mentionKey({
-                workspaceId: o.workspaceId,
-                kind: o.type as 'page' | 'database',
-                id: o.id,
-              }),
-              o.title,
-              o.name,
-              o.deleted,
-              runtime.can(o, 'read'),
-            ]),
-        ]);
-        if (signature !== next) {
-          signature = next;
-          listener();
+      listeners.add(listener);
+      if (!unsubscribe) {
+        let previous = signature();
+        const deniedSignature = () =>
+          JSON.stringify(
+            runtime.state
+              .getState()
+              .objects.filter(
+                (o) => ['page', 'database'].includes(o.type) && !runtime.can(o, 'read'),
+              )
+              .map((o) => o.id)
+              .sort(),
+          );
+        let previousDenied = deniedSignature();
+        unsubscribe = runtime.state.subscribe(() => {
+          const next = signature();
+          if (next === previous) return;
+          previous = next;
+          // Revoked access must not wait for the title refresh debounce.
+          const denied = deniedSignature();
+          const accessChanged = denied !== previousDenied;
+          previousDenied = denied;
+          if (accessChanged) notify();
+          else {
+            clearTimeout(delay);
+            delay = setTimeout(notify, 1000);
+            maximum ??= setTimeout(notify, 5000);
+          }
+        });
+      }
+      return () => {
+        listeners.delete(listener);
+        if (!listeners.size) {
+          unsubscribe?.();
+          unsubscribe = undefined;
+          clearTimers();
+          refreshAfterRead = false;
         }
-      });
+      };
     },
     navigate(ref) {
       if (ref.workspaceId === workspaceId) navigate(ref.id);

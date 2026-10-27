@@ -13,7 +13,7 @@ import type { EditorSchema } from '@tio/editor-blocknote';
 import { useT, useTranslation } from '@tio/i18n';
 import type { ViewExtensions } from '@tio/views';
 import { newPage, newDatabase, type EditorSession } from '@tio/workspace';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
 import { createMentionService } from './mentions';
@@ -41,9 +41,13 @@ export interface EditorSurfaceProps {
 }
 export function useEditorController(props: EditorSurfaceProps) {
   const { runtime, workspaceId, target, onNavigate } = props;
+  const navigateRef = useRef(onNavigate);
+  navigateRef.current = onNavigate;
   const mentions = useMemo(
-    () => props.mentions ?? createMentionService(runtime, workspaceId, (id) => onNavigate({ id })),
-    [props.mentions, runtime, workspaceId, onNavigate],
+    () =>
+      props.mentions ??
+      createMentionService(runtime, workspaceId, (id) => navigateRef.current({ id })),
+    [props.mentions, runtime, workspaceId],
   );
   const sliceStore = useMemo(() => {
     void runtime;

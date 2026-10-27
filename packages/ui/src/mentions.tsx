@@ -14,22 +14,52 @@ export function MentionLabel({ reference }: { reference: MentionReference }) {
   const zh = i18n.language === 'zh';
   const { workspaceId, kind, id } = reference;
   const stableReference = useMemo(() => ({ workspaceId, kind, id }), [workspaceId, kind, id]);
-  const [result, setResult] = useState<MentionResolution>();
+  const [resolved, setResolved] = useState<{
+    service: MentionService | undefined;
+    reference: MentionReference;
+    result: MentionResolution;
+    failed: boolean;
+  }>();
+  const current =
+    resolved && resolved.service === service && resolved.reference === stableReference
+      ? resolved
+      : undefined;
+  const result = current?.result;
+  const failed = current?.failed;
+
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let live = true,
       generation = 0;
     const read = () => {
       const current = ++generation;
-      setResult(undefined);
       if (!service) return;
       void service.resolve([stableReference]).then(
         (items) => {
-          if (live && current === generation) setResult(items[0]);
+          if (live && current === generation)
+            setResolved((previous) => {
+              const result = items[0] ?? { reference: stableReference, status: 'error' as const };
+              if (
+                previous?.service === service &&
+                previous.reference === stableReference &&
+                !previous.failed &&
+                JSON.stringify(previous.result) === JSON.stringify(result)
+              )
+                return previous;
+              return { service, reference: stableReference, result, failed: false };
+            });
         },
         () => {
           if (live && current === generation)
-            setResult({ reference: stableReference, status: 'error' });
+            setResolved((previous) => ({
+              service,
+              reference: stableReference,
+              failed: true,
+              result:
+                previous?.service === service && previous.reference === stableReference
+                  ? previous.result
+                  : { reference: stableReference, status: 'error' },
+            }));
         },
       );
     };
@@ -66,11 +96,15 @@ export function MentionLabel({ reference }: { reference: MentionReference }) {
     <button
       type="button"
       contentEditable={false}
+      title={failed ? (zh ? '刷新失败，点击重试' : 'Refresh failed; click to retry') : undefined}
+      data-refresh-error={failed || undefined}
+      style={failed ? { textDecorationStyle: 'wavy' } : undefined}
       className={`inline rounded px-1 underline ${result?.status === 'ready' ? '' : 'text-muted'}`}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (result?.status === 'ready') service?.navigate(reference);
+        if (failed) setRetry((n) => n + 1);
+        else if (result?.status === 'ready') service?.navigate(reference);
         else if (result?.status === 'error') setRetry((n) => n + 1);
         else if (result?.status === 'deleted')
           window.alert(zh ? '源文档已被删除' : 'The source document has been deleted');
