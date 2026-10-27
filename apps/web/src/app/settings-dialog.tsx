@@ -1,8 +1,9 @@
-import { t, translateStatus } from '@tio/i18n';
+import { t } from '@tio/i18n';
 import { Button, Modal, ThemeSwitcher, LanguageSwitcher, cn } from '@tio/ui';
 import { useState } from 'react';
 
 import { Identity } from '../components/identity';
+import { statusLabel } from '../features/workspace/status';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { usePresentation, setPresentation } from '../services/browser-presentation';
 const sections = ['general', 'storage', 'transfer'] as const;
@@ -66,9 +67,7 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
                   <span className="text-muted">{detail.label}</span> · {detail.value}
                 </div>
               ))}
-              <p className="text-sm text-muted">
-                {translateStatus(m.saveStatus)} · {translateStatus(m.syncStatus)}
-              </p>
+              <p className="text-sm text-muted">{statusLabel(m.status)}</p>
               {m.supportsSync && (
                 <Button variant="outline" onClick={() => void m.syncNow()}>
                   {t('sync.now')}

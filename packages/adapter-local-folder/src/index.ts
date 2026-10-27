@@ -1,5 +1,6 @@
 import { connectionError, type ConnectionAdapter, type ConnectionAccessState } from '@tio/core';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
+import { StorageError } from '@tio/storage';
 export const supported = () =>
   typeof window !== 'undefined' &&
   typeof window.showDirectoryPicker === 'function' &&
@@ -35,6 +36,11 @@ export class FolderConnectionAdapter implements ConnectionAdapter {
     return state;
   }
   classifyError(error: unknown) {
+    if (error instanceof StorageError && error.code === 'permission')
+      return {
+        code: 'reauthorization-required' as const,
+        scope: { connectionId: this.connectionId },
+      };
     return connectionError(error, this.connectionId);
   }
   async getAccessState() {

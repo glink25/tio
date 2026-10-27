@@ -29,8 +29,11 @@ export interface ConnectionAdapter {
 /** Adapters use this for endpoint failures, distinct from resource-level AccessPolicy denial. */
 export class ConnectionAccessError extends Error {
   readonly retryAt?: number;
-  constructor(readonly state: ConnectionAccessState) {
-    super(state.code);
+  constructor(
+    readonly state: ConnectionAccessState,
+    options?: ErrorOptions,
+  ) {
+    super(state.code, options);
     this.retryAt = state.retryAt;
     this.name = 'ConnectionAccessError';
   }

@@ -19,9 +19,12 @@ test('PAT discovery opens a replica and retains it offline without exposing repo
     type: 'blob',
   }));
   let failDiscovery = true;
+  let expired = false;
   await page.route('https://api.github.com/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     let json: unknown;
+    if (expired)
+      return route.fulfill({ status: 401, json: { message: 'changed diagnostic prose' } });
     if (path === '/user')
       json = { id: 71, login: 'tester', avatar_url: 'https://avatars.githubusercontent.com/u/71' };
     else if (path === '/user/repos' && failDiscovery) {
@@ -75,6 +78,45 @@ test('PAT discovery opens a replica and retains it offline without exposing repo
       ),
     )
     .toBe(true);
+  // Missing remote objects retain local content and route the status button to issue handling.
+  const removed = files.splice(
+    files.findIndex((file) => file.sha === 'github-p'),
+    1,
+  )[0];
+  await page
+    .locator('header')
+    .getByRole('button', { name: /^已保存本地/ })
+    .click();
+  const issues = page.locator('header').getByRole('button', { name: /查看问题/ });
+  await expect(issues).toBeVisible();
+  await issues.click();
+  await expect(page.getByRole('dialog', { name: '同步问题', exact: true })).toContainText(
+    '已同步文件被移除',
+  );
+  await expect(page.getByRole('button', { name: '恢复文件', exact: true })).toBeVisible();
+  await page.keyboard.press('Escape');
+  files.push(removed);
+  // Use the existing explicit sync action to clear the resolved issue.
+  await page.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: '同步', exact: true }).click();
+  await page.getByRole('button', { name: '立即同步', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(issues).toHaveCount(0);
+
+  expired = true;
+  // Trigger the real background connectivity handler before clicking its resulting action.
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  const reauthorize = page.locator('header').getByRole('button', { name: /需要重新授权/ });
+  await expect(reauthorize).toBeVisible();
+  await expect(page.getByLabel('页面标题')).toHaveValue('Remote page');
+  await reauthorize.click();
+  await expect(page.getByRole('dialog', { name: 'GitHub', exact: true })).toBeVisible();
+  expired = false;
+  await page.locator('#github-token').fill('replacement-pat');
+  await page.getByRole('button', { name: 'GitHub Token 登录', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(reauthorize).toHaveCount(0);
+  await expect(page.getByLabel('页面标题')).toHaveValue('Remote page');
   await page.unroute('https://api.github.com/**');
   await page.route('https://api.github.com/**', (route) => route.abort('internetdisconnected'));
   await page.reload();

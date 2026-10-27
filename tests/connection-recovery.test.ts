@@ -257,3 +257,19 @@ it('late discovery cannot register spaces after abandoning the connection', asyn
   await discovering;
   expect(service.connection).toBeNull();
 });
+
+it('publishes connection access separately from synchronization phase', async () => {
+  const { service, set } = fixture();
+  await service.connect('device');
+  const snapshots: import('@tio/sync').SyncSnapshot[] = [];
+  service.startSync((snapshot) => snapshots.push(snapshot));
+  expect(snapshots.at(-1)).toEqual({ phase: 'idle', access: undefined, progress: undefined });
+  set('reauthorization-required');
+  expect(snapshots.at(-1)).toMatchObject({
+    phase: 'idle',
+    access: { code: 'reauthorization-required' },
+  });
+  set('available');
+  expect(snapshots.at(-1)).toMatchObject({ phase: 'idle', access: { code: 'available' } });
+  expect(snapshots.at(-1)?.progress).toBeUndefined();
+});

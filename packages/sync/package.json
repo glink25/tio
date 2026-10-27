@@ -12,6 +12,7 @@
   "dependencies": {
     "@tio/core": "workspace:*",
     "@tio/merge": "workspace:*",
-    "@tio/serialization": "workspace:*"
+    "@tio/serialization": "workspace:*",
+    "@tio/storage": "workspace:*"
   }
 }

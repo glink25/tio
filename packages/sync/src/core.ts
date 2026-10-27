@@ -1,3 +1,4 @@
+import { DomainError } from '@tio/core';
 import {
   ConnectionAccessError,
   repairTree,
@@ -10,11 +11,30 @@ import {
 import type { WorkspaceContentPort, TioObject } from '@tio/core';
 import { merge } from '@tio/merge';
 import { canonical } from '@tio/serialization';
+import { StorageError } from '@tio/storage';
 export interface SyncIssue {
   id?: string;
   path: string;
-  code: string;
-  message: string;
+  code: 'permission' | 'missing' | 'object' | 'connection';
+  error: unknown;
+  retryAt?: number;
+}
+export function syncIssue(path: string, error: unknown, id?: string): SyncIssue {
+  return {
+    path,
+    id,
+    error,
+    code:
+      error instanceof ConnectionAccessError
+        ? 'connection'
+        : (error instanceof HostError || error instanceof StorageError) &&
+            error.code === 'permission'
+          ? 'permission'
+          : error instanceof DomainError && error.code === 'missing'
+            ? 'missing'
+            : 'object',
+    retryAt: error instanceof ConnectionAccessError ? error.retryAt : undefined,
+  };
 }
 export class SyncCore {
   issues: SyncIssue[] = [];
@@ -105,7 +125,7 @@ export class SyncCore {
         const originalRemote = snapshots.get(path);
         const remote = originalRemote;
         if (remote && (remote.workspaceId !== this.workspaceId || remote.id !== path))
-          throw new Error('文件路径与对象身份不匹配');
+          throw new DomainError('identity', '文件路径与对象身份不匹配');
         if (remote && !this.types.supports(remote)) {
           if (!(await this.store.get(remote.id))) await this.store.reconcile(remote, 0);
           throw new Error('未注册的对象类型，保留只读');
@@ -117,7 +137,7 @@ export class SyncCore {
             id: entry.object.id,
             path,
             code: 'missing',
-            message: '已同步文件被移除；可恢复文件',
+            error: new DomainError('missing'),
           });
           continue;
         }
@@ -132,19 +152,16 @@ export class SyncCore {
         // Authorization is refreshed for each publication; denied local content stays intact.
         if (!remote || canonical(target) !== canonical(remote)) {
           const access = await this.content.authorize();
-          try {
-            assertAccess(access, remote, target);
-          } catch {
-            throw new HostError('permission');
-          }
+          assertAccess(access, remote, target);
         }
-        if (!this.types.supports(target)) throw new Error('对象版本不支持写入');
+        if (!this.types.supports(target))
+          throw new DomainError('future-version', '对象版本不支持写入');
         let assetRepaired = false;
         if (target.type === 'asset') {
           let blob = await this.store.readAsset(target.id);
           if (!blob && !target.deleted && !this.lazyAssets) {
             const remoteBlob = await this.content.readAsset(target);
-            if (!remoteBlob) throw new Error('Missing asset binary');
+            if (!remoteBlob) throw new DomainError('asset-missing');
             blob = { name: target.filename ?? '', mime: target.mime!, bytes: remoteBlob };
             await this.store.stageAsset(target.id, blob);
             assetRepaired = true;
@@ -152,7 +169,7 @@ export class SyncCore {
           if (blob && !target.deleted && (!this.lazyAssets || !remote))
             await this.content.writeAsset(target, blob.bytes);
           if (this.lazyAssets && !remote && !target.deleted && !blob)
-            throw new Error('Missing local asset binary');
+            throw new DomainError('asset-missing');
         } else {
           for (const id of assetReferences(target))
             if (
@@ -160,7 +177,7 @@ export class SyncCore {
               (!this.lazyAssets && !(await this.store.readAsset(id))) ||
               (this.lazyAssets && !snapshots.get(id) && !(await this.store.readAsset(id)))
             )
-              throw new Error(`Asset unavailable: ${id}`);
+              throw new DomainError('asset-pending', `Asset unavailable: ${id}`);
         }
         let rev = entry?.revision ?? 0;
         if (assetRepaired || !entry || canonical(entry.object) !== canonical(target)) {
@@ -212,15 +229,13 @@ export class SyncCore {
     }
   }
   private issue(id: string, error: unknown) {
-    if ((error as { retryAt?: number }).retryAt) throw error;
-    if (error instanceof ConnectionAccessError || (error as Error).name === 'NotAllowedError')
+    if ((error as { retryAt?: number } | null)?.retryAt) throw error;
+    if (
+      error instanceof ConnectionAccessError ||
+      (error instanceof StorageError && error.code === 'permission')
+    )
       throw error;
-    this.issues.push({
-      id,
-      path: id,
-      code: error instanceof HostError ? error.code : 'object',
-      message: (error as Error).message,
-    });
+    this.issues.push(syncIssue(id, error, id));
   }
 }
 function assetReferences(value: unknown): Set<string> {

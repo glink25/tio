@@ -1,8 +1,12 @@
-import { segments, type FileStorageProvider } from '@tio/storage';
+import { StorageError, segments, type FileStorageProvider } from '@tio/storage';
 export class LocalFolderProvider implements FileStorageProvider {
   constructor(readonly handle: FileSystemDirectoryHandle) {}
   async canWrite() {
-    return (await this.handle.queryPermission({ mode: 'readwrite' })) === 'granted';
+    try {
+      return (await this.handle.queryPermission({ mode: 'readwrite' })) === 'granted';
+    } catch (error) {
+      throw storageError(error);
+    }
   }
   private async parent(path: string, create = false) {
     const parts = segments(path);
@@ -19,10 +23,17 @@ export class LocalFolderProvider implements FileStorageProvider {
       );
     } catch (e) {
       if ((e as DOMException).name === 'NotFoundError') return null;
-      throw e;
+      throw storageError(e);
     }
   }
   async write(path: string, data: Uint8Array) {
+    try {
+      await this.writeFile(path, data);
+    } catch (error) {
+      throw storageError(error);
+    }
+  }
+  private async writeFile(path: string, data: Uint8Array) {
     const { dir, filename } = await this.parent(path, true);
     const file = await dir.getFileHandle(filename, { create: true });
     const stream = await file.createWritable();
@@ -31,7 +42,7 @@ export class LocalFolderProvider implements FileStorageProvider {
       await stream.close();
     } catch (e) {
       await stream.abort().catch(() => {});
-      throw e;
+      throw storageError(e);
     }
   }
   async delete(path: string) {
@@ -39,7 +50,7 @@ export class LocalFolderProvider implements FileStorageProvider {
       const { dir, filename } = await this.parent(path);
       await dir.removeEntry(filename);
     } catch (e) {
-      if ((e as DOMException).name !== 'NotFoundError') throw e;
+      if ((e as DOMException).name !== 'NotFoundError') throw storageError(e);
     }
   }
   async list(prefix: string) {
@@ -57,8 +68,19 @@ export class LocalFolderProvider implements FileStorageProvider {
       if (parts) for (const p of segments(parts)) dir = await dir.getDirectoryHandle(p);
       await walk(dir, parts ? parts + '/' : '');
     } catch (e) {
-      if ((e as DOMException).name !== 'NotFoundError') throw e;
+      if ((e as DOMException).name !== 'NotFoundError') throw storageError(e);
     }
     return result.sort((a, b) => a.path.localeCompare(b.path));
   }
+}
+
+function storageError(error: unknown): unknown {
+  if (
+    (error as DOMException)?.name === 'NotAllowedError' ||
+    (error as DOMException)?.name === 'SecurityError'
+  )
+    return new StorageError('permission', error instanceof Error ? error.message : String(error), {
+      cause: error,
+    });
+  return error;
 }

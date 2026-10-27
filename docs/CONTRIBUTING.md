@@ -24,6 +24,14 @@ Two React compiler-only diagnostics (`react/refs`, `react/set-state-in-effect`) 
 - Use Lucide named imports and accessible labels for icon buttons. Use shared Radix dialogs for focus trapping and dismissal.
 - Use Tailwind utilities in components. Add editor-boundary CSS only when the third-party DOM cannot be styled through props.
 
+## State and error semantics
+
+- Business decisions consume typed state and stable error codes, never display text, translated strings, or `Error.message`. Localization is the final presentation step.
+- Keep status, progress and connection access separate. Do not encode fields in strings such as `syncing:3/10`. Use finite unions and exhaustive presentation mappings; loading and unknown failures must never appear as saved or successful.
+- Preserve structured errors through services and issue dialogs. Diagnostic messages and causes may be displayed, but must not determine retry, authorization or recovery behavior.
+- Normalize external failures at provider/adapter boundaries. Standard browser exception names and HTTP status codes belong there; resource permission denial is distinct from connection authorization expiry.
+- Review these rules in code review and verify behavior with type checks and tests, including changed diagnostic wording and language switches. No custom AST enforcement is required.
+
 ## Testing
 
 Vitest covers merge laws, transactional revisions, failure recovery, attachments and archives. Playwright uses isolated browser contexts for persistence, responsive views, localization, OPFS provider integration and production PWA behavior. Never point automated destructive tests at a user's folder.

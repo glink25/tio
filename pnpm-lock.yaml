@@ -405,6 +405,12 @@ importers:
 
   packages/i18n:
     dependencies:
+      '@tio/core':
+        specifier: workspace:*
+        version: link:../core
+      '@tio/storage':
+        specifier: workspace:*
+        version: link:../storage
       i18next:
         specifier: 26.5.5
         version: 26.5.5(typescript@6.0.3)
@@ -485,6 +491,9 @@ importers:
       '@tio/serialization':
         specifier: workspace:*
         version: link:../serialization
+      '@tio/storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/ui:
     dependencies:

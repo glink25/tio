@@ -116,3 +116,68 @@ test('mobile input dialogs stay centered in the visible viewport as the keyboard
     });
   }
 });
+
+for (const language of ['zh', 'en'] as const) {
+  test(`status button retries failed local saves independently of error wording (${language})`, async ({
+    page,
+  }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: '本机', exact: true }).click();
+    await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+    await finishWorkspaceCreation(page, false);
+    if (language === 'en') {
+      await settings(page);
+      await page.getByRole('button', { name: '语言', exact: true }).click();
+      await page.keyboard.press('Escape');
+    }
+    await page.evaluate(async (root) => {
+      const { LocalStore } = await import(root + '/packages/local-store/src/index.ts');
+      const commit = LocalStore.prototype.commit;
+      (window as any).restoreCommit = () => {
+        LocalStore.prototype.commit = commit;
+      };
+      LocalStore.prototype.commit = async () => {
+        throw new Error('arbitrary diagnostic wording');
+      };
+    }, '/@fs' + process.cwd());
+    await page.getByLabel(language === 'zh' ? '页面标题' : 'Page title').fill('Recovered title');
+    const failed = language === 'zh' ? '本地保存失败' : 'Local save failed';
+    await expect(
+      page.locator('header').getByRole('button', { name: failed, exact: true }),
+    ).toBeVisible();
+    await page.evaluate(() => (window as any).restoreCommit());
+    await page.locator('header').getByRole('button', { name: failed, exact: true }).click();
+    await expect(
+      page.locator('header').getByRole('button', {
+        name: language === 'zh' ? '已保存本地' : 'Saved locally',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(page.getByLabel(language === 'zh' ? '页面标题' : 'Page title')).toHaveValue(
+      'Recovered title',
+    );
+  });
+}
+
+test('blocked logout shows a coded error and retries without reporting success', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '本机', exact: true }).click();
+  await page.evaluate(async () => {
+    (window as any).blockingDatabase = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open('tio-workspaces');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  });
+  await page.getByRole('button', { name: '返回', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '退出登录', exact: true });
+  await dialog.getByRole('button', { name: '退出登录', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('关闭其他', { timeout: 15000 });
+  await expect(page.getByRole('heading', { name: 'Tio', exact: true })).toHaveCount(0);
+  await page.evaluate(() => (window as any).blockingDatabase.close());
+  await dialog.getByRole('button', { name: '重试', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Tio', exact: true })).toBeVisible();
+});

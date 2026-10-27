@@ -1,10 +1,24 @@
+import { ConnectionAccessError } from '@tio/core';
 import type { ObjectRegistry, SyncRepository, WorkspaceContentPort } from '@tio/core';
 
-import { SyncCore, type SyncIssue } from './core';
+import { SyncCore, syncIssue, type SyncIssue } from './core';
 export { SyncCore, type SyncIssue } from './core';
+export type SyncPhase =
+  | 'idle'
+  | 'syncing'
+  | 'synced'
+  | 'pending'
+  | 'permission'
+  | 'failed'
+  | 'issues';
+export interface SyncSnapshot {
+  phase: SyncPhase;
+  progress?: { loaded: number; total: number };
+  access?: import('@tio/core').ConnectionAccessState;
+}
 export class HostSyncRunner {
   issues: SyncIssue[] = [];
-  status = 'idle';
+  status: SyncPhase = 'idle';
   progress?: { loaded: number; total: number };
   onStatus = () => {};
   private running: Promise<void> | null = null;
@@ -26,6 +40,7 @@ export class HostSyncRunner {
       pollMs?: number;
       beforeSync?: () => Promise<boolean>;
       onError?: (error: unknown) => void;
+      normalizeError?: (error: unknown) => unknown;
       isActive?: () => boolean;
       onActive?: (listener: () => void) => () => void;
       lock?: (name: string, work: () => Promise<void>) => Promise<void>;
@@ -34,12 +49,14 @@ export class HostSyncRunner {
     this.core = new SyncCore(store, provider, endpoint, workspaceId, host.types);
     this.core.onDirty = () => this.schedule();
     this.core.onProgress = (loaded, total) => {
+      if (this.disposed || this.status !== 'syncing') return;
       this.progress = { loaded, total };
       this.onStatus();
     };
   }
   private core: SyncCore;
-  private state(s: string) {
+  private state(s: SyncPhase) {
+    this.progress = undefined;
     this.status = s;
     this.onStatus();
   }
@@ -55,10 +72,10 @@ export class HostSyncRunner {
     void this.sync();
   }
   private async backgroundSync() {
-    if (!this.debounce) await this.sync();
+    if (!this.debounce && this.canRetry()) await this.sync();
   }
   schedule() {
-    if (this.disposed) return;
+    if (this.disposed || !this.canRetry()) return;
     clearTimeout(this.debounce);
     if (!this.running) this.state('pending');
     this.debounce = setTimeout(() => {
@@ -98,19 +115,16 @@ export class HostSyncRunner {
           this.attempts = 0;
           this.state(this.debounce || this.rerun ? 'pending' : 'synced');
         }
-      } catch (e) {
-        this.retryAt = (e as { retryAt?: number }).retryAt ?? 0;
+      } catch (caught) {
+        const e = this.host.normalizeError?.(caught) ?? caught;
+        this.retryAt = (e as { retryAt?: number } | null)?.retryAt ?? 0;
         this.host.onError?.(e);
-        const err = e as Error;
-        this.issues.push({ path: '', code: err.name, message: err.message });
-        this.state(err.name === 'NotAllowedError' ? 'permission' : 'failed');
+        const issue = syncIssue('', e);
+        this.issues.push(issue);
+        this.state(issue.code === 'permission' ? 'permission' : 'failed');
       } finally {
         this.onStatus();
-        if (
-          this.issues.length &&
-          !this.issues.some((i) => i.code === 'permission' || i.code === 'NotAllowedError') &&
-          !this.disposed
-        ) {
+        if (this.issues.length && this.canRetry() && !this.disposed) {
           clearTimeout(this.retry);
           this.retry = setTimeout(
             () => void this.backgroundSync(),
@@ -133,6 +147,16 @@ export class HostSyncRunner {
       }
     });
     return this.running;
+  }
+  private canRetry() {
+    return !this.issues.some(
+      (issue) =>
+        issue.code === 'permission' ||
+        (issue.error instanceof ConnectionAccessError &&
+          (issue.error.state.code === 'reauthorization-required' ||
+            issue.error.state.code === 'forbidden' ||
+            issue.error.state.code === 'unrecoverable')),
+    );
   }
   async discard(id: string) {
     if (this.running) await this.running;

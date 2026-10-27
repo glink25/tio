@@ -10,8 +10,9 @@ export class StorageError extends Error {
   constructor(
     public code: 'permission' | 'missing' | 'invalid' | 'io',
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
   }
 }
 export function segments(path: string): string[] {

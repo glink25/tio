@@ -91,3 +91,11 @@ The expanded editor/embedding browser run also exposed two existing fixture/expe
 ## GitHub storage integration
 
 GitHub-specific unit coverage lives in `tests/github.test.ts` and `tests/github-auth.test.ts`; the browser fixture is `tests/e2e/github.spec.ts`. These cover the stateless login/install/exchange flow, token rotation, pinned Git snapshots and publication confirmation, offline replicas, and repository discovery. Real GitHub/Cloudflare integration requires deployment credentials; fixture success must not be reported as live authorization verification.
+
+## State and error semantics — 2026-10-27
+
+Serial verification completed on macOS with isolated Chrome contexts: `corepack pnpm check` passed (25 test files, 204 unit/contract tests, formatting, lint, package boundaries, TypeScript, production builds and editor CSS isolation); `corepack pnpm test:e2e` passed all 70 browser tests.
+
+New coverage verifies structured saving/sync/access states, cleared sync progress, error-code localization independent of diagnostic wording, preserved causal errors, resource-denial retry suppression, Chinese/English save retries, sync issue handling, GitHub reauthorization without leaving the editor, and blocked database cleanup followed by successful retry. The GitHub browser fixture triggers the real online handler and waits for authorization state before clicking, avoiding a race with background access checks. Language changes use the settings UI.
+
+These results use mocked GitHub responses and isolated OPFS/browser storage; they do not certify live GitHub accounts, native folder pickers, Safari, or physical mobile devices. State/error constraints are documented in CONTRIBUTING.md; no custom AST checks were added.

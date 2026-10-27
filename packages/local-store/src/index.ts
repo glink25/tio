@@ -1,3 +1,4 @@
+import { DomainError } from '@tio/core';
 import { navigationObject } from '@tio/core';
 import type { PageQuery, RecordQuery, RepositoryCapabilities } from '@tio/core';
 import {
@@ -370,7 +371,7 @@ export class LocalStore {
       const snapshot = await this.readObjects([id]);
       const old = snapshot.entries.find((e) => e.object.id === id);
       if (expectedRevision !== undefined && (old?.revision ?? 0) !== expectedRevision)
-        throw new Error('内容已在另一个窗口更新，请重试');
+        throw new DomainError('stale', '内容已在另一个窗口更新，请重试');
       const value = fn(old && structuredClone(old.object));
       const result = await this.internalCommit({
         id: crypto.randomUUID(),

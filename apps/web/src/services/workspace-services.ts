@@ -1,6 +1,8 @@
 import {
   id,
   ConnectionAccessError,
+  HostError,
+  DomainError,
   type Connection,
   type WorkspaceSession,
   type TioObject,
@@ -9,7 +11,8 @@ import {
   type WorkspaceRepository,
 } from '@tio/core';
 import { LocalCatalog } from '@tio/local-store';
-import { HostSyncRunner } from '@tio/sync';
+import { StorageError } from '@tio/storage';
+import { HostSyncRunner, type SyncSnapshot } from '@tio/sync';
 import { WorkspaceRuntime } from '@tio/workspace';
 
 import {
@@ -243,7 +246,21 @@ export class WorkspaceServices {
                 throw new ConnectionAccessError(access);
               return allowed;
             },
+            normalizeError: (error) => {
+              if (
+                error instanceof HostError ||
+                error instanceof DomainError ||
+                (error instanceof StorageError && error.code !== 'permission') ||
+                error instanceof ConnectionAccessError ||
+                !this.binding
+              )
+                return error;
+              return new ConnectionAccessError(this.binding.adapter.classifyError(error), {
+                cause: error,
+              });
+            },
             onError: (error) => {
+              if (!(error instanceof ConnectionAccessError)) return;
               if (!this.binding) return;
               const state = this.binding.adapter.classifyError(error);
               this.setAccess(
@@ -343,15 +360,13 @@ export class WorkspaceServices {
       return runtime;
     });
   }
-  startSync(onStatus: (status: string) => void) {
+  startSync(onStatus: (status: SyncSnapshot) => void) {
     this.status = () =>
-      onStatus(
-        this.access && this.access.code !== 'available'
-          ? this.access.code
-          : this.runner?.status === 'syncing' && this.runner.progress
-            ? `syncing:${this.runner.progress.loaded}/${this.runner.progress.total}`
-            : (this.runner?.status ?? 'idle'),
-      );
+      onStatus({
+        phase: this.runner?.status ?? 'idle',
+        progress: this.runner?.progress,
+        access: this.access,
+      });
     this.status();
   }
   private get runner() {

@@ -32,7 +32,7 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
             <Identity identity={m.identity} />
           </div>
         </header>
-        {m.syncStatus === 'reauthorization-required' && (
+        {m.syncStatus.access?.code === 'reauthorization-required' && (
           <Button
             onClick={() =>
               void m

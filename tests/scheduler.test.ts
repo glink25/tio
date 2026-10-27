@@ -65,3 +65,47 @@ describe('trailing synchronization', () => {
     expect(run).toHaveBeenCalledTimes(2);
   });
 });
+
+it('clears progress between runs and after both success and failure', async () => {
+  let release!: () => void;
+  const e = engine(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const core = (e as unknown as { core: SyncCore }).core;
+  const first = e.sync();
+  core.onProgress(2, 3);
+  expect(e.progress).toEqual({ loaded: 2, total: 3 });
+  release();
+  await first;
+  expect(e.status).toBe('synced');
+  expect(e.progress).toBeUndefined();
+  vi.spyOn(core, 'run').mockImplementation(async () => {
+    expect(e.progress).toBeUndefined();
+    core.onProgress(1, 2);
+    throw new Error('different failure message');
+  });
+  await e.sync();
+  expect(e.status).toBe('failed');
+  expect(e.progress).toBeUndefined();
+});
+
+it('does not automatically retry resource denial but allows explicit retry', async () => {
+  const { HostError } = await import('@tio/core');
+  vi.useFakeTimers();
+  const run = vi.fn(async () => {
+    throw new HostError('permission', 'arbitrary text');
+  });
+  const e = engine(run);
+  e.start();
+  await vi.advanceTimersByTimeAsync(120000);
+  expect(run).toHaveBeenCalledTimes(1);
+  expect(e.status).toBe('permission');
+  e.schedule();
+  await vi.advanceTimersByTimeAsync(10000);
+  expect(run).toHaveBeenCalledTimes(1);
+  await e.sync();
+  expect(run).toHaveBeenCalledTimes(2);
+});

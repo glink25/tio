@@ -86,7 +86,7 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
         <Modal title={t('sync.issues')} close={() => m.setIssuesOpen(false)}>
           {m.issues.map((issue, i) => (
             <div className="border-b border-line py-3 text-sm" key={i}>
-              <strong>{errorMessage(new Error(issue.message))}</strong>
+              <strong>{errorMessage(issue.error)}</strong>
               <code className="mt-2 block text-xs break-all text-muted">{issue.path}</code>
               {issue.code === 'permission' && issue.id && (
                 <div className="flex gap-2">

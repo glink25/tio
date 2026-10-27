@@ -1,6 +1,8 @@
+import { DomainError } from '@tio/core';
 import { id, object, type AssetData } from '@tio/core';
 export function prepareAsset(workspaceId: string, file: AssetData) {
-  if (file.bytes.byteLength > 20 * 1024 * 1024) throw new Error('附件不能超过 20 MB');
+  if (file.bytes.byteLength > 20 * 1024 * 1024)
+    throw new DomainError('asset-size', '附件不能超过 20 MB');
   const assetId = id('asset');
   const ext =
     file.name

@@ -1,4 +1,5 @@
 import type { TioObject } from './index';
+import { HostError } from './repository';
 export interface Connection {
   id: string;
   kind: 'device' | 'folder' | 'github';
@@ -44,7 +45,7 @@ export function assertAccess(
   after: TioObject,
 ) {
   const operation = !before ? 'create' : after.deleted && !before.deleted ? 'delete' : 'update';
-  if (!policy.allows(resourceOf(after), operation)) throw new Error('permission');
+  if (!policy.allows(resourceOf(after), operation)) throw new HostError('permission');
   const keys = new Set([
     ...Object.keys(before?.properties ?? {}),
     ...Object.keys(after.properties ?? {}),
@@ -55,7 +56,7 @@ export function assertAccess(
         JSON.stringify(after.properties?.[fieldId]) &&
       !policy.allows(resourceOf(after, fieldId), operation)
     )
-      throw new Error('permission');
+      throw new HostError('permission');
   for (const field of [...(before?.fields ?? []), ...(after.fields ?? [])]) {
     const a = before?.fields?.find((f) => f.id === field.id),
       b = after.fields?.find((f) => f.id === field.id);
@@ -63,7 +64,7 @@ export function assertAccess(
       JSON.stringify(a) !== JSON.stringify(b) &&
       !policy.allows(resourceOf(after, field.id), !a ? 'create' : !b ? 'delete' : 'update')
     )
-      throw new Error('permission');
+      throw new HostError('permission');
   }
 }
 

@@ -3,6 +3,7 @@ import { id, visibility, editable, type TioObject } from '@tio/core';
 import type { WorkspaceSession, Connection } from '@tio/core';
 import { t, i18n, errorMessage } from '@tio/i18n';
 import { exportZip, exportMarkdownZip, importZip } from '@tio/serialization';
+import type { SyncSnapshot } from '@tio/sync';
 import { toast } from '@tio/ui';
 import {
   starterWorkspace,
@@ -24,6 +25,7 @@ import {
 import { logoutCoordinator } from '../../services/logout';
 import { readRoute, writeRoute } from '../../services/navigation';
 import { WorkspaceServices } from '../../services/workspace-services';
+import { statusModel, type StatusAction } from './status';
 const emptyStore = createStore(() => emptyWorkspaceState);
 export function useWorkspace() {
   const [services] = useState(() => new WorkspaceServices());
@@ -31,17 +33,12 @@ export function useWorkspace() {
   const runtimeRef = useRef<WorkspaceRuntime | null>(null);
   const state = useStore(runtime?.state ?? emptyStore);
   const objects = state.objects;
-  const saveStatus =
-    state.status === 'error'
-      ? '本地保存失败'
-      : state.status === 'saving'
-        ? '正在保存本地'
-        : '已保存本地';
+  const saveStatus = state.status;
   const [connection, setConnection] = useState<Connection | null>(null);
   const [session, setSession] = useState<WorkspaceSession | null>(null);
   const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
   const [selected, setSelected] = useState('');
-  const [syncStatus, setSyncStatus] = useState('');
+  const [syncStatus, setSyncStatus] = useState<SyncSnapshot>({ phase: 'idle' });
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -175,7 +172,7 @@ export function useWorkspace() {
       }
       setMenu(false);
       setSidebar(false);
-      setSyncStatus('');
+      setSyncStatus({ phase: 'idle' });
       setError('');
       await services.setting('active', s.id);
       setRecent(s.id);
@@ -498,7 +495,8 @@ export function useWorkspace() {
   const issues = services.issues;
   const syncNow = async () => {
     try {
-      if (syncStatus === 'reauthorization-required' && services.canReauthorize) await authorize();
+      if (syncStatus.access?.code === 'reauthorization-required' && services.canReauthorize)
+        await authorize();
       else await services.sync();
     } catch (e) {
       setError(errorMessage(e));
@@ -526,7 +524,17 @@ export function useWorkspace() {
       setError(errorMessage(e));
     }
   };
+  const status = statusModel(saveStatus, syncStatus, services.supportsSync, issues.length > 0);
+  const statusActions: Record<StatusAction, () => void | Promise<void>> = {
+    'retry-save': retrySave,
+    reauthorize: syncNow,
+    issues: () => setIssuesOpen(true),
+    sync: syncNow,
+    none: () => {},
+  };
   return {
+    status,
+    activateStatus: () => statusActions[status.action](),
     identity: services.identity,
     loading,
     loadError,

@@ -1,3 +1,4 @@
+import { DomainError } from '@tio/core';
 import {
   createDomain,
   isDerivedField,
@@ -179,7 +180,7 @@ export const moveObject =
     let parent = parentId;
     const visited = new Set([id]);
     while (parent) {
-      if (visited.has(parent)) throw new Error('不能移动到自身或子页面');
+      if (visited.has(parent)) throw new DomainError('move-cycle', '不能移动到自身或子页面');
       visited.add(parent);
       const target = objects.find((o) => o.id === parent);
       if (!target || !editable(target, domain) || !['page', 'database'].includes(target.type))

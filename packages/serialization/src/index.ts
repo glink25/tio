@@ -1,3 +1,4 @@
+import { DomainError } from '@tio/core';
 import { createDefaultRegistry, type ObjectRegistry, type TioObject } from '@tio/core';
 import { zip, unzip, unzipSync, strToU8, type Unzipped } from 'fflate';
 export function canonical(value: unknown): string {
@@ -93,17 +94,17 @@ export async function importZip(bytes: Uint8Array): Promise<{
     .filter(([p]) => managedPath(p))
     .map(([p, b]) => {
       const o = decode(b);
-      if (pathFor(o) !== p) throw new Error('文件身份不匹配');
+      if (pathFor(o) !== p) throw new DomainError('identity', '文件身份不匹配');
       return o;
     });
   if (objects.filter((o) => o.type === 'workspace').length !== 1)
-    throw new Error('请选择只包含一个工作空间的备份');
+    throw new DomainError('single-workspace', '请选择只包含一个工作空间的备份');
   const workspace = objects.find((o) => o.type === 'workspace')!;
   if (
     objects.some((o) => o.workspaceId !== workspace.id) ||
     new Set(objects.map((o) => o.id)).size !== objects.length
   )
-    throw new Error('备份对象重复或跨工作空间');
+    throw new DomainError('backup-identity', '备份对象重复或跨工作空间');
   const assets = new Map<string, Uint8Array>();
   for (const o of objects.filter((o) => o.type === 'asset')) {
     const b = files[`workspaces/${o.workspaceId}/${o.assetPath}`];

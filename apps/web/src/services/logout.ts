@@ -1,7 +1,11 @@
+import { DomainError } from '@tio/core';
 function deleteDatabase(name: string) {
   return new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase(name);
-    const timeout = setTimeout(() => reject(new Error('Close other tio tabs and retry.')), 10000);
+    const timeout = setTimeout(
+      () => reject(new DomainError('close-tabs', 'Close other tio tabs and retry.')),
+      10000,
+    );
     request.onsuccess = () => {
       clearTimeout(timeout);
       resolve();

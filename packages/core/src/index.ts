@@ -1,3 +1,4 @@
+export * from './diagnostics';
 import { validDatePart, validateFieldDefinition } from './fields';
 import { assertJson } from './json';
 import { contentMentions } from './mentions';
