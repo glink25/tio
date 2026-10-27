@@ -6,6 +6,8 @@
 
 Oxfmt 负责格式、导入与 Tailwind 排序；Oxlint 负责正确性与类型感知检查；TypeScript 独立严格检查。使用 `.vscode/` 推荐的 Oxc 扩展，不并行引入 ESLint/Prettier。工具与依赖维护见[依赖约定](dependencies.md)。
 
+生产部署见 [Cloudflare Pages 部署](deployment.md)。
+
 ## 实现约束
 
 - 修改经过命令、运行时与仓库，不在组件中直接持久化。纯包和编辑器的具体依赖边界由检查脚本维护。

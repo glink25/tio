@@ -86,9 +86,19 @@ it('roundtrips code source, display modes and unknown props without converting l
   };
   for (const props of [
     { language: 'js' },
+    { language: 'html', future: { retained: true } },
+    ...(['code', 'preview', 'split'] as const).map((displayMode) => ({
+      language: 'html',
+      displayMode,
+      future: { retained: true },
+    })),
     { language: 'mermaid', displayMode: 'split', future: true },
   ]) {
-    const block: Block = { ...textBlock('flowchart TD\n A --> B\n'), type: 'codeBlock', props };
+    const source =
+      props.language === 'html'
+        ? '<!doctype html>\n<style>body { color: red }</style>\n<script>document.body.append("Hello")</script>\n'
+        : 'flowchart TD\n A --> B\n';
+    const block: Block = { ...textBlock(source), type: 'codeBlock', props };
     expect(fromEditor(toEditor([block], configured), [block])).toEqual([block]);
   }
 });

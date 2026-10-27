@@ -175,3 +175,147 @@ test('inline mentions support keyboard insertion, atomic deletion and undo', asy
   await page.keyboard.press('Escape');
   await expect(page.locator('#one .bn-suggestion-menu')).toBeHidden();
 });
+
+async function insertCode(page: Page, source: string, language = 'html', displayMode?: string) {
+  await page.evaluate(
+    async (value) => {
+      const fixture = (window as any).chromeFixture;
+      const snapshot = await fixture.repository.readSnapshot();
+      const current = snapshot.entries.find((entry: any) => entry.object.id === 'main').object;
+      await fixture.repository.commit({
+        id: crypto.randomUUID(),
+        expectedVersion: snapshot.version,
+        assetIds: [],
+        changes: [
+          {
+            ...current,
+            blocks: [
+              ...current.blocks,
+              {
+                id: 'preview-code',
+                type: 'codeBlock',
+                props: {
+                  language: value.language,
+                  ...(value.displayMode ? { displayMode: value.displayMode } : {}),
+                },
+                content: [{ type: 'text', text: value.source, styles: {} }],
+                children: [],
+              },
+            ],
+          },
+        ],
+      });
+    },
+    { source, language, displayMode },
+  );
+  return page.locator('#one [data-id="preview-code"]');
+}
+
+async function savedCode(page: Page) {
+  await page.evaluate(() => (window as any).chromeFixture.one.flush());
+  return page.evaluate(async () => {
+    const snapshot = await (window as any).chromeFixture.repository.readSnapshot();
+    return snapshot.entries
+      .find((entry: any) => entry.object.id === 'main')
+      .object.blocks.find((block: any) => block.id === 'preview-code');
+  });
+}
+
+test('HTML code previews execute isolated scripts and load external resources', async ({
+  page,
+}) => {
+  await page.route('https://preview.test/**', (route) => {
+    const script = route.request().url().endsWith('.js');
+    return route.fulfill({
+      contentType: script ? 'application/javascript' : 'text/css',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: script
+        ? 'document.getElementById("external").textContent = "External script loaded"'
+        : '#external { color: rgb(12, 34, 56); }',
+    });
+  });
+  const source = `<!doctype html><html><head>
+    <link rel="stylesheet" href="https://preview.test/style.css"></head><body>
+    <div id="external"></div><div id="isolation"></div><div id="sdk"></div>
+    <script>
+      try { parent.document.body; document.getElementById('isolation').textContent = 'unsafe'; }
+      catch { document.getElementById('isolation').textContent = 'isolated'; }
+      document.getElementById('sdk').textContent = typeof window.tio;
+    </script><script src="https://preview.test/script.js"></script>
+    </body></html>`;
+  const block = await insertCode(page, source);
+  const frame = block.locator('iframe').contentFrame();
+  await expect(frame.locator('#external')).toHaveText('External script loaded');
+  await expect(frame.locator('#external')).toHaveCSS('color', 'rgb(12, 34, 56)');
+  await expect(frame.locator('#isolation')).toHaveText('isolated');
+  await expect(frame.locator('#sdk')).toHaveText('undefined');
+  await expect(block.locator('iframe')).toHaveAttribute('sandbox', 'allow-scripts');
+  await expect(block.locator('iframe')).toHaveAttribute('referrerpolicy', 'no-referrer');
+  await expect(block.locator('iframe')).toHaveCSS('height', '400px');
+  await expect(block.locator('.tio-code-source')).toBeHidden();
+  await frame.locator('#sdk').evaluate((element) => {
+    element.textContent = 'running state';
+  });
+  await page.evaluate(() => (window as any).chromeFixture.one.setPresentation({ theme: 'dark' }));
+  await expect(frame.locator('#sdk')).toHaveText('running state');
+  await block.getByRole('button', { name: 'Code', exact: true }).click();
+  await expect(block.locator('iframe')).toHaveCount(0);
+  await expect(block.locator('.tio-code-source')).toBeVisible();
+  expect(JSON.stringify(await savedCode(page))).toContain('preview.test');
+});
+
+test('HTML modes persist edits and read-only switching stays temporary', async ({ page }) => {
+  const block = await insertCode(page, '<p>Before</p>', 'text');
+  await expect(block.getByRole('group', { name: 'Display mode' })).toHaveCount(0);
+  await block.getByLabel('Code language').selectOption('html');
+  await expect(block.locator('.tio-code-block')).toHaveAttribute('data-mode', 'split');
+  await block.locator('.tio-code-source code').click();
+  await page.locator('#one .bn-editor').evaluate((element) => {
+    const editor = (element as HTMLElement & { editor: any }).editor;
+    let from: number | undefined;
+    editor.state.doc.descendants((node: any, pos: number) => {
+      if (node.isText && node.text === '<p>Before</p>') from = pos;
+    });
+    if (from === undefined) throw new Error('Missing HTML source fixture');
+    editor.commands.setTextSelection({ from, to: from + '<p>Before</p>'.length });
+    editor.view.focus();
+  });
+  await page.keyboard.insertText('<p>Edited preview</p>');
+  await expect(block.locator('iframe').contentFrame().locator('p')).toHaveText('Edited preview');
+  await block.getByRole('button', { name: 'Preview', exact: true }).click();
+  const saved = await savedCode(page);
+  expect(saved.props).toMatchObject({ language: 'html', displayMode: 'preview' });
+  expect(JSON.stringify(saved.content)).toContain('<p>Edited preview</p>');
+  await page.evaluate(async () => {
+    const fixture = (window as any).chromeFixture;
+    await fixture.one.open({ id: 'target' });
+  });
+  await expect(block).toHaveCount(0);
+  await page.evaluate(() => (window as any).chromeFixture.one.open({ id: 'main' }));
+  await expect(block.locator('iframe').contentFrame().locator('p')).toHaveText('Edited preview');
+  await expect(block.locator('.tio-code-source')).toBeHidden();
+  await page.evaluate(() => (window as any).chromeFixture.one.setPresentation({ readOnly: true }));
+  await expect(block.getByLabel('Code language')).toBeDisabled();
+  await block.getByRole('button', { name: 'Code', exact: true }).click();
+  await expect(block.locator('iframe')).toHaveCount(0);
+  await block.getByRole('button', { name: 'Split', exact: true }).click();
+  await expect(block.locator('.tio-code-source')).toBeVisible();
+  await expect(block.locator('iframe').contentFrame().locator('p')).toHaveText('Edited preview');
+  expect(await savedCode(page)).toEqual(saved);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sourceBox = await block.locator('.tio-code-source').boundingBox();
+  const previewBox = await block.locator('.tio-code-preview').boundingBox();
+  expect(previewBox!.y).toBeGreaterThanOrEqual(sourceBox!.y + sourceBox!.height);
+});
+
+test('Mermaid keeps its preview when using the shared mode controls', async ({ page }) => {
+  const block = await insertCode(page, 'flowchart TD\n A --> B', 'text');
+  await block.getByLabel('Code language').selectOption('mermaid');
+  await expect(block.locator('.tio-code-block')).toHaveAttribute('data-mode', 'split');
+  await expect(block.locator('.tio-mermaid-preview svg')).toBeVisible();
+  await block.getByRole('button', { name: 'Code', exact: true }).click();
+  await expect(block.locator('.tio-mermaid-preview')).toHaveCount(0);
+  await block.getByRole('button', { name: 'Preview', exact: true }).click();
+  await expect(block.locator('.tio-code-source')).toBeHidden();
+  await expect(block.locator('.tio-mermaid-preview svg')).toBeVisible();
+});

@@ -7,7 +7,15 @@ import { lazy, Suspense, useState } from 'react';
 import { languages, languageId } from './languages';
 import { PreviewBoundary } from './preview-boundary';
 
-const MermaidPreview = lazy(() => import('./preview'));
+const previews = {
+  mermaid: lazy(() => import('./preview')),
+  html: lazy(() => import('./html-preview')),
+};
+function previewFor(language: string) {
+  return Object.hasOwn(previews, language)
+    ? previews[language as keyof typeof previews]
+    : undefined;
+}
 const base = createCodeBlockSpec({ supportedLanguages: languages });
 type Mode = 'code' | 'preview' | 'split';
 export const CodeBlock = createReactBlockSpec(
@@ -33,12 +41,12 @@ export const CodeBlock = createReactBlockSpec(
       const zh = i18n.language === 'zh';
       const [temporaryMode, setTemporaryMode] = useState<Mode>();
       const id = languageId(block.props.language);
-      const diagram = id === 'mermaid';
+      const Preview = previewFor(id);
       const mode = editor.isEditable
         ? block.props.displayMode
         : (temporaryMode ?? block.props.displayMode);
       return (
-        <div className="tio-code-block" data-mode={diagram ? mode : 'code'}>
+        <div className="tio-code-block" data-mode={Preview ? mode : 'code'}>
           <div className="tio-code-toolbar" contentEditable={false}>
             <select
               aria-label={zh ? '代码语言' : 'Code language'}
@@ -47,7 +55,7 @@ export const CodeBlock = createReactBlockSpec(
               onChange={(event) => {
                 const language = event.target.value;
                 editor.updateBlock(block, {
-                  props: { language, ...(language === 'mermaid' ? { displayMode: 'split' } : {}) },
+                  props: { language, ...(previewFor(language) ? { displayMode: 'split' } : {}) },
                 });
               }}
             >
@@ -58,8 +66,8 @@ export const CodeBlock = createReactBlockSpec(
                 </option>
               ))}
             </select>
-            {diagram && (
-              <fieldset aria-label={zh ? '图表显示模式' : 'Diagram display mode'}>
+            {Preview && (
+              <fieldset aria-label={zh ? '显示模式' : 'Display mode'}>
                 {(['code', 'preview', 'split'] as const).map((value) => (
                   <button
                     type="button"
@@ -80,12 +88,13 @@ export const CodeBlock = createReactBlockSpec(
             )}
           </div>
           <div className="tio-code-body">
-            <pre className="tio-code-source" hidden={diagram && mode === 'preview'}>
+            <pre className="tio-code-source" hidden={Preview && mode === 'preview'}>
               <code ref={contentRef} />
             </pre>
-            {diagram && mode !== 'code' && (
+            {Preview && mode !== 'code' && (
               <div className="tio-code-preview" contentEditable={false}>
                 <PreviewBoundary
+                  key={id}
                   message={
                     zh
                       ? '预览加载失败，请重新打开页面。源码仍可编辑。'
@@ -93,7 +102,7 @@ export const CodeBlock = createReactBlockSpec(
                   }
                 >
                   <Suspense fallback={<output>{zh ? '正在加载…' : 'Loading…'}</output>}>
-                    <MermaidPreview source={codeText(block.content)} />
+                    <Preview source={codeText(block.content)} />
                   </Suspense>
                 </PreviewBoundary>
               </div>

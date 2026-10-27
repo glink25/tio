@@ -7,3 +7,5 @@
 应用不提供加密、同浏览器配置内的用户隔离或任意并发写入下的零丢失保证。浏览器数据可能被清理，重要内容需要导出或外部备份。
 
 Web Slice 在不透明来源 iframe 中运行，授权由宿主保存，不进入同步或备份。CSP 不是完整网络防火墙，iframe 也不提供 CPU/内存配额。能力边界见[Web Slice](../../packages/web-editor/docs/web-slice.md)。
+
+HTML 代码块预览同样在不透明来源 iframe 中执行脚本，外部资源默认放行；不注入 Web Slice SDK，也不授予 Tio 数据读写 API。隔离不代表阻断网络请求，资源加载仍受浏览器与宿主策略约束。实现边界见[代码块](../../packages/editor-blocknote/docs/code-blocks.md)。
