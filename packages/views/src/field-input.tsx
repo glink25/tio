@@ -11,7 +11,7 @@ import {
 import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
 import { useT, type TranslationKey } from '@tio/i18n';
-import { MentionLabel, MentionPicker, Button } from '@tio/ui';
+import { MentionLabel, MentionPicker, Button, useDraftHistory } from '@tio/ui';
 import { useState, useEffect, useRef } from 'react';
 
 import { useDisplayValue } from './display-value';
@@ -175,7 +175,9 @@ function DateEditor({
   value,
   onChange,
   label,
+  historyOwner,
 }: {
+  historyOwner: symbol;
   value: unknown;
   onChange: (next: unknown) => void;
   label: string;
@@ -188,6 +190,33 @@ function DateEditor({
   const [start, setStart] = useState(date ? dateInput(date.start, zone) : '');
   const [end, setEnd] = useState(date?.end ? dateInput(date.end, zone) : '');
   const [error, setError] = useState('');
+  const published = useRef(value);
+  useEffect(() => {
+    if (JSON.stringify(value) === JSON.stringify(published.current)) return;
+    published.current = value;
+    const date = isDateValue(value) ? value : undefined;
+    const zone = date?.timeZone ?? localTimeZone();
+    setTime(!!date?.start.includes('T'));
+    setRange(!!date?.end);
+    setZone(zone);
+    setStart(date ? dateInput(date.start, zone) : '');
+    setEnd(date?.end ? dateInput(date.end, zone) : '');
+    setError('');
+  }, [value]);
+  const draftHistory = useDraftHistory(
+    { start, end, time, range, zone, error, value },
+    (draft) => {
+      setStart(draft.start);
+      setEnd(draft.end);
+      setTime(draft.time);
+      setRange(draft.range);
+      setZone(draft.zone);
+      setError(draft.error);
+      published.current = draft.value;
+      onChange(draft.value);
+    },
+    historyOwner,
+  );
   const publish = (
     first: string,
     last: string,
@@ -205,11 +234,25 @@ function DateEditor({
         : null;
       if (ranged && first && !last) throw new Error('Choose an end date');
       if (next && !isDateValue(next)) throw new Error('Invalid date range');
-      setError('');
-      onChange(next);
+      draftHistory.change({
+        start: first,
+        end: last,
+        time: timed,
+        range: ranged,
+        zone: timeZone,
+        error: '',
+        value: next,
+      });
     } catch (e) {
-      setError(String(e));
-      onChange({ invalidDate: true });
+      draftHistory.change({
+        start: first,
+        end: last,
+        time: timed,
+        range: ranged,
+        zone: timeZone,
+        error: String(e),
+        value: { invalidDate: true },
+      });
     }
   };
   return (
@@ -309,10 +352,7 @@ function DateEditor({
         type="button"
         className="px-0 text-xs"
         onClick={() => {
-          setStart('');
-          setEnd('');
-          setError('');
-          onChange(null);
+          draftHistory.change({ start: '', end: '', time, range, zone, error: '', value: null });
         }}
       >
         {t('database.clearDate')}
@@ -335,8 +375,12 @@ export function FieldInput(props: FieldInputProps) {
     [error, setError] = useState('');
   const [uploading, setUploading] = useState(false),
     [failed, setFailed] = useState<File[]>([]);
-  const change = (next: unknown) => {
+  const draftHistory = useDraftHistory(draft, (next) => {
     setDraft(next);
+    setError('');
+  });
+  const change = (next: unknown) => {
+    draftHistory.change(next);
     setError('');
   };
   const commit = () => {
@@ -349,6 +393,7 @@ export function FieldInput(props: FieldInputProps) {
           : draft;
       validateValue(field, submitted);
       onChange(submitted);
+      draftHistory.discard();
       setError('');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -370,14 +415,25 @@ export function FieldInput(props: FieldInputProps) {
         setError(String(e));
       }
     }
-    setDraft((previous: unknown) => [...(Array.isArray(previous) ? previous : []), ...refs]);
+    draftHistory.update((previous) => [...(Array.isArray(previous) ? previous : []), ...refs]);
     setFailed(failures);
     setUploading(false);
   };
   let control;
   if (Custom) control = <Custom {...props} value={draft} onChange={change} />;
   else if (field.type === 'date')
-    control = <DateEditor key={field.id} value={value} label={field.name} onChange={change} />;
+    control = (
+      <DateEditor
+        key={field.id}
+        historyOwner={draftHistory.owner}
+        value={draft}
+        label={field.name}
+        onChange={(value) => {
+          setDraft(value);
+          setError('');
+        }}
+      />
+    );
   else if (field.type === 'boolean')
     control = (
       <input
@@ -438,6 +494,7 @@ export function FieldInput(props: FieldInputProps) {
         <input
           className="w-full"
           aria-label={t('database.searchOptions')}
+          data-history="native"
           placeholder={t('database.searchOptions')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -561,6 +618,7 @@ export function FieldInput(props: FieldInputProps) {
         if (e.key === 'Escape' && cancel) {
           e.preventDefault();
           e.stopPropagation();
+          draftHistory.discard();
           cancel();
         } else if (
           e.key === 'Enter' &&
@@ -584,7 +642,13 @@ export function FieldInput(props: FieldInputProps) {
       {(dirty || onCancel) && (
         <div className="flex justify-end gap-2 border-t border-line pt-2">
           {cancel && (
-            <Button type="button" onClick={cancel}>
+            <Button
+              type="button"
+              onClick={() => {
+                draftHistory.discard();
+                cancel();
+              }}
+            >
               {t('ui.cancel')}
             </Button>
           )}

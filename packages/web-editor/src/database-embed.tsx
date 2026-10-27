@@ -55,50 +55,56 @@ export function DatabaseEmbed({
   });
   const referenced = views.find((o) => o.id === viewId);
   const view = views.find((o) => o.id === selected) ?? (fullPage ? views[0] : referenced);
-  const [rows, setRows] = useState<TioObject[]>([]);
-  const [next, setNext] = useState<string | undefined>();
-  const [cursor, setCursor] = useState<string | undefined>();
+  const [result, setResult] = useState<{ rows: TioObject[]; next?: string; key: string }>({
+    rows: [],
+    key: '',
+  });
+  const [pagination, setPagination] = useState<{ key: string; after?: string }>();
   const [queryText, setQueryText] = useState('');
   const [querying, setQuerying] = useState(false);
-  const viewKey = JSON.stringify(view);
-  useEffect(() => {
-    setCursor(undefined);
-    setRows([]);
-  }, [databaseId, viewKey, queryText]);
+  const [showQuerying, setShowQuerying] = useState(false);
+  const queryKey = JSON.stringify([databaseId, view?.id, view?.filters, view?.sorts, queryText]);
+  const cursor = pagination?.key === queryKey ? pagination.after : undefined;
+  const pageKey = JSON.stringify([queryKey, cursor]);
+  const rows = result.rows;
+  const next = result.key === pageKey ? result.next : undefined;
+  const setCursor = (after?: string) => setPagination({ key: queryKey, after });
   useEffect(() => {
     if (!loaded || !view) return;
     let live = true;
     setQuerying(true);
-    void m.runtime
-      .records({ databaseId, view, text: queryText, after: cursor, limit: 100 })
-      .then((page) => {
-        if (!live) return;
-        setRows(page.entries.map((e) => e.object));
-        setNext(page.next);
-        setQuerying(false);
-      })
-      .catch((error) => {
-        if (live) {
-          setLoadError(String(error));
+    setShowQuerying(false);
+    const indicator = window.setTimeout(() => {
+      if (live) setShowQuerying(true);
+    }, 200);
+    // Coalesce invalidations from the same React commit, including undo/redo.
+    const request = window.setTimeout(() => {
+      void m.runtime
+        .records({ databaseId, view, text: queryText, after: cursor, limit: 100 })
+        .then((page) => {
+          if (!live) return;
+          setResult({ rows: page.entries.map((e) => e.object), next: page.next, key: pageKey });
           setQuerying(false);
-        }
-      });
+          setShowQuerying(false);
+          window.clearTimeout(indicator);
+        })
+        .catch((error) => {
+          if (live) {
+            setLoadError(String(error));
+            setQuerying(false);
+            setShowQuerying(false);
+            window.clearTimeout(indicator);
+          }
+        });
+    }, 0);
     return () => {
       live = false;
+      window.clearTimeout(request);
+      window.clearTimeout(indicator);
     };
     // Query results update the projection; only view definitions and completed writes invalidate queries.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    m.runtime,
-    databaseId,
-    loaded,
-    viewKey,
-    queryText,
-    cursor,
-    m.state.pending,
-    m.state.version,
-    retry,
-  ]);
+  }, [m.runtime, databaseId, loaded, queryKey, queryText, pageKey, cursor, m.state.version, retry]);
   const rowIds = rows.map((row) => row.id).join(',');
   useEffect(() => m.runtime.retain(rowIds ? rowIds.split(',') : []), [m.runtime, rowIds]);
   if (loadError)
@@ -222,7 +228,7 @@ export function DatabaseEmbed({
           )
         }
       />
-      {querying && <output>{t('common.loading')}</output>}
+      {showQuerying && <output aria-live="polite">{t('database.loadingRecords')}</output>}
       <div className="flex gap-2">
         {cursor && <Button onClick={() => setCursor(undefined)}>←</Button>}
         {next && (

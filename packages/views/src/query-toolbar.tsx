@@ -305,6 +305,7 @@ export function QueryToolbar(p: RowsProps) {
           >
             <input
               aria-label={t('ui.searchRecords')}
+              data-history="native"
               placeholder={t('ui.searchRecords')}
               className="w-full"
               value={p.searchQuery ?? ''}

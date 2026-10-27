@@ -26,6 +26,24 @@ import {
 import { createStore } from 'zustand/vanilla';
 
 import { executeCommand, fieldOperations, type WorkspaceCommand } from './commands';
+
+type HistoryStep = Extract<WorkspaceCommand, { type: 'restore' }>;
+interface HistoryEntry {
+  steps: HistoryStep[];
+  draft?: {
+    owner: symbol;
+    before: unknown;
+    after: unknown;
+    apply: (value: unknown) => void;
+  };
+  group?: string;
+  time: number;
+}
+interface HistoryOptions {
+  group?: string;
+  target?: HistoryEntry[];
+  entry?: HistoryEntry;
+}
 export interface WorkspaceState {
   objects: TioObject[];
   loads: Record<string, 'loading' | 'ready' | 'missing' | 'denied' | 'error'>;
@@ -37,6 +55,7 @@ export interface WorkspaceState {
   pending: number;
   error: Error | null;
   canUndo: boolean;
+  canRedo: boolean;
   lifecycle: Lifecycle;
 }
 interface PendingCommand {
@@ -44,7 +63,7 @@ interface PendingCommand {
   assets: ReadonlyMap<string, AssetData>;
   request?: CommitRequest;
   confirmed?: boolean;
-  historyEntry?: WorkspaceCommand;
+  historyEntry?: HistoryStep;
   guard?: () => void;
   complete?: () => void;
   reject?: (error: unknown) => void;
@@ -60,6 +79,7 @@ export const emptyWorkspaceState: WorkspaceState = {
   pending: 0,
   error: null,
   canUndo: false,
+  canRedo: false,
   lifecycle: 'opening',
 };
 /** One editing session owns the live projection, command queue, persistence ACKs and external ingress. */
@@ -74,13 +94,16 @@ export class WorkspaceRuntime {
   private waiting: {
     intent: WorkspaceCommand;
     remember: boolean;
+    historyOptions?: HistoryOptions;
     assets: ReadonlyMap<string, AssetData>;
     receipt?: Pick<PendingCommand, 'guard' | 'complete' | 'reject'>;
   }[] = [];
   private retained = new Map<string, number>();
   private baseline = new Map<string, WorkspaceEntry>();
   private pending: PendingCommand[] = [];
-  private history: WorkspaceCommand[] = [];
+  private history: HistoryEntry[] = [];
+  private redos: HistoryEntry[] = [];
+  private historyGroup?: HistoryEntry;
   private blobs = new Map<string, AssetData>();
   private running: Promise<void> | null = null;
   private unsubscribe?: () => void;
@@ -155,6 +178,7 @@ export class WorkspaceRuntime {
         lifecycle: this.closing ? 'closing' : this.pending.length ? 'flushing' : 'ready',
         pending: this.pending.length + this.preparingCount,
         canUndo: this.history.length > 0,
+        canRedo: this.redos.length > 0,
         status: this.store.getState().error
           ? 'error'
           : this.pending.length || this.preparingCount
@@ -458,12 +482,19 @@ export class WorkspaceRuntime {
     assets: ReadonlyMap<string, AssetData> = new Map(),
     receipt?: Pick<PendingCommand, 'guard' | 'complete' | 'reject'>,
     prepared = false,
+    historyOptions?: HistoryOptions,
   ) {
     if (this.disposed || (this.closing && !prepared)) throw new Error('Workspace is closed');
     if (!prepared && !this.store.getState().writable) throw new HostError('permission');
     const dependencies = this.dependencies(intent);
     if (!prepared && (this.preparing || dependencies.some((id) => !this.baseline.has(id)))) {
-      this.waiting.push({ intent: structuredClone(intent), remember, assets, receipt });
+      this.waiting.push({
+        intent: structuredClone(intent),
+        remember,
+        assets,
+        receipt,
+        historyOptions,
+      });
       this.preparingCount = this.waiting.length;
       this.store.setState({ pending: this.pending.length + this.preparingCount, status: 'saving' });
       this.prepareWaiting();
@@ -480,9 +511,29 @@ export class WorkspaceRuntime {
             (p) => p.intent.type === 'create' && p.intent.objects.some((n) => n.id === o.id),
           ),
       );
+    if (historyOptions?.entry) {
+      // Build the inverse only after required bodies have been loaded.
+      const restored = [...historyOptions.entry.steps]
+        .reverse()
+        .reduce((state, step) => executeCommand(step, state, undefined, this.domain), before);
+      const changed = restored.filter(
+        (o) => JSON.stringify(o) !== JSON.stringify(before.find((old) => old.id === o.id)),
+      );
+      intent = {
+        ...intent,
+        type: 'restore',
+        before: changed,
+        after: before.filter((o) => changed.some((change) => change.id === o.id)),
+      };
+    }
     const next = executeCommand(intent, before, undefined, this.domain);
     const originals = new Map(before.map((o) => [o.id, o]));
-    const changed = next.filter((o) => o !== originals.get(o.id));
+    const changed = next.filter((o) => JSON.stringify(o) !== JSON.stringify(originals.get(o.id)));
+    if (!changed.length) {
+      this.store.setState({ canUndo: this.history.length > 0, canRedo: this.redos.length > 0 });
+      receipt?.complete?.();
+      return;
+    }
     for (const o of changed) {
       this.domain.objects.decode(o);
       try {
@@ -491,8 +542,8 @@ export class WorkspaceRuntime {
         throw new HostError('permission');
       }
     }
-    let historyEntry: WorkspaceCommand | undefined;
-    if (remember) {
+    let historyEntry: HistoryStep | undefined;
+    if (remember || historyOptions?.target) {
       historyEntry = {
         type: 'restore',
         before: structuredClone(
@@ -500,12 +551,28 @@ export class WorkspaceRuntime {
         ),
         after: structuredClone(changed),
       };
-      this.history.push(historyEntry);
+      const target = historyOptions?.target ?? this.history;
+      const time = Date.now();
+      const group = historyOptions?.group;
+      if (remember) this.redos = [];
+      if (
+        group &&
+        this.historyGroup === target.at(-1) &&
+        this.historyGroup?.group === group &&
+        time - this.historyGroup.time < 500
+      ) {
+        this.historyGroup.steps.push(historyEntry);
+        this.historyGroup.time = time;
+      } else {
+        const entry = { steps: [historyEntry], group, time };
+        target.push(entry);
+        this.historyGroup = group ? entry : undefined;
+      }
       while (
-        this.history.length > 100 ||
-        new TextEncoder().encode(JSON.stringify(this.history)).length > 8 * 1024 * 1024
+        target.length > 100 ||
+        new TextEncoder().encode(JSON.stringify(target)).length > 8 * 1024 * 1024
       )
-        this.history.shift();
+        target.shift();
     }
     const command = { intent: structuredClone(intent), assets, historyEntry, ...receipt };
     this.pending.push(command);
@@ -518,6 +585,7 @@ export class WorkspaceRuntime {
       ],
       pending: this.pending.length + this.preparingCount,
       canUndo: this.history.length > 0,
+      canRedo: this.redos.length > 0,
       status: this.store.getState().error ? 'error' : 'saving',
     });
     this.drain();
@@ -533,7 +601,14 @@ export class WorkspaceRuntime {
             for (const id of this.dependencies(command.intent))
               if (!this.baseline.has(id))
                 throw new HostError('unavailable', `Command dependency unavailable: ${id}`);
-            this.dispatch(command.intent, command.remember, command.assets, command.receipt, true);
+            this.dispatch(
+              command.intent,
+              command.remember,
+              command.assets,
+              command.receipt,
+              true,
+              command.historyOptions,
+            );
             this.waiting.shift();
             this.preparingCount = this.waiting.length;
           } catch (error) {
@@ -566,8 +641,7 @@ export class WorkspaceRuntime {
           } catch (error) {
             if (command.intent.type === 'checked' && !command.request) {
               this.pending.shift();
-              if (command.historyEntry)
-                this.history = this.history.filter((entry) => entry !== command.historyEntry);
+              if (command.historyEntry) this.removeHistoryStep(command.historyEntry);
               command.reject?.(error);
               this.publish();
               continue;
@@ -582,6 +656,13 @@ export class WorkspaceRuntime {
         this.running = null;
         this.drain();
       });
+  }
+  private removeHistoryStep(step: HistoryStep) {
+    for (const stack of [this.history, this.redos]) {
+      for (const entry of stack) entry.steps = entry.steps.filter((item) => item !== step);
+      for (let i = stack.length - 1; i >= 0; i--)
+        if (!stack[i].steps.length && !stack[i].draft) stack.splice(i, 1);
+    }
   }
   private async commitCommand(command: PendingCommand): Promise<WorkspaceEntry[]> {
     for (let attempt = 0; attempt < 32; attempt++) {
@@ -629,6 +710,7 @@ export class WorkspaceRuntime {
             changed.flatMap((o) => (previous.has(o.id) ? [previous.get(o.id)!] : [])),
           );
           command.historyEntry.after = structuredClone(changed);
+          if (!changed.length) this.removeHistoryStep(command.historyEntry);
         }
         for (const [id, asset] of command.assets) await this.repository.stageAsset(id, asset);
         command.request = {
@@ -703,8 +785,13 @@ export class WorkspaceRuntime {
       }
     });
   }
-  patch(id: string, changes: Partial<TioObject>, remember = false) {
-    this.dispatch({ type: 'patch', id, changes }, remember);
+  patch(id: string, changes: Partial<TioObject>, remember = true) {
+    const keys = Object.keys(changes);
+    const group =
+      keys.length === 1 && ['title', 'name'].includes(keys[0])
+        ? `patch:${id}:${keys[0]}`
+        : undefined;
+    this.dispatch({ type: 'patch', id, changes }, remember, new Map(), undefined, false, { group });
   }
   create(
     items: TioObject[],
@@ -716,8 +803,37 @@ export class WorkspaceRuntime {
   append(id: string, block: Block) {
     this.dispatch({ type: 'append', id, block }, true);
   }
-  blocks(id: string, next: Block[], previous: Block[]) {
-    this.dispatch({ type: 'blocks', id, next, previous });
+  blocks(id: string, next: Block[], previous: Block[], inputGroup?: string | null) {
+    const changed = next.filter(
+      (block, i) => JSON.stringify(block) !== JSON.stringify(previous[i]),
+    );
+    const inserted = next.filter((block) => !previous.some((old) => old.id === block.id));
+    const inputBlock =
+      next.length === previous.length &&
+      changed.length === 1 &&
+      previous.some(
+        (block) =>
+          block.id === changed[0].id &&
+          block.type === changed[0].type &&
+          JSON.stringify(block.props) === JSON.stringify(changed[0].props) &&
+          JSON.stringify(block.children) === JSON.stringify(changed[0].children),
+      )
+        ? changed[0]
+        : next.length === previous.length + 1 &&
+            inserted.length === 1 &&
+            inserted[0].type === 'paragraph' &&
+            !inserted[0].children.length
+          ? inserted[0]
+          : undefined;
+    const group =
+      inputGroup === null
+        ? undefined
+        : inputGroup || inputBlock
+          ? `blocks:${id}:${inputGroup ?? inputBlock!.id}`
+          : undefined;
+    this.dispatch({ type: 'blocks', id, next, previous }, true, new Map(), undefined, false, {
+      group,
+    });
   }
   cell(id: string, fieldId: string, value: unknown) {
     this.dispatch({ type: 'cell', id, fieldId, value }, true);
@@ -742,9 +858,91 @@ export class WorkspaceRuntime {
   restoreObject(id: string) {
     this.dispatch({ type: 'undelete', id }, true);
   }
+  breakHistoryGroup() {
+    this.historyGroup = undefined;
+  }
+  /** Temporary editor drafts participate in ordering, never in persistence. */
+  recordDraft<T>(owner: symbol, before: T, after: T, apply: (value: T) => void) {
+    if (this.disposed || this.closing) throw new HostError('closed');
+    if (!this.store.getState().writable) throw new HostError('permission');
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    const time = Date.now();
+    const previous = this.history.at(-1);
+    if (
+      previous === this.historyGroup &&
+      previous?.draft?.owner === owner &&
+      time - previous.time < 500
+    ) {
+      previous.draft.after = structuredClone(after);
+      previous.time = time;
+    } else {
+      const entry: HistoryEntry = {
+        steps: [],
+        time,
+        draft: {
+          owner,
+          before: structuredClone(before),
+          after: structuredClone(after),
+          apply: (value) => apply(value as T),
+        },
+      };
+      this.history.push(entry);
+      this.historyGroup = entry;
+    }
+    this.redos = [];
+    while (
+      this.history.length > 100 ||
+      new TextEncoder().encode(JSON.stringify(this.history)).length > 8 * 1024 * 1024
+    )
+      this.history.shift();
+    this.store.setState({ canUndo: this.history.length > 0, canRedo: false });
+  }
+  discardDraft(owner: symbol) {
+    if (![...this.history, ...this.redos].some((entry) => entry.draft?.owner === owner)) return;
+    this.history = this.history.filter((entry) => entry.draft?.owner !== owner);
+    this.redos = this.redos.filter((entry) => entry.draft?.owner !== owner);
+    this.breakHistoryGroup();
+    this.store.setState({ canUndo: this.history.length > 0, canRedo: this.redos.length > 0 });
+  }
+  private travelHistory(source: HistoryEntry[], target: HistoryEntry[]) {
+    if (this.disposed || this.closing) throw new HostError('closed');
+    if (!this.store.getState().writable) throw new HostError('permission');
+    this.breakHistoryGroup();
+    const entry = source.at(-1);
+    if (!entry) return;
+    if (entry.draft) {
+      entry.draft.apply(
+        structuredClone(source === this.history ? entry.draft.before : entry.draft.after),
+      );
+      source.pop();
+      target.push(entry);
+      this.store.setState({ canUndo: this.history.length > 0, canRedo: this.redos.length > 0 });
+      return;
+    }
+    source.pop();
+    try {
+      this.dispatch(
+        {
+          type: 'restore',
+          before: [],
+          after: entry.steps.flatMap((step) => step.after),
+        },
+        false,
+        new Map(),
+        undefined,
+        false,
+        { target, entry },
+      );
+    } catch (error) {
+      source.push(entry);
+      throw error;
+    }
+  }
   undo() {
-    const apply = this.history.pop();
-    if (apply) this.dispatch(apply);
+    this.travelHistory(this.history, this.redos);
+  }
+  redo() {
+    this.travelHistory(this.redos, this.history);
   }
   upload(workspaceId: string, file: AssetData) {
     const { metadata, assets, ref } = prepareAsset(workspaceId, file);
@@ -761,7 +959,10 @@ export class WorkspaceRuntime {
     if (!force && (this.pending.length || this.preparingCount))
       throw new HostError('pending', 'Flush pending changes before disposing');
     this.disposed = true;
-    this.store.setState({ lifecycle: 'closed' });
+    this.history = [];
+    this.redos = [];
+    this.breakHistoryGroup();
+    this.store.setState({ lifecycle: 'closed', canUndo: false, canRedo: false });
     this.readGeneration++;
     this.unsubscribe?.();
     // An already-started commit may finish, but cannot enter another session's state.
@@ -793,6 +994,10 @@ export type EditorSession = Pick<
   | 'fields'
   | 'move'
   | 'undo'
+  | 'redo'
+  | 'breakHistoryGroup'
+  | 'recordDraft'
+  | 'discardDraft'
   | 'upload'
   | 'readAsset'
   | 'flush'

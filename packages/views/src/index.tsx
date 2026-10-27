@@ -85,7 +85,9 @@ export function DatabaseView(props: ViewProps) {
       ) : mobile && !mobileTable ? (
         <MobileView {...childProps} />
       ) : (
-        <Suspense fallback={<div className="p-8 text-xs text-muted">{t('common.loading')}</div>}>
+        <Suspense
+          fallback={<div className="p-8 text-xs text-muted">{t('database.loadingRecords')}</div>}
+        >
           <GridView {...childProps} />
         </Suspense>
       )}

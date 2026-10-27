@@ -28,6 +28,19 @@ test.beforeEach(async ({ page }) => {
     );
     const deniedDeletes = new Set<string>();
     const repository = new MemoryRepository();
+    const queries = { count: 0, delay: 0, active: 0 };
+    const queryRecords = repository.queryRecords.bind(repository);
+    repository.queryRecords = async (query: any) => {
+      queries.count++;
+      queries.active++;
+      try {
+        const result = await queryRecords(query);
+        if (queries.delay) await new Promise((resolve) => setTimeout(resolve, queries.delay));
+        return result;
+      } finally {
+        queries.active--;
+      }
+    };
     await repository.commit({ id: 'seed', expectedVersion: 0, changes: objects, assetIds: [] });
     document.body.innerHTML = '<div id="editor"></div>';
     const editor = await (window as any).TioEditor.mountEditor(document.getElementById('editor'), {
@@ -46,6 +59,7 @@ test.beforeEach(async ({ page }) => {
         editor,
         repository,
         deniedDeletes,
+        queries,
         databaseId: database.id,
         recordId: objects.find((o: any) => o.type === 'record').id,
         homeId: objects.find((o: any) => o.type === 'page').id,
@@ -395,4 +409,163 @@ test('record drawer content supports typing, slash insertion and reopening', asy
   await expect(reopened.locator('.bn-editor').getByRole('heading', { level: 2 })).toHaveText(
     'Next steps',
   );
+});
+
+test('cell drafts and committed cells share keyboard and menu undo/redo without reopening the workspace', async ({
+  page,
+}) => {
+  await openRecord(page);
+  const name = page.getByRole('group', { name: 'Name editor', exact: true });
+  const input = name.getByRole('textbox', { name: 'Name', exact: true });
+  const original = await input.inputValue();
+  await input.fill('Changed draft');
+  await input.press('ControlOrMeta+z');
+  await expect(input).toHaveValue(original);
+  await input.press('ControlOrMeta+Shift+z');
+  await expect(input).toHaveValue('Changed draft');
+  expect(Object.values(await properties(page))).toContain(original);
+  await name.getByRole('button', { name: 'Done', exact: true }).click();
+  await input.press('ControlOrMeta+z');
+  await expect(input).toHaveValue(original);
+  await page.getByRole('button', { name: 'More actions' }).click();
+  await page.getByRole('menuitem', { name: 'Redo action', exact: true }).click();
+  await expect(input).toHaveValue('Changed draft');
+  await input.press('Control+y');
+  await expect(input).toHaveValue('Changed draft');
+  await page.evaluate(() => {
+    const f = (window as any).databaseFixture;
+    return f.editor.open({ id: f.databaseId });
+  });
+  await expect(page.locator('canvas').first()).toBeVisible();
+  await rowClick(page, 0);
+  await page.locator('canvas').first().focus();
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect.poll(async () => Object.values(await properties(page))).toContain(original);
+  await page.locator('canvas').first().focus();
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect.poll(async () => Object.values(await properties(page))).toContain('Changed draft');
+  await expect(page.getByText('Opening workspace…', { exact: true })).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).databaseFixture.queries.active))
+    .toBe(0);
+  // flush completes persistence; allow the resulting React effect to start its query.
+  await page.waitForTimeout(50);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).databaseFixture.queries.active))
+    .toBe(0);
+  const count = await page.evaluate(() => (window as any).databaseFixture.queries.count);
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => (window as any).databaseFixture.queries.count)).toBe(count);
+});
+
+test('record name and body undo in edit order', async ({ page }) => {
+  await openRecord(page);
+  const name = page.getByRole('group', { name: 'Name editor', exact: true });
+  const input = name.getByRole('textbox', { name: 'Name', exact: true });
+  const original = await input.inputValue();
+  await input.fill('Saved name');
+  await name.getByRole('button', { name: 'Done', exact: true }).click();
+  const body = page
+    .getByRole('region', { name: 'Record content', exact: true })
+    .locator('.bn-editor');
+  await body.locator('.bn-inline-content').first().click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type(' Unified history');
+  await expect(body).toContainText('Unified history');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(body).not.toContainText('Unified history');
+  await expect(input).toHaveValue('Saved name');
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(input).toHaveValue(original);
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(input).toHaveValue('Saved name');
+  await page.keyboard.press('ControlOrMeta+Shift+z');
+  await expect(body).toContainText('Unified history');
+});
+
+test('slow query responses settle after undo and never publish stale search results', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    (window as any).databaseFixture.queries.delay = 350;
+  });
+  const title = page.getByRole('textbox', { name: 'Page title' });
+  const original = await title.inputValue();
+  await title.fill('Renamed database');
+  await title.press('ControlOrMeta+z');
+  await expect(title).toHaveValue(original);
+  await page.getByRole('button', { name: 'Search records…' }).click();
+  const search = page.getByRole('textbox', { name: 'Search records…' });
+  await search.fill('Collect');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).databaseFixture.queries.active))
+    .toBeGreaterThan(0);
+  await search.fill('no matching record');
+  await expect(page.getByText('Loading records…', { exact: true })).toBeVisible();
+  await expect(page.getByText('Loading records…', { exact: true })).toHaveCount(0, {
+    timeout: 5000,
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).databaseFixture.queries.active))
+    .toBe(0);
+  // flush completes persistence; allow the resulting React effect to start its query.
+  await page.waitForTimeout(50);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).databaseFixture.queries.active))
+    .toBe(0);
+  const count = await page.evaluate(() => (window as any).databaseFixture.queries.count);
+  await page.waitForTimeout(700);
+  expect(await page.evaluate(() => (window as any).databaseFixture.queries.count)).toBe(count);
+  await expect(page.getByText('Opening workspace…', { exact: true })).toHaveCount(0);
+});
+
+test('embedded database view changes undo and redo without a query feedback loop', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    const f = (window as any).databaseFixture;
+    return f.editor.open({ id: f.homeId });
+  });
+  await expect(page.locator('canvas').first()).toBeVisible();
+  await page.getByRole('button', { name: 'View settings', exact: true }).last().click();
+  const layout = page.getByRole('combobox', { name: 'Layout', exact: true });
+  await layout.selectOption('board');
+  await expect(page.locator('canvas')).toHaveCount(0);
+  await layout.press('ControlOrMeta+z');
+  await expect(layout).toHaveValue('table');
+  await expect(page.locator('canvas').first()).toBeVisible();
+  await layout.press('Control+y');
+  await expect(layout).toHaveValue('board');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => (window as any).databaseFixture.editor.flush());
+  await expect
+    .poll(() => page.evaluate(() => (window as any).databaseFixture.queries.active))
+    .toBe(0);
+  // flush completes persistence; allow the resulting React effect to start its query.
+  await page.waitForTimeout(50);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).databaseFixture.queries.active))
+    .toBe(0);
+  const count = await page.evaluate(() => (window as any).databaseFixture.queries.count);
+  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => (window as any).databaseFixture.queries.count)).toBe(count);
+});
+
+test('date drafts restore their complete form state and stay unsaved until done', async ({
+  page,
+}) => {
+  await openRecord(page);
+  const date = page.getByRole('group', { name: 'Date editor', exact: true });
+  const start = date.getByLabel('Date', { exact: true });
+  await start.fill('2026-10-27');
+  await start.press('ControlOrMeta+z');
+  await expect(start).toHaveValue('');
+  await start.press('ControlOrMeta+Shift+z');
+  await expect(start).toHaveValue('2026-10-27');
+  await date.getByRole('checkbox', { name: 'End date', exact: true }).check();
+  await start.press('ControlOrMeta+z');
+  await expect(date.getByRole('checkbox', { name: 'End date', exact: true })).not.toBeChecked();
+  expect((await properties(page)).date).toBeUndefined();
+  await date.getByRole('button', { name: 'Done', exact: true }).click();
+  expect((await properties(page)).date).toMatchObject({ start: '2026-10-27' });
 });

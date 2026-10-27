@@ -96,6 +96,7 @@ export function ReferencePicker({
         <div className="flex items-center gap-2 border-b border-line px-2 pb-2">
           <Search size={15} className="shrink-0 text-muted" aria-hidden />
           <CommandInput
+            data-history="native"
             ref={inputRef}
             aria-label={label}
             placeholder={t('database.searchReferences')}

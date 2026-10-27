@@ -17,6 +17,7 @@ import {
 import { useT, type TranslationKey } from '@tio/i18n';
 import {
   Button,
+  useDraftHistory,
   IconButton,
   Select,
   SelectTrigger,
@@ -71,6 +72,7 @@ export function PropertyEditor({
         }
       : { id: id('field'), name: '', type: 'text' },
   );
+  const history = useDraftHistory(draft, setDraft);
   const [error, setError] = useState('');
   const formulaRef = useRef<HTMLTextAreaElement>(null);
   const [previewId, setPreviewId] = useState('');
@@ -125,7 +127,7 @@ export function PropertyEditor({
       preview = String(e);
     }
   }
-  const patch = (value: Partial<Field>) => setDraft((p) => ({ ...p, ...value }));
+  const patch = (value: Partial<Field>) => history.change({ ...draft, ...value });
   return (
     <form
       className="space-y-4"
@@ -160,6 +162,7 @@ export function PropertyEditor({
             throw new Error('Configure the rollup');
           validateFieldDefinition(next);
           onSave(next);
+          history.discard();
           close();
         } catch (e) {
           setError(String(e));

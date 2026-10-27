@@ -324,3 +324,31 @@ test('Mermaid keeps its preview when using the shared mode controls', async ({ p
   await expect(block.locator('.tio-code-source')).toBeHidden();
   await expect(block.locator('.tio-mermaid-preview svg')).toBeVisible();
 });
+
+test('history shortcuts belong to the focused surface and support native history input events', async ({
+  page,
+}) => {
+  const one = page.locator('#one').getByRole('textbox', { name: 'Page title' });
+  const two = page.locator('#two').getByRole('textbox', { name: 'Page title' });
+  await one.fill('Shared title');
+  await page.evaluate(() => (window as any).chromeFixture.one.flush());
+  await expect(two).toHaveValue('Shared title');
+  await two.fill('Second surface');
+  await page.evaluate(() => (window as any).chromeFixture.two.flush());
+  await two.press('ControlOrMeta+z');
+  await expect(two).toHaveValue('Shared title');
+  await page.evaluate(() => (window as any).chromeFixture.two.flush());
+  await expect(one).toHaveValue('Shared title');
+  // One keypress must not also undo the first surface's independent history.
+  await two.evaluate((input) =>
+    input.dispatchEvent(
+      new InputEvent('beforeinput', { bubbles: true, cancelable: true, inputType: 'historyRedo' }),
+    ),
+  );
+  await expect(two).toHaveValue('Second surface');
+  await two.dispatchEvent('keydown', { key: 'z', ctrlKey: true, isComposing: true });
+  await expect(two).toHaveValue('Second surface');
+  await page.evaluate(() => (window as any).chromeFixture.two.setPresentation({ readOnly: true }));
+  await two.press('ControlOrMeta+z');
+  await expect(two).toHaveValue('Second surface');
+});

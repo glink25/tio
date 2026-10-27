@@ -73,11 +73,7 @@ export function RecordContent({ model: m }: { model: EditorController }) {
             >
               <span className="text-xs text-muted">{f.name}</span>
               <FieldInput
-                key={
-                  ['mention', 'relation'].includes(f.type)
-                    ? `${record.id}:${f.id}`
-                    : `${record.id}:${f.id}:${JSON.stringify(record.properties?.[f.id])}`
-                }
+                key={`${record.id}:${f.id}`}
                 field={f}
                 record={record}
                 readOnly={m.readOnly || !editable(record) || !editable(db) || !m.can(record, f.id)}
@@ -103,7 +99,7 @@ export function RecordContent({ model: m }: { model: EditorController }) {
             placeholder={t('database.recordBodyPlaceholder')}
             blocks={record.blocks ?? []}
             readOnly={!m.can(record)}
-            onChange={(b, p) => m.changeBlocks(record, b, p)}
+            onChange={(b, p, group) => m.changeBlocks(record, b, p, group)}
             upload={m.upload}
             resolve={m.resolve}
             renderWebSlice={(block) => <WebSlice model={m} page={record} block={block} />}

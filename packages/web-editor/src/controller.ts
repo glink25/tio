@@ -12,6 +12,7 @@ import {
 } from '@tio/core';
 import type { EditorSchema } from '@tio/editor-blocknote';
 import { useT, useTranslation } from '@tio/i18n';
+import type { EditHistory } from '@tio/ui';
 import type { ViewExtensions } from '@tio/views';
 import { newPage, newDatabase, type EditorSession } from '@tio/workspace';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -124,7 +125,7 @@ export function useEditorController(props: EditorSurfaceProps) {
     if (o.type === 'record') setRecordId(o.id);
     else onNavigate({ id: o.id });
   }
-  function patch(o: TioObject, changes: Partial<TioObject>, remember = false) {
+  function patch(o: TioObject, changes: Partial<TioObject>, remember = true) {
     command(() => runtime.patch(o.id, changes, remember));
   }
   function addPage(parentId: string | null = null) {
@@ -220,6 +221,17 @@ export function useEditorController(props: EditorSurfaceProps) {
       setRecordId(record.id);
     });
   }
+  const history: EditHistory = {
+    canUndo: !readOnly && state.writable && state.canUndo,
+    canRedo: !readOnly && state.writable && state.canRedo,
+    undo: () => command(() => runtime.undo()),
+    redo: () => command(() => runtime.redo()),
+    breakGroup: () => runtime.breakHistoryGroup(),
+    recordDraft: (owner, before, after, apply) => {
+      if (!readOnly) runtime.recordDraft(owner, before, after, apply);
+    },
+    discardDraft: (owner) => runtime.discardDraft(owner),
+  };
   const upload = async (file: File) => {
     if (readOnly) throw new Error('Read only');
     if (runtime.state.getState().error) await runtime.retry();
@@ -267,11 +279,12 @@ export function useEditorController(props: EditorSurfaceProps) {
       command(() => runtime.cell(record.id, field.id, value)),
     changeFields: (db: TioObject, fields: Field[]) =>
       command(() => runtime.fields(db.id, fields, db.fields ?? [])),
-    changeBlocks: (page: TioObject, blocks: Block[], previous: Block[]) =>
+    changeBlocks: (page: TioObject, blocks: Block[], previous: Block[], group?: string | null) =>
       command(() => {
-        if (editable(page)) runtime.blocks(page.id, blocks, previous);
+        if (editable(page)) runtime.blocks(page.id, blocks, previous, group);
       }),
-    undoOperation: () => command(() => runtime.undo()),
+    history,
+    undoOperation: history.undo,
   };
 }
 export type EditorController = ReturnType<typeof useEditorController>;

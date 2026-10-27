@@ -23,7 +23,15 @@ import { MentionMenu } from './mention-menu';
 export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
 import { useT, useTranslation } from '@tio/i18n';
-import { MentionLabel, EmptyNotice, useTheme, useMobile, IconButton, PortalContext } from '@tio/ui';
+import {
+  MentionLabel,
+  EmptyNotice,
+  useTheme,
+  useMobile,
+  IconButton,
+  PortalContext,
+  EditHistoryContext,
+} from '@tio/ui';
 import { FilePlus, Database, Bold, Italic, Code, Undo2, Redo2, Plus } from 'lucide-react';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 
@@ -125,10 +133,45 @@ export interface EditorProps {
   onDatabase?: () => void;
   blocks: Block[];
   readOnly?: boolean;
-  onChange: (blocks: Block[], previous: Block[]) => void;
+  onChange: (blocks: Block[], previous: Block[], group?: string | null) => void;
   upload: (file: File) => Promise<string>;
   resolve: (url: string) => Promise<string>;
   renderDatabase: (db: string, view: string) => React.ReactNode;
+}
+/** Renderer defaults are equivalent to omitted properties in the stored document. */
+function comparableBlocks(blocks: Block[], schema: EditorSchema['schema']): Block[] {
+  return blocks.map((block) => ({
+    ...block,
+    props: {
+      ...Object.fromEntries(
+        Object.entries(schema.blockSchema[block.type]?.propSchema ?? {}).map(
+          ([key, definition]) => [key, (definition as { default: unknown }).default],
+        ),
+      ),
+      ...block.props,
+    },
+    children: comparableBlocks(block.children, schema),
+  }));
+}
+function typingBlock(before: Block[], after: Block[]): string | undefined {
+  if (before.length !== after.length || before.some((block, i) => block.id !== after[i].id)) return;
+  const changed = after.filter((block, i) => JSON.stringify(block) !== JSON.stringify(before[i]));
+  if (changed.length !== 1) return;
+  const next = changed[0];
+  const old = before.find((block) => block.id === next.id)!;
+  if (old.type !== next.type || JSON.stringify(old.props) !== JSON.stringify(next.props)) return;
+  if (JSON.stringify(old.children) !== JSON.stringify(next.children))
+    return JSON.stringify(old.content) === JSON.stringify(next.content)
+      ? typingBlock(old.children, next.children)
+      : undefined;
+  if (!Array.isArray(old.content) || !Array.isArray(next.content)) return;
+  const atoms = (parts: unknown[]) =>
+    parts.filter(
+      (part) => !part || typeof part !== 'object' || !('type' in part) || part.type !== 'text',
+    );
+  return JSON.stringify(atoms(old.content)) === JSON.stringify(atoms(next.content))
+    ? next.id
+    : undefined;
 }
 export function EditorContent({
   placeholder,
@@ -148,6 +191,7 @@ export function EditorContent({
   const theme = useTheme();
   const mobile = useMobile();
   const portal = useContext(PortalContext);
+  const history = useContext(EditHistoryContext);
   const [focused, setFocused] = useState(false);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
   useEffect(() => {
@@ -174,6 +218,7 @@ export function EditorContent({
   const sent = useRef(new Set<string>());
   const editor = useCreateBlockNote({
     schema,
+    disableExtensions: history ? ['history'] : undefined,
     extensions: [
       SyntaxHighlightingExtension({
         createHighlighter: () =>
@@ -201,7 +246,10 @@ export function EditorContent({
       if (sent.current.delete(serialized)) return;
       const current = fromEditor(editor.document, original.current, codecs);
       original.current = blocks;
-      if (JSON.stringify(current) !== serialized) {
+      if (
+        JSON.stringify(comparableBlocks(current, schema)) !==
+        JSON.stringify(comparableBlocks(blocks, schema))
+      ) {
         applying.current = true;
         try {
           const reconcile = (before: Block[], after: Block[], parentId?: string) => {
@@ -284,10 +332,17 @@ export function EditorContent({
             if (applying.current) return;
             const previous = original.current;
             const next = fromEditor(editor.document, previous, codecs);
+            if (
+              JSON.stringify(comparableBlocks(next, schema)) ===
+              JSON.stringify(comparableBlocks(previous, schema))
+            )
+              return;
             original.current = next;
             sent.current.add(JSON.stringify(next));
             if (sent.current.size > 500) sent.current.delete(sent.current.values().next().value!);
-            onChange(next, previous);
+            const normalizedBefore = comparableBlocks(previous, schema);
+            const normalizedAfter = comparableBlocks(next, schema);
+            onChange(next, previous, typingBlock(normalizedBefore, normalizedAfter) ?? null);
           }}
         >
           {!readOnly && <MentionMenu />}
@@ -409,12 +464,17 @@ export function EditorContent({
             >
               <Code size={18} />
             </IconButton>
-            <IconButton label={t('common.undo')} onClick={() => editor.undo()}>
+            <IconButton
+              label={t('common.undo')}
+              disabled={history && !history.canUndo}
+              onClick={() => (history ? history.undo() : editor.undo())}
+            >
               <Undo2 size={18} />
             </IconButton>
             <IconButton
-              label={i18n.language === 'zh' ? '重做' : 'Redo'}
-              onClick={() => editor.redo()}
+              label={t('common.redo')}
+              disabled={history && !history.canRedo}
+              onClick={() => (history ? history.redo() : editor.redo())}
             >
               <Redo2 size={18} />
             </IconButton>

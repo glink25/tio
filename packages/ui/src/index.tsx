@@ -1,3 +1,4 @@
+export { EditHistoryContext, useDraftHistory, type EditHistory } from './edit-history';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useT } from '@tio/i18n';
 import { clsx, type ClassValue } from 'clsx';
