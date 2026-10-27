@@ -15,6 +15,8 @@ export const PortalContext = createContext<HTMLElement | undefined>(undefined);
 import { twMerge } from 'tailwind-merge';
 
 import { useMobileDialogPosition } from './mobile-dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
+export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
 export function cn(...values: ClassValue[]) {
   return twMerge(clsx(values));
 }
@@ -165,15 +167,25 @@ export function LanguageSwitcher({
   const t = useT();
 
   return (
-    <Button
-      aria-label={t('common.language')}
-      title={t('common.language')}
-      className="gap-1.5 px-2 text-xs"
-      onClick={() => onChange(value === 'zh' ? 'en' : 'zh')}
+    <Select
+      value={value}
+      onValueChange={(language) => {
+        if (language === 'zh' || language === 'en') onChange(language);
+      }}
     >
-      <Languages size={15} />
-      {value === 'zh' ? 'EN' : '中文'}
-    </Button>
+      <SelectTrigger
+        aria-label={t('common.language')}
+        title={t('common.language')}
+        className="w-36 gap-1.5 px-2 text-xs"
+      >
+        <Languages size={15} aria-hidden className="shrink-0" />
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="end">
+        <SelectItem value="zh">简体中文</SelectItem>
+        <SelectItem value="en">English</SelectItem>
+      </SelectContent>
+    </Select>
   );
 }
 export function ObjectIcon({

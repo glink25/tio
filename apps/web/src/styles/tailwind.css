@@ -299,3 +299,7 @@
 .login-brand header button {
   color: inherit;
 }
+.login-brand header [role='combobox'] {
+  border-color: #ffffff40;
+  background: transparent;
+}
