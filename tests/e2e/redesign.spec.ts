@@ -1,10 +1,12 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { finishWorkspaceCreation } from './ui-helpers';
 import { createChild } from './ui-helpers';
 async function start(page: Page) {
   await page.goto('/');
   await page.getByRole('button', { name: '本机', exact: true }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await expect(page.getByLabel('页面标题')).toHaveValue('开始');
 }
 async function viewSettings(page: Page) {
@@ -24,6 +26,7 @@ test('new page previews, workspace isolation, history and trash recovery', async
   await page.getByRole('button', { name: '切换工作空间', exact: true }).click();
   await expect(page.getByRole('button', { name: '重命名工作空间', exact: true })).toHaveCount(1);
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await expect(page.getByLabel('页面标题')).toHaveValue('开始');
   expect(page.url().split('/p/')[0]).not.toBe(firstUrl.split('/p/')[0]);
   await page.keyboard.press('ControlOrMeta+k');
@@ -35,9 +38,13 @@ test('new page previews, workspace isolation, history and trash recovery', async
   await page.locator('header').getByRole('button', { name: '更多操作', exact: true }).click();
   await page.getByRole('menuitem', { name: '移至回收站', exact: true }).click();
   await expect(page.getByText('已移至回收站', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '设置', exact: true }).click();
   await page.getByRole('button', { name: '回收站', exact: true }).click();
-  await expect(page.getByRole('dialog')).toContainText('空间 A 专属页面');
+  await expect(page.getByRole('dialog', { name: '回收站', exact: true })).toContainText(
+    '空间 A 专属页面',
+  );
   await page.getByRole('button', { name: '恢复', exact: true }).click();
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await expect(page.getByLabel('页面标题')).toHaveValue('空间 A 专属页面');
   await page.reload();

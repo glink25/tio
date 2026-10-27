@@ -85,6 +85,7 @@ export function BoardView({
                   />
                 ) : (
                   <Popover
+                    mobilePlacement="center"
                     label={field.name}
                     className="w-64"
                     trigger={

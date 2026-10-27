@@ -12,7 +12,11 @@ export function EditorDialogs({ model: m }: { model: EditorController }) {
     <>
       {m.recordId && <RecordDetail model={m} />}
       {m.fieldTarget && (
-        <Modal title={t('database.fieldManager')} close={() => m.setFieldDb(null)}>
+        <Modal
+          mobilePlacement={m.fieldId ? 'center' : 'sheet'}
+          title={t('database.fieldManager')}
+          close={() => m.setFieldDb(null)}
+        >
           {m.fieldId ? (
             <PropertyEditor
               database={m.fieldTarget}

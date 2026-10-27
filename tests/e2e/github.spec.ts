@@ -18,11 +18,16 @@ test('PAT discovery opens a replica and retains it offline without exposing repo
     sha: value.id,
     type: 'blob',
   }));
+  let failDiscovery = true;
   await page.route('https://api.github.com/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     let json: unknown;
-    if (path === '/user') json = { id: 71, login: 'tester' };
-    else if (path === '/user/repos')
+    if (path === '/user')
+      json = { id: 71, login: 'tester', avatar_url: 'https://avatars.githubusercontent.com/u/71' };
+    else if (path === '/user/repos' && failDiscovery) {
+      failDiscovery = false;
+      return route.fulfill({ status: 503, json: { message: 'Unavailable' } });
+    } else if (path === '/user/repos')
       json = [
         {
           id: 7,
@@ -48,15 +53,21 @@ test('PAT discovery opens a replica and retains it offline without exposing repo
     await route.fulfill({ json });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: 'GitHub', exact: true }).click();
+  await page.getByRole('button', { name: 'GitHub Token 登录', exact: true }).click();
   await expect(page.getByRole('dialog').locator('input')).toHaveCount(1);
   await expect(page.locator('#github-token')).toHaveAttribute('type', 'password');
   await page.locator('#github-token').fill('test-pat');
-  await page.getByRole('button', { name: '使用 Token 连接' }).click();
+  await page.getByRole('button', { name: 'GitHub Token 登录' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 10000 });
   await expect(page.getByRole('button', { name: '发现仓库', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('503');
+  await expect(page.getByRole('button', { name: '新建工作空间', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: '重试', exact: true }).click();
   await page.getByRole('button', { name: 'GitHub test space', exact: true }).click();
   await expect(page.getByText('Remote body', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: '设置', exact: true }).locator('img'),
+  ).toHaveAttribute('src', 'https://avatars.githubusercontent.com/u/71');
   await expect
     .poll(() =>
       page.evaluate(() =>

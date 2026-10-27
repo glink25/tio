@@ -1,5 +1,35 @@
 import { id, object, textBlock, visible, type TioObject } from '@tio/core';
 
+export function starterWorkspace(name: string, language: 'zh' | 'en' = 'zh'): TioObject[] {
+  if (!name.trim()) throw new Error('Workspace name is required');
+  const en = language === 'en';
+  const workspaceId = id('workspace');
+  const intro = textBlock(en ? 'A little space for your ideas.' : '留一点空间，记录你的想法。');
+  intro.content = [
+    { type: 'text', text: en ? 'Start here.' : '从这里开始。', styles: { bold: true } },
+    ...(intro.content as unknown[]),
+  ];
+  return [
+    object('workspace', workspaceId, { id: workspaceId, name: name.trim() }),
+    object('page', workspaceId, {
+      title: en ? 'Getting started' : '开始',
+      parentId: null,
+      order: 0,
+      blocks: [
+        intro,
+        {
+          ...textBlock(en ? 'Type / to add content.' : '输入 / 添加内容。'),
+          type: 'bulletListItem',
+        },
+        {
+          ...textBlock(en ? 'Select text to change its style.' : '选中文字，试试不同样式。'),
+          type: 'bulletListItem',
+        },
+      ],
+    }),
+  ];
+}
+
 export function sampleWorkspace(language: 'zh' | 'en' = 'zh'): TioObject[] {
   const tr = (zh: string, en: string) => (language === 'en' ? en : zh);
   const workspaceId = id('workspace');

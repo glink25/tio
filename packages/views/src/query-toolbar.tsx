@@ -80,6 +80,7 @@ export function QueryToolbar(p: RowsProps) {
         </div>
         <div className="flex items-center gap-0.5">
           <Popover
+            mobilePlacement="center"
             label={t('database.filter')}
             trigger={
               <IconButton
@@ -294,6 +295,7 @@ export function QueryToolbar(p: RowsProps) {
             </fieldset>
           </Popover>
           <Popover
+            mobilePlacement="center"
             label={t('ui.searchRecords')}
             trigger={
               <IconButton label={t('ui.searchRecords')} className="p-1.5">
@@ -310,6 +312,7 @@ export function QueryToolbar(p: RowsProps) {
             />
           </Popover>
           <Popover
+            mobilePlacement="center"
             label={t('ui.viewSettings')}
             trigger={
               <IconButton label={t('ui.viewSettings')} className="p-1.5">

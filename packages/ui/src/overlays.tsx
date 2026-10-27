@@ -124,6 +124,7 @@ export function Popover({
   label,
   modal = false,
   restoreFocus,
+  mobilePlacement,
 }: {
   trigger: ReactNode;
   children: ReactNode;
@@ -133,6 +134,7 @@ export function Popover({
   label?: string;
   modal?: boolean;
   restoreFocus?: () => void;
+  mobilePlacement?: 'sheet' | 'center';
 }) {
   const container = useContext(PortalContext);
   const mobile = useMobile();
@@ -149,7 +151,7 @@ export function Popover({
           onClick: () => change(!active),
         })}
         {active && (
-          <Modal title={label ?? ''} close={() => change(false)}>
+          <Modal mobilePlacement={mobilePlacement} title={label ?? ''} close={() => change(false)}>
             {children}
           </Modal>
         )}

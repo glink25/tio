@@ -5,7 +5,7 @@ import { t, i18n, errorMessage } from '@tio/i18n';
 import { exportZip, exportMarkdownZip, importZip } from '@tio/serialization';
 import { toast } from '@tio/ui';
 import {
-  sampleWorkspace,
+  starterWorkspace,
   newPage,
   newDatabase,
   WorkspaceRuntime,
@@ -21,6 +21,7 @@ import {
   credentials,
   loginGitHub,
 } from '../../services/github-auth';
+import { logoutCoordinator } from '../../services/logout';
 import { readRoute, writeRoute } from '../../services/navigation';
 import { WorkspaceServices } from '../../services/workspace-services';
 const emptyStore = createStore(() => emptyWorkspaceState);
@@ -43,6 +44,28 @@ export function useWorkspace() {
   const [syncStatus, setSyncStatus] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [creating, setCreating] = useState(false);
+  const creation = useRef<{ running: boolean; session?: WorkspaceSession }>({ running: false });
+  useEffect(() => {
+    if (!creating) creation.current = { running: false };
+  }, [creating]);
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
+  const [recent, setRecent] = useState<string>();
+  const coordinator = useRef<ReturnType<typeof logoutCoordinator> | null>(null);
+  useEffect(() => {
+    coordinator.current = logoutCoordinator(async () => {
+      setLoggingOut(true);
+      setLogoutOpen(true);
+      await services.abandon();
+      runtimeRef.current = null;
+      setRuntime(null);
+    });
+    return () => coordinator.current?.close();
+  }, [services]);
   const [githubOpen, setGithubOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -81,23 +104,36 @@ export function useWorkspace() {
     void (async () => {
       const loggedIn = await finishGitHubLogin();
       await services.initialize();
-      if (loggedIn && services.connection?.id !== `github-${credentials()?.userId}`)
-        await services.connect('github');
+      const restoringAuthorization =
+        loggedIn && services.connection?.id === `github-${credentials()?.userId}`;
+      if (loggedIn && !restoringAuthorization) await services.connect('github');
+      if (disposed) return;
+      setConnection(services.connection);
+      services.startSync(setSyncStatus);
+      const active = await services.setting('active');
+      setRecent(active);
+      const available = await services.sessions();
+      const route = readRoute();
+      const selected =
+        available.find((s) => s.workspaceId === route?.workspaceId) ??
+        (!loggedIn || restoringAuthorization ? available.find((s) => s.id === active) : undefined);
+      if (selected) {
+        await activate(selected);
+        await services.refreshRemote();
+      } else {
+        await services.refreshRemote(true);
+        const discovered = await services.sessions();
+        const linked = discovered.find((s) => s.workspaceId === route?.workspaceId);
+        if (linked) await activate(linked);
+      }
+      if (!disposed) await refreshSessions();
     })()
-      .then(async () => {
-        setConnection(services.connection);
-        services.startSync(setSyncStatus);
-        await refreshSessions();
-        const active = await services.setting('active');
-        const available = await services.sessions();
-        const route = readRoute();
-        const selected =
-          available.find((s) => s.workspaceId === route?.workspaceId) ??
-          available.find((s) => s.id === active);
-        if (selected) await activate(selected);
-        if (!disposed) await services.refreshRemote();
+      .catch((e) => {
+        if (!disposed) setLoadError(errorMessage(e));
       })
-      .catch((e) => setError(errorMessage(e)));
+      .finally(() => {
+        if (!disposed) setLoading(false);
+      });
     return () => {
       disposed = true;
       services.onChange = () => {};
@@ -142,8 +178,10 @@ export function useWorkspace() {
       setSyncStatus('');
       setError('');
       await services.setting('active', s.id);
+      setRecent(s.id);
       await refreshSessions();
       services.startSync(setSyncStatus);
+      return true;
     } catch (error) {
       setError(errorMessage(error));
       const previous = sessionRef.current;
@@ -241,22 +279,49 @@ export function useWorkspace() {
       void services.saveSession(next).catch((e) => setError(errorMessage(e)));
     }
   }
-  async function offline() {
-    setBusy(true);
+  async function loadSpaces() {
+    setLoading(true);
+    setLoadError('');
     try {
-      if (!services.connection) {
-        await services.connect('device');
-        setConnection(services.connection);
-        await refreshSessions();
-        return;
-      }
-      const s = await services.create(sampleWorkspace(i18n.language === 'en' ? 'en' : 'zh'));
-      setConnection(services.connection);
+      await services.refreshRemote(true);
       await refreshSessions();
-      await activate(s);
+    } catch (e) {
+      setLoadError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function offline() {
+    if (services.connection) {
+      setCreating(true);
+      return;
+    }
+    setLoading(true);
+    try {
+      await services.connect('device');
+      setConnection(services.connection);
+      await loadSpaces();
+    } catch (e) {
+      setLoadError(errorMessage(e));
+      setLoading(false);
+    }
+  }
+  async function createWorkspace(name: string) {
+    if (!name.trim() || creation.current.running) return;
+    creation.current.running = true;
+    setBusy(true);
+    setError('');
+    try {
+      const s =
+        creation.current.session ??
+        (await services.create(starterWorkspace(name, i18n.language === 'en' ? 'en' : 'zh')));
+      creation.current.session = s;
+      await refreshSessions();
+      if (await activate(s)) setCreating(false);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
+      creation.current.running = false;
       setBusy(false);
     }
   }
@@ -277,9 +342,8 @@ export function useWorkspace() {
       else if (services.connection.kind === 'github') await services.credentialsChanged();
       setConnection(services.connection);
       services.startSync(setSyncStatus);
-      await services.refreshRemote();
-      await refreshSessions();
       setGithubOpen(false);
+      await loadSpaces();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -293,8 +357,7 @@ export function useWorkspace() {
       await services.connect('folder', handle);
       setConnection(services.connection);
       services.startSync(setSyncStatus);
-      await refreshSessions();
-      await services.refreshRemote();
+      await loadSpaces();
     } catch (e) {
       if ((e as Error).name !== 'AbortError') setError(errorMessage(e));
     } finally {
@@ -315,16 +378,12 @@ export function useWorkspace() {
     }
   }
   async function logout() {
+    setLogoutError('');
+    setLoggingOut(true);
     try {
-      await services.disconnect();
-      setConnection(null);
-      runtimeRef.current = null;
-      setRuntime(null);
-      setSession(null);
-      await services.setting('active', null);
-      await refreshSessions();
+      await coordinator.current!.logout();
     } catch (error) {
-      setError(errorMessage(error));
+      setLogoutError(errorMessage(error));
     }
   }
   function addPage(parentId: string | null = null) {
@@ -468,6 +527,18 @@ export function useWorkspace() {
     }
   };
   return {
+    identity: services.identity,
+    loading,
+    loadError,
+    loadSpaces,
+    recent,
+    creating,
+    setCreating,
+    createWorkspace,
+    logoutOpen,
+    setLogoutOpen,
+    loggingOut,
+    logoutError,
     github,
     githubOpen,
     setGithubOpen,

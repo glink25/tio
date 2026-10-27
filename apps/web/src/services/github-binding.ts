@@ -18,7 +18,10 @@ export function githubBinding(connection: Connection): ConnectionBinding {
   const endpoints = new Map<string, GitHubEndpoint>(
     JSON.parse(localStorage.getItem(storageKey) ?? '[]'),
   );
-  const persist = () => localStorage.setItem(storageKey, JSON.stringify([...endpoints]));
+  let disposed = false;
+  const persist = () => {
+    if (!disposed) localStorage.setItem(storageKey, JSON.stringify([...endpoints]));
+  };
   const userId = Number(connection.id.replace('github-', ''));
   const client = new GitHubClient(() => {
     if (credentials()?.userId !== userId)
@@ -61,7 +64,7 @@ export function githubBinding(connection: Connection): ConnectionBinding {
       this.completeKey = `tio.github.complete.${this.instanceId}`;
     }
     markComplete() {
-      localStorage.setItem(this.completeKey, 'true');
+      if (!disposed) localStorage.setItem(this.completeKey, 'true');
     }
     private requireComplete() {
       if (!localStorage.getItem(this.completeKey))
@@ -101,6 +104,18 @@ export function githubBinding(connection: Connection): ConnectionBinding {
   }
   const replicas = new Map<string, Replica>();
   return {
+    dispose: () => {
+      disposed = true;
+    },
+    identity: {
+      provider: 'github',
+      name: connection.name,
+      get avatarUrl() {
+        return credentials()?.avatarUrl;
+      },
+      icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"%3E%3Ccircle cx="12" cy="12" r="9"/%3E%3Cpath d="M8 20v-4c-4-1-4-7-1-8V5l4 2h2l4-2v3c3 1 3 7-1 8v4"/%3E%3C/svg%3E',
+      details: [],
+    },
     adapter,
     repository: (workspaceId, instanceId) => {
       const store = new Replica(instanceId, workspaceId);

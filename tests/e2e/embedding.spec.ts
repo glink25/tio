@@ -68,8 +68,18 @@ test('isolated editor uses only host persistence and isolates instances', async 
     });
   });
   await expect(page.locator('#one .bn-editor')).toContainText('Written by native host');
-  await page.locator('#one').getByRole('button', { name: 'More actions', exact: true }).click();
-  await page.locator('#one').getByRole('menuitem', { name: 'Database', exact: true }).click();
+  await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    await f.executeBasic(f.repository, {
+      version: 1,
+      workspaceId: f.context.workspaceId,
+      type: 'createPage',
+      id: 'empty-dialog-page',
+      title: 'Empty page',
+    });
+    await f.one.open({ id: 'empty-dialog-page' });
+  });
+  await page.locator('#one').getByRole('button', { name: 'Databases', exact: true }).click();
   await expect(page.locator('#one').getByRole('dialog')).toBeVisible();
   await expect(page.locator('#two').getByRole('dialog')).toHaveCount(0);
   await page.keyboard.press('Escape');

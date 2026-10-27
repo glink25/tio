@@ -13,6 +13,8 @@ import {
 export { MentionContext, MentionLabel, MentionPicker } from './mentions';
 export const PortalContext = createContext<HTMLElement | undefined>(undefined);
 import { twMerge } from 'tailwind-merge';
+
+import { useMobileDialogPosition } from './mobile-dialog';
 export function cn(...values: ClassValue[]) {
   return twMerge(clsx(values));
 }
@@ -54,9 +56,11 @@ export function Modal({
   children,
   wide = false,
   sheet = false,
+  mobilePlacement = 'sheet',
 }: {
   wide?: boolean;
   sheet?: boolean;
+  mobilePlacement?: 'sheet' | 'center';
   title: string;
   description?: string;
   close: () => void;
@@ -64,6 +68,7 @@ export function Modal({
 }) {
   const t = useT();
   useOverlayBack(close);
+  const position = useMobileDialogPosition(mobilePlacement === 'center');
   return (
     <Dialog.Root
       open
@@ -74,7 +79,8 @@ export function Modal({
       <Dialog.Portal container={useContext(PortalContext)}>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
         <Dialog.Content
-          aria-describedby={description ? undefined : undefined}
+          style={position}
+          aria-describedby={undefined}
           className={cn(
             'tio-dialog fixed z-50 overflow-y-auto border border-line bg-panel p-5 text-ink shadow-xl outline-none',
             sheet
@@ -82,6 +88,7 @@ export function Modal({
               : wide
                 ? 'inset-0 md:inset-auto md:top-[6dvh] md:left-1/2 md:max-h-[88dvh] md:w-[min(1100px,92vw)] md:-translate-x-1/2 md:rounded-xl'
                 : 'bottom-0 left-0 max-h-[90dvh] w-full rounded-t-xl md:top-[12dvh] md:bottom-auto md:left-1/2 md:max-h-[76dvh] md:w-[min(550px,calc(100%-24px))] md:-translate-x-1/2 md:rounded-xl',
+            mobilePlacement === 'center' && 'max-md:rounded-xl',
           )}
         >
           <div className="mb-5 flex items-center justify-between gap-4">

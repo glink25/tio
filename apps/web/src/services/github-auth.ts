@@ -2,6 +2,7 @@ import { GitHubClient, GitHubError } from '@tio/provider-github';
 export interface Credentials {
   userId: number;
   login: string;
+  avatarUrl?: string;
   mode: 'pat' | 'app';
   accessToken: string;
   refreshToken?: string;
@@ -16,12 +17,14 @@ interface TokenPayload {
 }
 const key = 'tio.github.credentials';
 const attemptKey = 'tio.github.login';
+let generation = 0;
 export const authOrigin = import.meta.env.VITE_GITHUB_AUTH_URL as string | undefined;
 export function credentials(): Credentials | undefined {
   const value = localStorage.getItem(key);
   return value ? JSON.parse(value) : undefined;
 }
 export function clearCredentials() {
+  generation++;
   localStorage.removeItem(key);
   sessionStorage.removeItem(attemptKey);
 }
@@ -66,12 +69,22 @@ export async function accessToken(): Promise<string> {
   return refreshing;
 }
 export async function connectToken(token: string, expectedUserId?: number) {
-  const me = await new GitHubClient(async () => token).request<{ id: number; login: string }>(
-    '/user',
-  );
+  const started = generation;
+  const me = await new GitHubClient(async () => token).request<{
+    id: number;
+    login: string;
+    avatar_url?: string;
+  }>('/user');
   if (expectedUserId !== undefined && expectedUserId !== me.id)
     throw new Error('请使用原 GitHub 账号恢复连接');
-  const value: Credentials = { userId: me.id, login: me.login, mode: 'pat', accessToken: token };
+  if (started !== generation) throw new Error('GitHub login was cancelled');
+  const value: Credentials = {
+    userId: me.id,
+    login: me.login,
+    avatarUrl: me.avatar_url,
+    mode: 'pat',
+    accessToken: token,
+  };
   localStorage.setItem(key, JSON.stringify(value));
   return value;
 }
@@ -120,13 +133,20 @@ export async function finishGitHubLogin() {
   const me = await new GitHubClient(async () => token.accessToken).request<{
     id: number;
     login: string;
+    avatar_url?: string;
   }>('/user');
   if (sessionStorage.getItem(attemptKey) !== pending) throw new Error('GitHub login was cancelled');
   if (attempt.expectedUserId !== undefined && attempt.expectedUserId !== me.id)
     throw new Error('请使用原 GitHub 账号恢复连接');
   localStorage.setItem(
     key,
-    JSON.stringify({ ...token, userId: me.id, login: me.login, mode: 'app' }),
+    JSON.stringify({
+      ...token,
+      userId: me.id,
+      login: me.login,
+      avatarUrl: me.avatar_url,
+      mode: 'app',
+    }),
   );
   sessionStorage.removeItem(attemptKey);
   return true;

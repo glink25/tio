@@ -36,6 +36,9 @@ export class WorkspaceServices {
     return this.accessFor(this.active?.session.workspaceId);
   }
   onChange = () => {};
+  get identity() {
+    return this.binding?.identity;
+  }
   get supportsSync() {
     return this.binding?.adapter.supportsSync ?? false;
   }
@@ -121,8 +124,13 @@ export class WorkspaceServices {
       this.connection?.kind === 'github' ? 60000 : 5000,
     );
   }
+  private assertLive() {
+    if (this.abandoning) throw new Error('Connection is closed');
+  }
   async initialize() {
+    this.assertLive();
     const saved = await this.catalog.setting('connection');
+    this.assertLive();
     if (saved) {
       this.connection = saved.connection;
       this.handle = saved.handle;
@@ -131,7 +139,9 @@ export class WorkspaceServices {
     }
   }
   async connect(kind: Connection['kind'], handle?: FileSystemDirectoryHandle) {
+    this.assertLive();
     await this.disconnect(kind !== 'github');
+    this.assertLive();
     if (kind === 'github') {
       const auth = credentials();
       if (!auth) throw new Error('GitHub credentials missing');
@@ -142,6 +152,7 @@ export class WorkspaceServices {
     }
     const previous = await this.catalog.setting('folderIdentity');
     const same = handle && previous?.handle && (await handle.isSameEntry(previous.handle));
+    this.assertLive();
     this.connection = {
       id: kind === 'device' ? 'device' : same ? previous.id : id('connection'),
       kind,
@@ -159,24 +170,30 @@ export class WorkspaceServices {
     );
     return saved;
   }
-  async refreshRemote() {
+  async refreshRemote(strict = false) {
     const generation = this.generation,
       binding = this.binding;
     if (!this.syncStarted) {
       this.syncStarted = true;
       for (const entry of this.repositories.values()) entry.runner?.start();
     }
-    if (!binding || !binding.adapter.supportsSync || !(await this.checkAccess())) return;
+    if (!binding || !binding.adapter.supportsSync) return;
+    if (!(await this.checkAccess())) {
+      if (strict) throw new ConnectionAccessError(this.accessFor()!);
+      return;
+    }
     let discovered: TioObject[];
     try {
       discovered = await binding.discover();
     } catch (error) {
       if (generation === this.generation) this.setAccess(binding.adapter.classifyError(error));
+      if (strict) throw error;
       return;
     }
     if (generation !== this.generation) return;
     const saved = await this.sessions();
     for (const workspace of discovered) {
+      if (generation !== this.generation) return;
       const existing = saved.find((s) => s.workspaceId === workspace.id);
       if (existing) {
         if (binding.sync) this.repository(existing);
@@ -194,12 +211,15 @@ export class WorkspaceServices {
     this.onChange();
   }
   setting(key: string, ...value: [unknown?]) {
+    this.assertLive();
     return value.length ? this.catalog.setting(key, value[0]) : this.catalog.setting(key);
   }
   saveSession(session: WorkspaceSession) {
+    this.assertLive();
     return this.catalog.saveSession(session);
   }
   private repository(session: WorkspaceSession) {
+    this.assertLive();
     let entry = this.repositories.get(session.id);
     if (!entry) {
       if (!this.binding) throw new Error('Connection is not initialized');
@@ -267,6 +287,7 @@ export class WorkspaceServices {
     if (!this.connection) await this.connect('device');
     const workspace = objects.find((o) => o.type === 'workspace')!;
     await this.binding?.create?.(workspace.id);
+    this.assertLive();
     const session: WorkspaceSession = {
       id: this.connection!.id + '_' + workspace.id,
       workspaceId: workspace.id,
@@ -283,9 +304,17 @@ export class WorkspaceServices {
     };
     const { repository } = this.repository(session);
     const runtime = await WorkspaceRuntime.open(repository);
-    runtime.create(objects, undefined, assets);
-    await runtime.flush();
-    runtime.dispose();
+    if (this.abandoning) {
+      runtime.dispose(true);
+      this.assertLive();
+    }
+    try {
+      runtime.create(objects, undefined, assets);
+      await runtime.flush();
+    } finally {
+      runtime.dispose(true);
+    }
+    this.assertLive();
     await this.catalog.saveSession(session);
     return session;
   }
@@ -302,7 +331,9 @@ export class WorkspaceServices {
         targetId: session.selectedId,
       });
       try {
+        this.assertLive();
         await this.closeActive();
+        this.assertLive();
       } catch (error) {
         runtime.dispose();
         throw error;
@@ -423,7 +454,35 @@ export class WorkspaceServices {
       await this.catalog.setting('connection', null);
     });
   }
+  private abandoning?: Promise<void>;
+  abandon() {
+    if (this.abandoning) return this.abandoning;
+    this.invalidateConnection();
+    this.onChange = () => {};
+    this.status = () => {};
+    this.binding?.dispose?.();
+    clearCredentials();
+    this.active?.runtime.dispose(true);
+    this.active = undefined;
+    this.abandoning = this.transition(async () => {
+      this.active?.runtime.dispose(true);
+      this.active = undefined;
+      await Promise.all(
+        [...this.repositories.values()].map(async (entry) => {
+          entry.unsubscribe?.();
+          await entry.runner?.stop();
+          entry.repository.close();
+        }),
+      );
+      this.repositories.clear();
+      await this.catalog.close();
+      this.binding = undefined;
+      this.connection = null;
+    });
+    return this.abandoning;
+  }
   dispose() {
+    if (this.abandoning) return this.abandoning;
     this.invalidateConnection();
     return this.transition(async () => {
       await this.closeActive();

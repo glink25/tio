@@ -83,9 +83,6 @@ export function EditorSurface(props: EditorSurfaceProps) {
           {props.pageActions}
           {current.type === 'page' && (
             <>
-              <MenuItem disabled={!m.can(current)} onSelect={() => titleRef.current?.focus()}>
-                {t('ui.rename')}
-              </MenuItem>
               <MenuItem
                 onSelect={() => {
                   const next = !fullWidth;
@@ -103,15 +100,6 @@ export function EditorSurface(props: EditorSurfaceProps) {
               <MenuItem onSelect={() => m.setReadOnly(!m.readOnly)}>
                 <BookOpen size={15} />
                 {t(m.readOnly ? 'common.edit' : 'common.read')}
-              </MenuItem>
-              <MenuSeparator />
-              <MenuItem disabled={!m.can(current)} onSelect={() => m.addPage(current.id)}>
-                <Plus size={15} />
-                {t('page.child')}
-              </MenuItem>
-              <MenuItem disabled={!m.can(current)} onSelect={() => m.setEmbedPicker(true)}>
-                <Database size={15} />
-                {t('document.embed')}
               </MenuItem>
             </>
           )}

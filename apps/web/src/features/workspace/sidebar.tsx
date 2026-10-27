@@ -22,14 +22,11 @@ import {
   Plus,
   ChevronsUpDown,
   Check,
-  Settings,
   Trash2,
   MoreHorizontal,
   Star,
   ChevronRight,
   PanelLeftClose,
-  FolderOpen,
-  HardDrive,
   FileText,
   Database,
   Pencil,
@@ -37,6 +34,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
+import { Identity } from '../../components/identity';
 import type { WorkspaceController } from './use-workspace';
 
 export function WorkspaceSwitcher({
@@ -48,6 +46,7 @@ export function WorkspaceSwitcher({
 }) {
   return (
     <Popover
+      mobilePlacement="center"
       open={m.menu}
       onOpenChange={m.setMenu}
       label={t('ui.switch')}
@@ -60,9 +59,6 @@ export function WorkspaceSwitcher({
             compact ? 'max-w-44 px-1 text-xs' : 'w-full px-2 text-sm',
           )}
         >
-          <span className="flex size-6 shrink-0 items-center justify-center rounded bg-surface-hover text-xs">
-            {(m.workspace?.name ?? m.session?.name ?? 'T').slice(0, 1)}
-          </span>
           <span className="truncate">{m.workspace?.name ?? m.session?.name}</span>
           <ChevronsUpDown size={14} className="ml-auto shrink-0 text-muted" />
         </Button>
@@ -106,18 +102,7 @@ export function WorkspaceSwitcher({
           <Pencil size={16} />
           {t('workspace.rename')}
         </Button>
-        <Button
-          className="w-full justify-start"
-          onClick={() => {
-            m.setMenu(false);
-            m.setSettingsOpen(true);
-          }}
-        >
-          <Settings size={16} />
-          {t('ui.settings')}
-        </Button>
       </div>
-      <p className="px-2 pt-2 text-xs text-muted">{t('ui.isolated')}</p>
     </Popover>
   );
 }
@@ -237,21 +222,12 @@ export function Sidebar({ model: m }: { model: WorkspaceController }) {
         </nav>
       </div>
       <div className="mt-3 border-t border-line pt-2">
-        <Button className="w-full justify-start text-xs" onClick={() => m.setTrashOpen(true)}>
-          <Trash2 size={16} />
-          {t('ui.trash')}
-        </Button>
-        <Button className="w-full justify-start text-xs" onClick={() => m.setSettingsOpen(true)}>
-          <Settings size={16} />
-          {t('ui.settings')}
-        </Button>
         <Button
-          className="mt-2 w-full justify-start text-xs text-muted"
+          className="w-full justify-start text-sm"
+          aria-label={t('ui.settings')}
           onClick={() => m.setSettingsOpen(true)}
         >
-          {m.connection?.kind === 'folder' ? <FolderOpen size={14} /> : <HardDrive size={14} />}
-          <span className="truncate">{m.connection?.name ?? t('workspace.localStorage')}</span>
-          <span className="ml-auto size-1.5 shrink-0 rounded-full bg-sage" aria-hidden="true" />
+          <Identity identity={m.identity} />
         </Button>
       </div>
     </div>

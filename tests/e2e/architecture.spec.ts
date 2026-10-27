@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 
+import { finishWorkspaceCreation } from './ui-helpers';
 import { settings, setLight } from './ui-helpers';
 
 test('one folder connection writes independent spaces directly without an editor', async ({
@@ -82,6 +83,7 @@ test('host and editor computed colors follow host preferences across navigation 
   await page.goto('/');
   await page.getByRole('button', { name: '本机', exact: true }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await expect(page.getByLabel('页面标题')).toBeVisible();
   await expect(page.locator('aside')).toHaveCSS('background-color', 'rgb(32, 32, 32)');
   await expect(page.locator('.tio-editor')).toHaveCSS('background-color', 'rgb(25, 25, 25)');
@@ -124,6 +126,7 @@ for (const permission of ['prompt', 'denied']) {
     });
     await page.getByRole('button', { name: '连接本地文件夹', exact: false }).click();
     await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+    await finishWorkspaceCreation(page);
     await page.getByLabel('页面标题').fill('授权前的文档');
     await expect
       .poll(() =>
@@ -147,7 +150,7 @@ for (const permission of ['prompt', 'denied']) {
         }),
       )
       .toBe(true);
-    await expect(page.locator('header output').filter({ hasText: '已保存本地' })).toBeVisible();
+    await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
     await page.evaluate(
       (value) => localStorage.setItem('test.folder.permission', value),
       permission,
@@ -201,9 +204,9 @@ test('a restored folder connection without cached spaces exposes recovery in the
     await service.dispose();
   }, '/@fs' + process.cwd());
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'no-cache' })).toBeVisible();
+  await expect(page.getByText('local/no-cache', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '需要重新授权' }).click();
-  await expect(page.getByRole('heading', { name: 'no-cache' })).toBeVisible();
+  await expect(page.getByText('local/no-cache', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: '需要重新授权' })).toBeVisible();
   await expect(page.getByLabel('页面标题')).toHaveCount(0);
 });

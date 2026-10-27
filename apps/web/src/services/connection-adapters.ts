@@ -2,6 +2,7 @@ import { FolderConnectionAdapter } from '@tio/adapter-local-folder';
 import {
   connectionError,
   type Connection,
+  type ConnectionIdentity,
   type ConnectionAdapter,
   type TioObject,
 } from '@tio/core';
@@ -9,11 +10,14 @@ import type { WorkspaceContentPort } from '@tio/core';
 import type { WorkspaceRepository } from '@tio/core';
 import { WorkerSearch } from '@tio/database/search-browser';
 import { FileWorkspaceContent, FileRepository, type FileJournalState } from '@tio/file-storage';
+import { t } from '@tio/i18n';
 import { LocalStore, RecoveryJournal } from '@tio/local-store';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
 
 import { githubBinding } from './github-binding';
 export interface ConnectionBinding {
+  dispose?(): void;
+  identity: ConnectionIdentity;
   adapter: ConnectionAdapter;
   repository(workspaceId: string, instanceId: string): WorkspaceRepository & { close(): void };
   discover(): Promise<TioObject[]>;
@@ -48,6 +52,15 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
   if (connection.kind === 'github') return githubBinding(connection);
   if (connection.kind === 'device')
     return {
+      identity: {
+        provider: 'local',
+        get name() {
+          return t('welcome.offline');
+        },
+        icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"%3E%3Crect x="3" y="5" width="18" height="14" rx="2"/%3E%3Cpath d="M3 14h18m-5 3h2"/%3E%3C/svg%3E',
+        details: [],
+        localOnly: true,
+      },
       adapter: {
         supportsSync: false,
         getAccessState: async () => ({ code: 'available', scope: { connectionId: connection.id } }),
@@ -63,6 +76,14 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
   const adapter = new FolderConnectionAdapter(connection.id, handle);
   const provider = handle && new LocalFolderProvider(handle);
   return {
+    identity: {
+      provider: 'local',
+      name: connection.name,
+      icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"%3E%3Cpath d="M3 7V5h6l2 2h10v13H3z"/%3E%3C/svg%3E',
+      get details() {
+        return [{ label: t('workspace.folderMode'), value: connection.name }];
+      },
+    },
     adapter,
     repository(workspaceId, instanceId) {
       if (!provider) throw new Error('Folder unavailable');

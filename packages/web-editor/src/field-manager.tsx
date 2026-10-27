@@ -41,7 +41,7 @@ export function FieldManager({
         {t('database.addField')}
       </Button>
       {editing && (
-        <Modal title={t('ui.editProperty')} close={() => setEditing(null)}>
+        <Modal mobilePlacement="center" title={t('ui.editProperty')} close={() => setEditing(null)}>
           <PropertyEditor
             database={database}
             field={fields.find((f) => f.id === editing)}

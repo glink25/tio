@@ -1,7 +1,7 @@
 import { titleOf } from '@tio/core';
 import { t, errorMessage } from '@tio/i18n';
 import { Button, Modal } from '@tio/ui';
-import { FileText } from 'lucide-react';
+import { FileText, Trash2 } from 'lucide-react';
 
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { SearchDialog } from './search-dialog';
@@ -10,7 +10,11 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
   return (
     <>
       {m.renaming && (
-        <Modal title={t('workspace.rename')} close={() => m.setRenaming(false)}>
+        <Modal
+          mobilePlacement="center"
+          title={t('workspace.rename')}
+          close={() => m.setRenaming(false)}
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -34,7 +38,7 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
       {m.searching && <SearchDialog model={m} />}
       {m.settingsOpen && <SettingsDialog model={m} />}
       {m.renameId && (
-        <Modal title={t('ui.rename')} close={() => m.setRenameId(null)}>
+        <Modal mobilePlacement="center" title={t('ui.rename')} close={() => m.setRenameId(null)}>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -60,7 +64,6 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
       )}
       {m.trashOpen && (
         <Modal title={t('ui.trash')} close={() => m.setTrashOpen(false)}>
-          <p className="mb-4 text-sm text-muted">{t('ui.trashHint')}</p>
           {m.objects
             .filter((o) => o.deleted && ['page', 'database', 'record'].includes(o.type))
             .map((o) => (
@@ -73,7 +76,9 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
               </div>
             ))}
           {!m.objects.some((o) => o.deleted && ['page', 'database', 'record'].includes(o.type)) && (
-            <p className="py-8 text-center text-muted">{t('ui.emptyTrash')}</p>
+            <div className="flex justify-center py-12 text-muted" aria-label={t('ui.emptyTrash')}>
+              <Trash2 size={32} aria-hidden="true" />
+            </div>
           )}
         </Modal>
       )}

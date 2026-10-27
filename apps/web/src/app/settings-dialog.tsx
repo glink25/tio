@@ -2,15 +2,15 @@ import { t, translateStatus } from '@tio/i18n';
 import { Button, Modal, ThemeSwitcher, LanguageSwitcher, cn } from '@tio/ui';
 import { useState } from 'react';
 
+import { Identity } from '../components/identity';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { usePresentation, setPresentation } from '../services/browser-presentation';
-const sections = ['appearance', 'workspace', 'storage', 'transfer'] as const;
+const sections = ['general', 'storage', 'transfer'] as const;
 export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
   const [section, setSection] = useState<(typeof sections)[number] | null>(null);
   const presentation = usePresentation();
-  const selected = section ?? 'appearance';
-  const label = (key: typeof selected) =>
-    key === 'workspace' ? t('workspace.name') : t(`ui.${key}`);
+  const selected = section ?? 'general';
+  const label = (key: typeof selected) => t(`ui.${key}`);
   return (
     <Modal wide title={t('ui.settings')} close={() => m.setSettingsOpen(false)}>
       <div className="flex min-h-[55dvh] flex-col gap-6 md:flex-row">
@@ -24,13 +24,21 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
               {label(key)}
             </Button>
           ))}
+          <Button
+            className="w-full justify-start"
+            onClick={() => {
+              m.setTrashOpen(true);
+            }}
+          >
+            {t('ui.trash')}
+          </Button>
         </nav>
         <section className={cn('min-w-0 flex-1 md:px-7', !section && 'hidden md:block')}>
           <Button className="mb-4 md:hidden" onClick={() => setSection(null)}>
             ← {t('ui.back')}
           </Button>
           <h2 className="mb-7 text-2xl font-semibold">{label(selected)}</h2>
-          {selected === 'appearance' && (
+          {selected === 'general' && (
             <div className="space-y-6">
               <div className="flex items-center justify-between border-b border-line pb-5">
                 <span>{t('ui.appearance')}</span>
@@ -48,40 +56,22 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
               </div>
             </div>
           )}
-          {selected === 'workspace' && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted">{t('ui.isolated')}</p>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const name = new FormData(e.currentTarget).get('name');
-                  if (typeof name === 'string') m.renameWorkspace(name);
-                }}
-              >
-                <label className="block text-sm">
-                  {t('workspace.rename')}
-                  <input
-                    name="name"
-                    required
-                    defaultValue={m.workspace?.name}
-                    className="mt-2 w-full"
-                  />
-                </label>
-                <Button variant="primary" className="mt-4" type="submit">
-                  {t('ui.done')}
-                </Button>
-              </form>
-            </div>
-          )}
           {selected === 'storage' && (
             <div className="space-y-4">
-              <p>{m.connection?.name ?? t('workspace.localStorage')}</p>
+              <div className="flex items-center gap-3">
+                <Identity identity={m.identity} />
+              </div>
+              {m.identity?.details.map((detail) => (
+                <div key={detail.label} className="text-sm">
+                  <span className="text-muted">{detail.label}</span> · {detail.value}
+                </div>
+              ))}
               <p className="text-sm text-muted">
                 {translateStatus(m.saveStatus)} · {translateStatus(m.syncStatus)}
               </p>
               {m.supportsSync && (
                 <Button variant="outline" onClick={() => void m.syncNow()}>
-                  {t('sync.showIssues')}
+                  {t('sync.now')}
                 </Button>
               )}
               {m.issues.length > 0 && (
@@ -90,7 +80,7 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
               <Button className="block" onClick={() => void m.retrySave()}>
                 {t('common.retry')}
               </Button>
-              <Button className="block" onClick={() => void m.logout()}>
+              <Button className="block" onClick={() => m.setLogoutOpen(true)}>
                 {t('workspace.disconnect')}
               </Button>
             </div>

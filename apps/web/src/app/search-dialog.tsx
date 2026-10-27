@@ -80,7 +80,12 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
     return names.join(' / ');
   };
   return (
-    <Modal wide title={t('workspace.searchTitle')} close={() => m.setSearching(false)}>
+    <Modal
+      mobilePlacement="center"
+      wide
+      title={t('workspace.searchTitle')}
+      close={() => m.setSearching(false)}
+    >
       <Command shouldFilter={false} value={item?.id ?? ''} onValueChange={setSelected}>
         <CommandInput
           aria-label={t('workspace.search')}

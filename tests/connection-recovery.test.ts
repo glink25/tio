@@ -8,6 +8,8 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import { WorkspaceServices } from '../apps/web/src/services/workspace-services';
 const services: WorkspaceServices[] = [];
 beforeEach(() => {
+  vi.stubGlobal('localStorage', { removeItem() {} });
+  vi.stubGlobal('sessionStorage', { removeItem() {} });
   vi.stubGlobal('document', {
     visibilityState: 'visible',
     addEventListener() {},
@@ -41,6 +43,7 @@ function fixture(create?: (id: string) => Promise<void>) {
   };
   const discover = vi.fn(async () => []);
   const service = new WorkspaceServices(() => ({
+    identity: { provider: 'test', name: 'test', icon: '', details: [] },
     adapter,
     create,
     repository: (_id, instance) => new LocalStore(instance),
@@ -207,4 +210,50 @@ it('uses the new workspace identity after creation fails', async () => {
   const other = crypto.randomUUID();
   await service.create([object('workspace', other, { id: other })]);
   expect(create.mock.calls.map(([id]) => id)).toEqual([workspaceId, other]);
+});
+
+it('surfaces discovery failures to entry screens while background refresh remains quiet', async () => {
+  const { service, discover, set } = fixture();
+  await service.connect('device');
+  set('available');
+  discover.mockRejectedValue(new Error('discovery failed'));
+  await expect(service.refreshRemote(true)).rejects.toThrow('discovery failed');
+  await expect(service.refreshRemote()).resolves.toBeUndefined();
+});
+
+it('abandon discards pending changes and rejects subsequent host writes', async () => {
+  const { service } = fixture();
+  await service.connect('device');
+  const space = crypto.randomUUID();
+  const session = await service.create([
+    object('workspace', space, { id: space, name: 'Discard' }),
+    object('page', space, { id: 'discard-page', title: 'Before', blocks: [] }),
+  ]);
+  const runtime = await service.open(session);
+  runtime.patch('discard-page', { title: 'Pending' });
+  const close = vi.spyOn(runtime, 'close').mockRejectedValue(new Error('Save failed'));
+  await service.abandon();
+  expect(close).not.toHaveBeenCalled();
+  expect(runtime.state.getState().lifecycle).toBe('closed');
+  expect(() => service.setting('active', session.id)).toThrow('Connection is closed');
+  await expect(service.open(session)).rejects.toThrow('Connection is closed');
+});
+
+it('late discovery cannot register spaces after abandoning the connection', async () => {
+  const { service, discover, set } = fixture();
+  await service.connect('device');
+  set('available');
+  let resolve!: (value: never[]) => void;
+  discover.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  const discovering = service.refreshRemote();
+  await vi.waitFor(() => expect(discover).toHaveBeenCalled());
+  await service.abandon();
+  resolve([]);
+  await discovering;
+  expect(service.connection).toBeNull();
 });

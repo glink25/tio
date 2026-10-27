@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 
 import { test, expect } from '@playwright/test';
 
+import { finishWorkspaceCreation } from './ui-helpers';
 import { createChild } from './ui-helpers';
 
 const ledgerSlice = readFileSync('docs/examples/web-slice-ledger.html', 'utf8');
@@ -245,6 +246,7 @@ test('Web host persists a Slice grant and ledger records across a reload', async
   await page.goto('/');
   await page.getByRole('button', { name: '本机', exact: true }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await expect(page.getByLabel('页面标题')).toBeVisible();
   await createChild(page, 'Web Slice App');
   await page.locator('.bn-editor').click();

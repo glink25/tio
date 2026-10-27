@@ -1,3 +1,12 @@
+/** Provider-owned, framework-independent identity presentation. */
+export interface ConnectionIdentity {
+  provider: string;
+  name: string;
+  icon: string;
+  avatarUrl?: string;
+  details: { label: string; value: string }[];
+  localOnly?: boolean;
+}
 export type ConnectionAccessCode =
   | 'available'
   | 'reauthorization-required'

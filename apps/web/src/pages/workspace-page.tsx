@@ -1,10 +1,11 @@
 import { titleOf, type TioObject } from '@tio/core';
-import { t, translateStatus } from '@tio/i18n';
+import { t } from '@tio/i18n';
 import { Button, IconButton, MenuItem, Modal, cn, useMobile } from '@tio/ui';
 import { EditorSurface, type WebSlicePermissionStore } from '@tio/web-editor';
 import { ChevronRight, PanelLeft, Star, Move, Maximize2 } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 
+import { SyncStatus } from '../components/sync-status';
 import { Sidebar, WorkspaceSwitcher } from '../features/workspace/sidebar';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { usePresentation } from '../services/browser-presentation';
@@ -86,29 +87,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
         </span>
       </div>
       <div className="flex shrink-0 items-center gap-1">
-        <output
-          className={cn(
-            'hidden text-xs text-muted sm:block',
-            m.saveStatus.includes('失败') && 'text-red-600',
-          )}
-          aria-live="polite"
-        >
-          {translateStatus(m.saveStatus)}
-        </output>
-        {m.supportsSync && (
-          <Button
-            className="max-w-28 truncate p-1 text-xs text-muted"
-            title={translateStatus(m.syncStatus)}
-            onClick={() => void m.syncNow()}
-          >
-            {translateStatus(m.syncStatus)}
-          </Button>
-        )}
-        {m.issues.length > 0 && (
-          <Button className="text-xs" onClick={() => m.setIssuesOpen(true)}>
-            {t('sync.showIssues')}
-          </Button>
-        )}
+        <SyncStatus model={m} />
         {current && (
           <IconButton
             label={t('workspace.favorite')}

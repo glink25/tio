@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 
+import { finishWorkspaceCreation } from './ui-helpers';
 import { settings, setLight, createChild } from './ui-helpers';
 test('offline editing, database, board, persistence and backup', async ({ page }) => {
   const errors: string[] = [];
@@ -8,9 +9,10 @@ test('offline editing, database, board, persistence and backup', async ({ page }
   await expect(page.getByRole('heading', { name: 'Tio' })).toBeVisible();
   await page.getByRole('button', { name: '本机' }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await expect(page.getByLabel('页面标题')).toHaveValue('开始');
   await page.getByLabel('页面标题').fill('我的测试笔记');
-  await expect(page.getByText('已保存本地', { exact: true })).toBeVisible();
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
   const editor = page.locator('.bn-editor').first();
   await editor.click();
   await page.keyboard.press('ControlOrMeta+End');
@@ -59,6 +61,7 @@ test('mobile layout can create and edit a record', async ({ page }) => {
   await page.screenshot({ path: 'test-results/mobile-welcome.png', fullPage: true });
   await page.getByRole('button', { name: '本机' }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await expect(page.getByLabel('页面标题')).toBeVisible();
   await page.getByRole('button', { name: '新建', exact: true }).click();
   await expect(page.getByLabel('名称', { exact: true })).toBeVisible();
@@ -115,9 +118,10 @@ test('folder entry, direct writes, external changes and catalog-free discovery',
   await installPicker();
   await page.getByRole('button', { name: '连接本地文件夹', exact: false }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
-  await expect(page.locator('header output').filter({ hasText: '已保存本地' })).toBeVisible();
+  await finishWorkspaceCreation(page);
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
   await page.getByLabel('页面标题').fill('文件夹中的文档');
-  await expect(page.locator('header output').filter({ hasText: '已保存本地' })).toBeVisible();
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
   await expect
     .poll(async () =>
       page.evaluate(async () => {
@@ -154,29 +158,22 @@ test('folder entry, direct writes, external changes and catalog-free discovery',
       }
     }
   });
-  await page.getByRole('button', { name: '已保存本地', exact: true }).click();
+  await page
+    .locator('header')
+    .getByRole('button', { name: /^已保存本地/ })
+    .click();
   await expect(page.getByLabel('页面标题')).toHaveValue('外部修改的文档');
-  await settings(page, '存储与同步');
-  await page.getByRole('button', { name: '返回入口 / 断开会话' }).click();
-  await page.evaluate(async () => {
-    const req = indexedDB.open('tio-workspaces');
-    const db: IDBDatabase = await new Promise((resolve, reject) => {
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    });
-    const tx = db.transaction(['objects', 'assets', 'sessions', 'settings'], 'readwrite');
-    for (const name of ['objects', 'assets', 'sessions', 'settings']) tx.objectStore(name).clear();
-    await new Promise<void>((r, j) => {
-      tx.oncomplete = () => r();
-      tx.onerror = () => j(tx.error);
-    });
-    db.close();
-  });
-  await page.reload();
+  await settings(page, '同步');
+  await page.getByRole('button', { name: '退出登录', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: '退出登录', exact: true })
+    .getByRole('button', { name: '退出登录', exact: true })
+    .click();
+  await expect(page.getByRole('heading', { name: 'Tio' })).toBeVisible();
   await installPicker();
   await page.getByRole('button', { name: '连接本地文件夹', exact: false }).click();
   await page.getByRole('button', { name: '我的工作空间', exact: true }).click();
-  await expect(page.locator('header output').filter({ hasText: '已保存本地' })).toBeVisible();
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
   await page
     .locator('nav')
     .getByRole('button', { name: '外部修改的文档', exact: true })
@@ -188,8 +185,9 @@ test('production PWA reloads and reopens offline with saved content', async ({ p
   await page.goto('http://127.0.0.1:4175/');
   await page.getByRole('button', { name: '本机' }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await page.getByLabel('页面标题').fill('离线重开验证');
-  await expect(page.getByText('已保存本地', { exact: true })).toBeVisible();
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
   await page.evaluate(async () => {
     await navigator.serviceWorker.ready;
   });
@@ -206,13 +204,16 @@ test('production PWA reloads and reopens offline with saved content', async ({ p
 
 test('English and Chinese UI switch instantly, persist, and preserve content', async ({ page }) => {
   await page.goto('/');
+  await page.getByRole('button', { name: '本机', exact: true }).click();
+  await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page, false);
+  await settings(page);
   await page.getByRole('button', { name: '语言', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Tio' })).toBeVisible();
-  await page.getByRole('button', { name: 'This device' }).click();
-  await page.getByRole('button', { name: 'New workspace', exact: true }).click();
-  await expect(page.getByLabel('Page title')).toHaveValue('Getting started');
+  await page.keyboard.press('Escape');
   await page.getByLabel('Page title').fill('My own content');
-  await expect(page.getByText('Saved locally', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('header').getByRole('button', { name: /^Saved locally/ }),
+  ).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('Page title')).toHaveValue('My own content');
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
@@ -234,6 +235,7 @@ test('nested pages, references, workspace rename and dark theme persist', async 
   await expect(page.locator('html')).toHaveClass('dark');
   await page.getByRole('button', { name: '本机', exact: true }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await page.getByLabel('页面标题').fill('');
   await page.getByLabel('页面标题').pressSequentially('Parent page');
   await expect(page.getByLabel('页面标题')).toHaveValue('Parent page');
@@ -250,7 +252,7 @@ test('nested pages, references, workspace rename and dark theme persist', async 
   await page.getByRole('button', { name: '重命名工作空间' }).click();
   await page.getByRole('textbox', { name: '重命名工作空间' }).fill('我的知识库');
   await page.getByRole('dialog').getByRole('button', { name: '编辑', exact: true }).click();
-  await expect(page.getByText('已保存本地', { exact: true })).toBeVisible();
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('页面标题')).toHaveValue('孙页面');
   await expect(page.locator('html')).toHaveClass('dark');
@@ -279,6 +281,7 @@ test('slash commands create nested pages', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '本机', exact: true }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await createChild(page, '斜杠父页');
   await page.locator('.bn-editor').click();
   await page.keyboard.type('/page');
@@ -296,8 +299,9 @@ test('backup import restores editable pages and names in a separate workspace', 
   await page.goto('/');
   await page.getByRole('button', { name: '本机', exact: true }).click();
   await page.getByRole('button', { name: '新建工作空间', exact: true }).click();
+  await finishWorkspaceCreation(page);
   await page.getByLabel('页面标题').fill('备份中的页面');
-  await expect(page.getByText('已保存本地', { exact: true })).toBeVisible();
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
   const downloading = page.waitForEvent('download');
   await settings(page, '导入与导出');
   await page.getByRole('button', { name: '导出完整备份', exact: true }).click();
@@ -309,7 +313,7 @@ test('backup import restores editable pages and names in a separate workspace', 
   await page.locator('input[type="file"]').setInputFiles(path!);
   await expect(page.getByLabel('页面标题')).toHaveValue('备份中的页面');
   await page.getByLabel('页面标题').fill('导入后可编辑');
-  await expect(page.getByText('已保存本地', { exact: true })).toBeVisible();
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
   await page.reload();
   await expect(page.getByLabel('页面标题')).toHaveValue('导入后可编辑');
   await setLight(page);

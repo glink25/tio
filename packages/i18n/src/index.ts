@@ -46,6 +46,11 @@ export function errorMessage(error: unknown): string {
   return key ? t(key) : i18n.language === 'zh' ? message : t('errors.details', { message });
 }
 const errorKeys: Record<string, TranslationKey> = {
+  'reauthorization-required': 'status.reauthorize',
+  unreachable: 'status.unreachable',
+  unrecoverable: 'status.unrecoverable',
+  forbidden: 'status.permission',
+  'Close other tio tabs and retry.': 'errors.closeTabs',
   '内容已在另一个窗口更新，请重试': 'errors.stale',
   '附件不能超过 20 MB': 'errors.assetSize',
   请选择只包含一个工作空间的备份: 'errors.singleWorkspace',

@@ -310,6 +310,7 @@ export function GridView(props: RowsProps) {
       </div>
       {editing && fields[editing[0]] && rows[editing[1]] && (
         <Popover
+          mobilePlacement="center"
           modal
           restoreFocus={() => gridRef.current?.focus()}
           open
