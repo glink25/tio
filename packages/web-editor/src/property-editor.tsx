@@ -15,8 +15,16 @@ import {
   formulaSource,
 } from '@tio/database';
 import { useT, type TranslationKey } from '@tio/i18n';
-import { Button, IconButton } from '@tio/ui';
-import { useViewExtensions } from '@tio/views';
+import {
+  Button,
+  IconButton,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from '@tio/ui';
+import { optionPalette, useViewExtensions } from '@tio/views';
 import { Plus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 const types = [
@@ -222,23 +230,32 @@ export function PropertyEditor({
                   })
                 }
               />
-              <select
-                aria-label={t('database.color')}
+              <Select
                 value={option.color ?? 'gray'}
-                onChange={(e) =>
+                onValueChange={(color) =>
                   patch({
-                    options: draft.options!.map((o) =>
-                      o.id === option.id ? { ...o, color: e.target.value } : o,
-                    ),
+                    options: draft.options!.map((o) => (o.id === option.id ? { ...o, color } : o)),
                   })
                 }
               >
-                {fieldColors.map((color) => (
-                  <option key={color} value={color}>
-                    {color}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-32 shrink-0" aria-label={t('database.color')}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {fieldColors.map((color) => (
+                    <SelectItem key={color} value={color}>
+                      <span className="inline-flex items-center gap-2">
+                        <span
+                          aria-hidden
+                          className="size-3 shrink-0 rounded-sm"
+                          style={{ backgroundColor: optionPalette[color] }}
+                        />
+                        {t(`database.color.${color}`)}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {draft.type === 'status' && (
                 <select
                   aria-label={t('database.group')}

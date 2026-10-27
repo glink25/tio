@@ -73,7 +73,11 @@ export function RecordContent({ model: m }: { model: EditorController }) {
             >
               <span className="text-xs text-muted">{f.name}</span>
               <FieldInput
-                key={`${record.id}:${f.id}:${JSON.stringify(record.properties?.[f.id])}`}
+                key={
+                  ['mention', 'relation'].includes(f.type)
+                    ? `${record.id}:${f.id}`
+                    : `${record.id}:${f.id}:${JSON.stringify(record.properties?.[f.id])}`
+                }
                 field={f}
                 record={record}
                 readOnly={m.readOnly || !editable(record) || !editable(db) || !m.can(record, f.id)}
@@ -88,23 +92,29 @@ export function RecordContent({ model: m }: { model: EditorController }) {
           </div>
         ))}
       </div>
-      <hr className="my-8 border-line" />
-      {editable(record) ? (
-        <Editor
-          key={record.id}
-          blocks={record.blocks ?? []}
-          readOnly={!m.can(record)}
-          onChange={(b, p) => m.changeBlocks(record, b, p)}
-          upload={m.upload}
-          resolve={m.resolve}
-          renderWebSlice={(block) => <WebSlice model={m} page={record} block={block} />}
-          renderDatabase={(databaseId, viewId) => (
-            <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />
-          )}
-        />
-      ) : (
-        <EmptyNotice>{t('document.unsupported')}</EmptyNotice>
-      )}
+      <section
+        aria-label={t('database.recordBody')}
+        className="mt-8 border-t border-line pt-6 [&_.bn-editor]:min-h-28 [&_.bn-editor]:cursor-text"
+      >
+        <h2 className="mb-3 text-xs font-medium text-muted">{t('database.recordBody')}</h2>
+        {editable(record) ? (
+          <Editor
+            key={record.id}
+            placeholder={t('database.recordBodyPlaceholder')}
+            blocks={record.blocks ?? []}
+            readOnly={!m.can(record)}
+            onChange={(b, p) => m.changeBlocks(record, b, p)}
+            upload={m.upload}
+            resolve={m.resolve}
+            renderWebSlice={(block) => <WebSlice model={m} page={record} block={block} />}
+            renderDatabase={(databaseId, viewId) => (
+              <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />
+            )}
+          />
+        ) : (
+          <EmptyNotice>{t('document.unsupported')}</EmptyNotice>
+        )}
+      </section>
     </div>
   );
 }

@@ -125,7 +125,9 @@ export function Popover({
   modal = false,
   restoreFocus,
   mobilePlacement,
+  align = 'start',
 }: {
+  align?: 'start' | 'center' | 'end';
   trigger: ReactNode;
   children: ReactNode;
   open?: boolean;
@@ -171,7 +173,7 @@ export function Popover({
               : undefined
           }
           aria-label={label}
-          align="start"
+          align={align}
           sideOffset={6}
           collisionPadding={12}
           className={cn(

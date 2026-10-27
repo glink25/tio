@@ -1,5 +1,7 @@
 import DataEditor, {
   GridCellKind,
+  CompactSelection,
+  type GridSelection,
   type GridCell,
   type Item,
   type EditableGridCell,
@@ -7,7 +9,8 @@ import DataEditor, {
 } from '@glideapps/glide-data-grid';
 import { isDerivedField } from '@tio/core';
 import { isFieldError } from '@tio/database';
-import { useTheme, Popover } from '@tio/ui';
+import { useT } from '@tio/i18n';
+import { useTheme, Popover, Button } from '@tio/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useDisplayValue } from './display-value';
@@ -19,7 +22,39 @@ import '@glideapps/glide-data-grid/dist/index.css';
 export function GridView(props: RowsProps) {
   const { fields, rows, objects, onCell, onOpen, canEdit, view, onView, readOnly } = props;
   const displayValue = useDisplayValue();
-  const [editing, setEditing] = useState<Item | null>(null);
+  const t = useT();
+  const [cellSelection, setCellSelection] = useState<GridSelection>();
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
+  const selectionKey = JSON.stringify([view, props.searchQuery, rows.map((r) => r.id)]);
+  useEffect(() => {
+    setSelectedIds([]);
+    setCellSelection(undefined);
+  }, [selectionKey]);
+  const selected = rows.filter((r) => selectedIds.includes(r.id));
+  const blocked =
+    readOnly ||
+    !props.onDeleteRecords ||
+    selected.some((r) => props.canDeleteRecord?.(r) === false);
+  const removeSelected = () => {
+    if (!selected.length || blocked || deleting) return;
+    setDeleting(true);
+    void props.onDeleteRecords!(selected)
+      .then(() => setSelectedIds([]))
+      .catch(() => {})
+      .finally(() => setDeleting(false));
+  };
+  const selection: GridSelection = {
+    current: cellSelection?.current,
+    rows: rows.reduce(
+      (selection, record, i) => (selectedIds.includes(record.id) ? selection.add(i) : selection),
+      CompactSelection.empty(),
+    ),
+    columns: cellSelection?.columns ?? CompactSelection.empty(),
+  };
+  const [editing, setEditing] = useState<{ recordId: string; fieldId: string } | null>(null);
+  const editingRecord = rows.find((r) => r.id === editing?.recordId);
+  const editingField = fields.find((f) => f.id === editing?.fieldId);
   const gridRef = useRef<DataEditorRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [anchor, setAnchor] = useState({ x: 0, y: 0 });
@@ -161,154 +196,196 @@ export function GridView(props: RowsProps) {
           }
         />
       )}
-      <div ref={containerRef} className="w-full overflow-hidden">
-        <DataEditor
-          ref={gridRef}
-          cellActivationBehavior="double-click"
-          width="100%"
-          height={Math.min(460, Math.max(160, rows.length * 42 + 40))}
-          columns={[
-            ...fields.map((f) => ({
-              id: f.id,
-              title:
-                ((
-                  {
-                    title: 'Aa',
-                    text: '≡',
-                    number: '#',
-                    boolean: '☑',
-                    date: '▦',
-                    formula: 'ƒ',
-                    rollup: '∑',
-                    files: '↥',
-                    relation: '↗',
-                    url: '↗',
-                    email: '@',
-                    phone: '☎',
-                    createdTime: '◷',
-                    lastEditedTime: '◷',
-                    status: '◉',
-                    select: '⌄',
-                    multiSelect: '☷',
-                  } as Record<string, string>
-                )[f.type] ?? '≡') +
-                '  ' +
-                f.name,
-              hasMenu: true,
-              width: view.columnWidths?.[f.id] ?? (f.type === 'title' ? 270 : 155),
-            })),
-            { id: '__add', title: '+', width: 44 },
-          ]}
-          onHeaderMenuClick={(col, bounds) =>
-            setHeader({ col, x: bounds.x, y: bounds.y + bounds.height, open: true })
-          }
-          onHeaderClicked={(col, event) => {
-            if (col === fields.length) {
-              if (!readOnly) props.onField?.();
-            } else
-              setHeader({
-                col,
-                x: event.bounds.x,
-                y: event.bounds.y + event.bounds.height,
-                open: true,
-              });
-          }}
-          onColumnResize={(column, width) => {
-            if (!readOnly && column.id && column.id !== '__add')
-              onView({
-                columnWidths: {
-                  ...view.columnWidths,
-                  [column.id]: Math.min(2000, Math.max(80, width)),
-                },
-              });
-          }}
-          rows={rows.length}
-          getCellContent={getCell}
-          drawCell={({ ctx, rect, col, row, theme }, drawContent) => {
-            const field = fields[col];
-            if (!field || !['select', 'multiSelect', 'status'].includes(field.type)) {
-              drawContent();
-              return;
+      <div className="relative">
+        {selected.length > 0 && (
+          <section
+            className="absolute top-0 left-10 z-10 flex max-w-[calc(100%-3rem)] flex-wrap items-center gap-1 rounded-lg border border-line bg-panel px-2 py-1 text-xs shadow-lg"
+            aria-label={t('database.rowActions')}
+          >
+            <span className="px-1 font-medium whitespace-nowrap">
+              {t('database.selectedRows', { count: selected.length })}
+            </span>
+            <Button
+              type="button"
+              className="h-7 px-2 py-1 text-xs"
+              disabled={blocked || deleting}
+              onClick={removeSelected}
+            >
+              {t('database.deleteRecord')}
+            </Button>
+            <Button
+              type="button"
+              className="h-7 px-2 py-1 text-xs"
+              disabled={deleting}
+              onClick={() => setSelectedIds([])}
+            >
+              {t('ui.cancel')}
+            </Button>
+            {blocked && (
+              <span className="text-xs text-muted">{t('database.deleteRowsDenied')}</span>
+            )}
+          </section>
+        )}
+        <div ref={containerRef} className="w-full overflow-hidden">
+          <DataEditor
+            ref={gridRef}
+            cellActivationBehavior="double-click"
+            width="100%"
+            height={Math.min(460, Math.max(160, rows.length * 42 + 40))}
+            columns={[
+              ...fields.map((f) => ({
+                id: f.id,
+                title:
+                  ((
+                    {
+                      title: 'Aa',
+                      text: '≡',
+                      number: '#',
+                      boolean: '☑',
+                      date: '▦',
+                      formula: 'ƒ',
+                      rollup: '∑',
+                      files: '↥',
+                      relation: '↗',
+                      url: '↗',
+                      email: '@',
+                      phone: '☎',
+                      createdTime: '◷',
+                      lastEditedTime: '◷',
+                      status: '◉',
+                      select: '⌄',
+                      multiSelect: '☷',
+                    } as Record<string, string>
+                  )[f.type] ?? '≡') +
+                  '  ' +
+                  f.name,
+                hasMenu: true,
+                width: view.columnWidths?.[f.id] ?? (f.type === 'title' ? 270 : 155),
+              })),
+              { id: '__add', title: '+', width: 44 },
+            ]}
+            onHeaderMenuClick={(col, bounds) =>
+              setHeader({ col, x: bounds.x, y: bounds.y + bounds.height, open: true })
             }
-            const raw = rows[row]?.properties?.[field.id];
-            const ids = Array.isArray(raw) ? raw : raw ? [raw] : [];
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(rect.x, rect.y, rect.width, rect.height);
-            ctx.clip();
-            ctx.font = `12px ${theme.fontFamily}`;
-            ctx.textBaseline = 'middle';
-            let x = rect.x + 8;
-            for (const id of ids) {
-              const option = field.options?.find((o) => o.id === id);
-              const label = option?.label ?? String(id),
-                color = optionPalette[option?.color ?? 'gray'] ?? optionPalette.gray;
-              const width = Math.min(ctx.measureText(label).width + 14, rect.width - 16);
-              if (x + width > rect.x + rect.width - 4) break;
-              ctx.fillStyle = color + (dark ? '55' : '22');
-              ctx.beginPath();
-              ctx.roundRect(x, rect.y + (rect.height - 23) / 2, width, 23, 4);
-              ctx.fill();
+            onHeaderClicked={(col, event) => {
+              if (col === fields.length) {
+                if (!readOnly) props.onField?.();
+              } else
+                setHeader({
+                  col,
+                  x: event.bounds.x,
+                  y: event.bounds.y + event.bounds.height,
+                  open: true,
+                });
+            }}
+            onColumnResize={(column, width) => {
+              if (!readOnly && column.id && column.id !== '__add')
+                onView({
+                  columnWidths: {
+                    ...view.columnWidths,
+                    [column.id]: Math.min(2000, Math.max(80, width)),
+                  },
+                });
+            }}
+            rows={rows.length}
+            getCellContent={getCell}
+            drawCell={({ ctx, rect, col, row, theme }, drawContent) => {
+              const field = fields[col];
+              if (!field || !['select', 'multiSelect', 'status'].includes(field.type)) {
+                drawContent();
+                return;
+              }
+              const raw = rows[row]?.properties?.[field.id];
+              const ids = Array.isArray(raw) ? raw : raw ? [raw] : [];
               ctx.save();
               ctx.beginPath();
-              ctx.rect(x + 7, rect.y, width - 14, rect.height);
+              ctx.rect(rect.x, rect.y, rect.width, rect.height);
               ctx.clip();
-              ctx.fillStyle = dark ? theme.textDark : color;
-              ctx.fillText(label, x + 7, rect.y + rect.height / 2);
+              ctx.font = `12px ${theme.fontFamily}`;
+              ctx.textBaseline = 'middle';
+              let x = rect.x + 8;
+              for (const id of ids) {
+                const option = field.options?.find((o) => o.id === id);
+                const label = option?.label ?? String(id),
+                  color = optionPalette[option?.color ?? 'gray'] ?? optionPalette.gray;
+                const width = Math.min(ctx.measureText(label).width + 14, rect.width - 16);
+                if (x + width > rect.x + rect.width - 4) break;
+                ctx.fillStyle = color + (dark ? '55' : '22');
+                ctx.beginPath();
+                ctx.roundRect(x, rect.y + (rect.height - 23) / 2, width, 23, 4);
+                ctx.fill();
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(x + 7, rect.y, width - 14, rect.height);
+                ctx.clip();
+                ctx.fillStyle = dark ? theme.textDark : color;
+                ctx.fillText(label, x + 7, rect.y + rect.height / 2);
+                ctx.restore();
+                x += width + 5;
+              }
               ctx.restore();
-              x += width + 5;
-            }
-            ctx.restore();
-          }}
-          onCellEdited={edit}
-          onCellClicked={([col, row], event) => {
-            if (
-              fields[col]?.type === 'title' &&
-              event.localEventX > event.bounds.width - 32 &&
-              rows[row]
-            )
-              onOpen(rows[row]);
-          }}
-          onCellActivated={([col, row]) => {
-            if (!rows[row] || !fields[col]) return;
-            const bounds = gridRef.current?.getBounds(col, row);
-            if (!bounds) return;
-            setAnchor({ x: bounds.x, y: bounds.y + bounds.height });
-            setEditing([col, row]);
-          }}
-          rowHeight={42}
-          headerHeight={38}
-          rowMarkers="none"
-          smoothScrollX
-          smoothScrollY
-          theme={{
-            accentColor: colors.accent ?? colors.ink ?? (dark ? '#eeeeee' : '#252525'),
-            accentLight: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
-            bgHeader: colors.surface ?? (dark ? '#202020' : '#f7f7f5'),
-            bgCell: colors.panel ?? (dark ? '#191919' : '#ffffff'),
-            borderColor: colors.line ?? (dark ? '#383838' : '#e7e7e7'),
-            textDark: colors.ink ?? (dark ? '#eeeeee' : '#252525'),
-            textHeader: colors.ink ?? colors.ink ?? (dark ? '#eeeeee' : '#252525'),
-            textHeaderSelected: colors['on-accent'] ?? (dark ? '#191919' : '#ffffff'),
-            textGroupHeader: colors.secondary ?? (dark ? '#b5b5b5' : '#666666'),
-            accentFg: colors['on-accent'] ?? (dark ? '#191919' : '#ffffff'),
-            bgIconHeader: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
-            fgIconHeader: dark ? '#eeeeee' : '#444444',
-            textBubble: dark ? '#eeeeee' : '#333333',
-            bgBubble: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
-            bgBubbleSelected: dark ? '#444444' : '#dddddd',
-            linkColor: colors.ink ?? colors.ink ?? (dark ? '#eeeeee' : '#252525'),
-            textMedium: colors.secondary ?? (dark ? '#b5b5b5' : '#666666'),
-            textLight: colors.muted ?? (dark ? '#999999' : '#808080'),
-            bgCellMedium: dark ? '#242424' : '#fafafa',
-            bgHeaderHovered: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
-            bgHeaderHasFocus: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
-            fontFamily: 'Inter, system-ui, sans-serif',
-            baseFontStyle: '13px',
-          }}
-        />
+            }}
+            onCellEdited={edit}
+            onCellClicked={([col, row], event) => {
+              if (
+                fields[col]?.type === 'title' &&
+                event.localEventX > event.bounds.width - 32 &&
+                rows[row]
+              )
+                onOpen(rows[row]);
+            }}
+            onCellActivated={([col, row]) => {
+              if (!rows[row] || !fields[col]) return;
+              const bounds = gridRef.current?.getBounds(col, row);
+              if (!bounds) return;
+              setAnchor({ x: bounds.x, y: bounds.y + bounds.height });
+              setEditing({ recordId: rows[row].id, fieldId: fields[col].id });
+            }}
+            rowHeight={42}
+            headerHeight={38}
+            rowMarkers={readOnly ? 'number' : 'both'}
+            rowSelect="multi"
+            rowSelectionMode="multi"
+            gridSelection={selection}
+            onGridSelectionChange={(next) => {
+              setCellSelection(next);
+              setSelectedIds(next.rows.toArray().flatMap((i) => (rows[i] ? [rows[i].id] : [])));
+            }}
+            onDelete={(next) => {
+              if (next.rows.length) removeSelected();
+              return false;
+            }}
+            smoothScrollX
+            smoothScrollY
+            theme={{
+              accentColor: colors.accent ?? colors.ink ?? (dark ? '#eeeeee' : '#252525'),
+              accentLight: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
+              bgHeader: colors.surface ?? (dark ? '#202020' : '#f7f7f5'),
+              bgCell: colors.panel ?? (dark ? '#191919' : '#ffffff'),
+              borderColor: colors.line ?? (dark ? '#383838' : '#e7e7e7'),
+              textDark: colors.ink ?? (dark ? '#eeeeee' : '#252525'),
+              textHeader: colors.ink ?? colors.ink ?? (dark ? '#eeeeee' : '#252525'),
+              textHeaderSelected: colors['on-accent'] ?? (dark ? '#191919' : '#ffffff'),
+              textGroupHeader: colors.secondary ?? (dark ? '#b5b5b5' : '#666666'),
+              accentFg: colors['on-accent'] ?? (dark ? '#191919' : '#ffffff'),
+              bgIconHeader: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
+              fgIconHeader: dark ? '#eeeeee' : '#444444',
+              textBubble: dark ? '#eeeeee' : '#333333',
+              bgBubble: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
+              bgBubbleSelected: dark ? '#444444' : '#dddddd',
+              linkColor: colors.ink ?? colors.ink ?? (dark ? '#eeeeee' : '#252525'),
+              textMedium: colors.secondary ?? (dark ? '#b5b5b5' : '#666666'),
+              textLight: colors.muted ?? (dark ? '#999999' : '#808080'),
+              bgCellMedium: dark ? '#242424' : '#fafafa',
+              bgHeaderHovered: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
+              bgHeaderHasFocus: colors['surface-hover'] ?? (dark ? '#303030' : '#ebebeb'),
+              fontFamily: 'Inter, system-ui, sans-serif',
+              baseFontStyle: '13px',
+            }}
+          />
+        </div>
       </div>
-      {editing && fields[editing[0]] && rows[editing[1]] && (
+      {editingRecord && editingField && (
         <Popover
           mobilePlacement="center"
           modal
@@ -317,11 +394,11 @@ export function GridView(props: RowsProps) {
           onOpenChange={(open) => {
             if (!open) setEditing(null);
           }}
-          label={fields[editing[0]].name}
+          label={editingField.name}
           className={
-            fields[editing[0]].type === 'files'
+            editingField.type === 'files'
               ? 'w-[min(400px,calc(100vw-24px))]'
-              : fields[editing[0]].type === 'date'
+              : editingField.type === 'date'
                 ? 'w-[min(300px,calc(100vw-24px))]'
                 : 'w-[min(280px,calc(100vw-24px))]'
           }
@@ -341,18 +418,19 @@ export function GridView(props: RowsProps) {
           }
         >
           <FieldInput
-            key={`${rows[editing[1]].id}:${fields[editing[0]].id}`}
-            field={fields[editing[0]]}
-            value={rows[editing[1]].properties?.[fields[editing[0]].id]}
+            key={`${editingRecord.id}:${editingField.id}`}
+            field={editingField}
+            value={editingRecord.properties?.[editingField.id]}
             objects={objects}
             upload={props.upload}
             resolve={props.resolve}
             onOpen={onOpen}
-            record={rows[editing[1]]}
-            readOnly={readOnly || canEdit?.(rows[editing[1]], fields[editing[0]]) === false}
+            record={editingRecord}
+            readOnly={readOnly || canEdit?.(editingRecord, editingField) === false}
+            inlineReferencePicker
             onCancel={() => setEditing(null)}
             onChange={(value) => {
-              onCell(rows[editing[1]], fields[editing[0]], value);
+              onCell(editingRecord, editingField, value);
               setEditing(null);
             }}
           />

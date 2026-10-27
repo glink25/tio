@@ -1,11 +1,14 @@
 import {
   isMentionReference,
+  mentionKey,
   type MentionService,
   type MentionReference,
   type MentionResolution,
 } from '@tio/core';
 import { useTranslation } from '@tio/i18n';
-import { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo } from 'react';
+
+import { ReferencePicker } from './reference-picker';
 
 export const MentionContext = createContext<MentionService | undefined>(undefined);
 export function MentionLabel({ reference }: { reference: MentionReference }) {
@@ -117,109 +120,100 @@ export function MentionLabel({ reference }: { reference: MentionReference }) {
 export function MentionPicker({
   value,
   onChange,
+  inline = false,
+  label,
 }: {
   value: unknown;
   onChange: (value: MentionReference | null) => void;
+  inline?: boolean;
+  label?: string;
 }) {
   const service = useContext(MentionContext);
   const { i18n } = useTranslation();
   const zh = i18n.language === 'zh';
-  const choices = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState(inline);
   const [query, setQuery] = useState('');
   const [after, setAfter] = useState<string>();
-  const [page, setPage] = useState<Awaited<ReturnType<MentionService['query']>>>();
-  const [error, setError] = useState(false),
-    [retry, setRetry] = useState(0);
+  const [items, setItems] = useState<Awaited<ReturnType<MentionService['query']>>['items']>([]);
+  const [next, setNext] = useState<string>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
+    if (!active) return;
     let live = true;
-    setPage(undefined);
+    setLoading(true);
     setError(false);
     if (!service) {
       setError(true);
+      setLoading(false);
       return;
     }
     void service.query(query, after).then(
-      (p) => {
-        if (live) setPage(p);
+      (page) => {
+        if (!live) return;
+        setItems((previous) =>
+          after
+            ? [
+                ...previous,
+                ...page.items.filter(
+                  (item) =>
+                    !previous.some((p) => mentionKey(p.reference) === mentionKey(item.reference)),
+                ),
+              ]
+            : page.items,
+        );
+        setNext(page.next);
+        setLoading(false);
       },
       () => {
-        if (live) setError(true);
+        if (live) {
+          setError(true);
+          setLoading(false);
+        }
       },
     );
     return () => {
       live = false;
     };
-  }, [service, query, after, retry]);
+  }, [service, active, query, after, retry]);
   return (
-    <div className="space-y-2">
-      {isMentionReference(value) && <MentionLabel reference={value} />}
-      <input
-        aria-label={zh ? '搜索提及目标' : 'Search mention targets'}
-        value={query}
-        onKeyDown={(event) => {
-          if (event.nativeEvent.isComposing) return;
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            choices.current?.querySelector<HTMLButtonElement>('button')?.focus();
-          }
-          if (event.key === 'Enter') {
-            event.preventDefault();
-            event.stopPropagation();
-            if (page?.items[0]) onChange(page.items[0].reference);
-          }
-        }}
-        onChange={(e) => {
-          setQuery(e.target.value);
-          setAfter(undefined);
-        }}
-      />
-      <button type="button" onClick={() => onChange(null)}>
-        {zh ? '清空' : 'Clear'}
-      </button>
-      {error ? (
-        <button type="button" onClick={() => setRetry((n) => n + 1)}>
-          {zh ? '读取失败，重试' : 'Failed; retry'}
-        </button>
-      ) : !page ? (
-        <output>{zh ? '加载中…' : 'Loading…'}</output>
-      ) : (
-        <>
-          <div ref={choices}>
-            {page.items.map((item) => (
-              <button
-                type="button"
-                className="block w-full text-left"
-                key={item.reference.id}
-                onKeyDown={(event) => {
-                  if (!['ArrowDown', 'ArrowUp'].includes(event.key)) return;
-                  event.preventDefault();
-                  const buttons = Array.from(
-                    choices.current?.querySelectorAll<HTMLButtonElement>('button') ?? [],
-                  );
-                  const index = buttons.indexOf(event.currentTarget);
-                  buttons[
-                    (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length
-                  ]?.focus();
-                }}
-                onClick={() => onChange(item.reference)}
-              >
-                {item.title}
-              </button>
-            ))}
-          </div>
-          {!page.items.length && <p>{zh ? '无匹配文档' : 'No matching documents'}</p>}
-          {after && (
-            <button type="button" onClick={() => setAfter(undefined)}>
-              {zh ? '首页' : 'First page'}
-            </button>
-          )}
-          {page.next && (
-            <button type="button" onClick={() => setAfter(page.next)}>
-              {zh ? '下一页' : 'Next page'}
-            </button>
-          )}
-        </>
-      )}
-    </div>
+    <ReferencePicker
+      label={label ?? (zh ? '搜索提及目标' : 'Search mention targets')}
+      inline={inline}
+      selected={
+        isMentionReference(value)
+          ? [
+              {
+                id: mentionKey(value),
+                kind: value.kind,
+                text: zh ? '提及' : 'Mention',
+                label: <MentionLabel reference={value} />,
+              },
+            ]
+          : []
+      }
+      options={items.map((item) => ({
+        id: mentionKey(item.reference),
+        kind: item.reference.kind,
+        text: item.title,
+        label: item.title,
+      }))}
+      query={query}
+      onQuery={(text) => {
+        setQuery(text);
+        setAfter(undefined);
+      }}
+      onActiveChange={setActive}
+      onSelect={(id) => {
+        const item = items.find((i) => mentionKey(i.reference) === id);
+        if (item) onChange(item.reference);
+      }}
+      onRemove={() => onChange(null)}
+      loading={loading}
+      error={error}
+      retry={() => setRetry((n) => n + 1)}
+      more={next ? () => setAfter(next) : undefined}
+    />
   );
 }

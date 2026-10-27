@@ -193,6 +193,8 @@ export function DatabaseEmbed({
         queryText={queryText}
         onQueryText={setQueryText}
         readOnly={!writable}
+        onDeleteRecords={m.deleteRecords}
+        canDeleteRecord={m.canDeleteRecord}
         canEdit={(record, field) => m.can(record, field.id)}
         onCell={m.cell}
         upload={m.upload}

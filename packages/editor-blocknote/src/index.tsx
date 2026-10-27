@@ -119,6 +119,7 @@ export interface EditorSchema {
 }
 export const EditorSchemaContext = createContext<EditorSchema>({ schema: defaultEditorSchema });
 export interface EditorProps {
+  placeholder?: string;
   renderWebSlice?: (block: Block) => React.ReactNode;
   onSubpage?: () => void;
   onDatabase?: () => void;
@@ -130,6 +131,7 @@ export interface EditorProps {
   renderDatabase: (db: string, view: string) => React.ReactNode;
 }
 export function EditorContent({
+  placeholder,
   blocks,
   onSubpage,
   onDatabase,
@@ -178,7 +180,13 @@ export function EditorContent({
           import('./code-block/highlighter').then((m) => m.createHighlighter()),
       }),
     ],
-    dictionary: i18n.language === 'zh' ? zh : en,
+    dictionary: {
+      ...(i18n.language === 'zh' ? zh : en),
+      placeholders: {
+        ...(i18n.language === 'zh' ? zh.placeholders : en.placeholders),
+        ...(placeholder ? { default: placeholder, emptyDocument: placeholder } : {}),
+      },
+    },
     initialContent: blocks.length ? toEditor(blocks, schema, codecs) : undefined,
     uploadFile: upload,
     dropCursor: { color: 'var(--color-muted)', width: 2 },

@@ -116,12 +116,17 @@ test('multi-block deletion, undo and dragging preserve the document', async ({ p
   const first = page.locator('#one [data-id="select"] .bn-inline-content');
   await first.click();
   await first.evaluate((el) => {
-    const end = document.querySelector('#one [data-id="fold"] .bn-inline-content')!;
-    const range = document.createRange();
-    range.setStart(el, 0);
-    range.setEnd(end, end.childNodes.length);
-    window.getSelection()!.removeAllRanges();
-    window.getSelection()!.addRange(range);
+    const editor = (el.closest('.bn-editor') as HTMLElement & { editor: any }).editor;
+    let from: number | undefined;
+    let to: number | undefined;
+    editor.state.doc.descendants((node: any, pos: number) => {
+      if (node.isText && node.text === 'Select this text') from = pos;
+      if (node.isText && node.text === 'Folded section') to = pos + node.text.length;
+    });
+    if (from === undefined || to === undefined) throw new Error('Missing multi-block fixture');
+    // Native DOM ranges can be replaced by the editor's pending selection transaction.
+    editor.commands.setTextSelection({ from, to });
+    editor.view.focus();
   });
   await expect(page.locator('#one .bn-formatting-toolbar')).toBeVisible();
   await first.hover();

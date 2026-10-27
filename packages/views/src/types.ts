@@ -17,6 +17,8 @@ export interface ViewProps {
   onSearchQuery?: (query: string) => void;
   mobileTable?: boolean;
   onMobileTable?: () => void;
+  onDeleteRecords?: (records: TioObject[]) => Promise<void>;
+  canDeleteRecord?: (record: TioObject) => boolean;
   canEdit?: (record: TioObject, field: Field) => boolean;
   database: TioObject;
   view: TioObject;

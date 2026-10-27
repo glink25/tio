@@ -7,6 +7,7 @@ import {
   useContext,
   forwardRef,
   useEffect,
+  useState,
   type ButtonHTMLAttributes,
   type ReactNode,
 } from 'react';
@@ -126,6 +127,7 @@ export function Drawer({
   closeLabel?: string;
 }) {
   const t = useT();
+  const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   useOverlayBack(close);
   return (
     <Dialog.Root
@@ -137,6 +139,7 @@ export function Drawer({
       <Dialog.Portal container={useContext(PortalContext)}>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
         <Dialog.Content
+          ref={setPortalContainer}
           aria-describedby={undefined}
           className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl overflow-y-auto bg-panel shadow-xl"
         >
@@ -151,7 +154,9 @@ export function Drawer({
               </Dialog.Close>
             </div>
           </header>
-          {children}
+          <PortalContext.Provider value={portalContainer ?? undefined}>
+            {children}
+          </PortalContext.Provider>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -251,3 +256,5 @@ export function useOverlayBack(close: () => void) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
+
+export { ReferencePicker, type ReferenceOption } from './reference-picker';

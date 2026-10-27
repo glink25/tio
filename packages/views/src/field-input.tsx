@@ -12,11 +12,12 @@ import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
 import { useT, type TranslationKey } from '@tio/i18n';
 import { MentionLabel, MentionPicker, Button } from '@tio/ui';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 import { useDisplayValue } from './display-value';
 import type { FieldInputProps } from './extensions';
-import { RecordQueryContext, useViewExtensions } from './extensions';
+import { useViewExtensions } from './extensions';
+import { RelationPicker } from './relation-picker';
 
 export const optionPalette: Record<string, string> = {
   gray: '#787774',
@@ -324,54 +325,14 @@ export function FieldInput(props: FieldInputProps) {
   const t = useT();
   const Custom = useViewExtensions().fields?.[field.type]?.Input;
   const [draft, setDraft] = useState<unknown>(value ?? null);
+  const previousValue = useRef(value);
+  useEffect(() => {
+    if (JSON.stringify(draft) === JSON.stringify(previousValue.current ?? null))
+      setDraft(value ?? null);
+    previousValue.current = value;
+  }, [value, draft]);
   const [search, setSearch] = useState(''),
     [error, setError] = useState('');
-  const queryRecords = useContext(RecordQueryContext);
-  const [relationRows, setRelationRows] = useState<TioObject[]>([]);
-  const [relationNext, setRelationNext] = useState<string | undefined>();
-  const [relationAfter, setRelationAfter] = useState<string | undefined>();
-  const [relationLoading, setRelationLoading] = useState(false);
-  const [relationError, setRelationError] = useState('');
-  const [relationRetry, retryRelation] = useState(0);
-  useEffect(() => {
-    setRelationAfter(undefined);
-  }, [field.targetDatabaseId, search]);
-  useEffect(() => {
-    if (!queryRecords || field.type !== 'relation' || !field.targetDatabaseId || readOnly) return;
-    let live = true;
-    setRelationLoading(true);
-    setRelationError('');
-    void queryRecords({
-      databaseId: field.targetDatabaseId,
-      text: search,
-      after: relationAfter,
-      limit: 100,
-    })
-      .then((page) => {
-        if (live) {
-          setRelationRows(page.entries.map((e) => e.object));
-          setRelationNext(page.next);
-          setRelationLoading(false);
-        }
-      })
-      .catch((error) => {
-        if (live) {
-          setRelationError(String(error));
-          setRelationLoading(false);
-        }
-      });
-    return () => {
-      live = false;
-    };
-  }, [
-    queryRecords,
-    field.type,
-    field.targetDatabaseId,
-    readOnly,
-    search,
-    relationAfter,
-    relationRetry,
-  ]);
   const [uploading, setUploading] = useState(false),
     [failed, setFailed] = useState<File[]>([]);
   const change = (next: unknown) => {
@@ -463,28 +424,11 @@ export function FieldInput(props: FieldInputProps) {
         )}
       </div>
     );
-  else if (['select', 'multiSelect', 'relation', 'status'].includes(field.type)) {
-    const options =
-      field.type === 'relation'
-        ? (queryRecords ? relationRows : objects)
-            .filter(
-              (o) => o.type === 'record' && o.databaseId === field.targetDatabaseId && !o.deleted,
-            )
-            .map((record) => {
-              const db = objects.find((o) => o.id === record.databaseId);
-              return {
-                id: record.id,
-                label:
-                  valueText(
-                    record.properties?.[db?.fields?.find((f) => f.type === 'title')?.id ?? ''],
-                  ) || t('common.untitled'),
-                color: 'gray',
-                group: undefined,
-              };
-            })
-        : (field.options ?? []);
-    const multiple =
-      field.type === 'multiSelect' || (field.type === 'relation' && field.multiple !== false);
+  else if (field.type === 'relation')
+    control = <RelationPicker {...props} value={draft} onChange={change} />;
+  else if (['select', 'multiSelect', 'status'].includes(field.type)) {
+    const options = field.options ?? [];
+    const multiple = field.type === 'multiSelect';
     const selected = Array.isArray(draft) ? draft : draft ? [draft] : [];
     const filtered = options.filter((o) =>
       o.label.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
@@ -521,17 +465,7 @@ export function FieldInput(props: FieldInputProps) {
           }}
           className="max-h-56 overflow-y-auto"
         >
-          {relationLoading && <output>{t('common.loading')}</output>}
-          {relationError && (
-            <p role="alert">
-              {relationError}
-              <Button onClick={() => retryRelation((n) => n + 1)}>{t('common.retry')}</Button>
-            </p>
-          )}
-          {relationNext && <Button onClick={() => setRelationAfter(relationNext)}>→</Button>}
-          {!relationLoading && !relationError && !filtered.length && (
-            <p className="p-2 text-xs text-muted">{t('database.noOptions')}</p>
-          )}
+          {!filtered.length && <p className="p-2 text-xs text-muted">{t('database.noOptions')}</p>}
           {filtered.map((o, i) => (
             <div key={o.id}>
               {field.type === 'status' && o.group && o.group !== filtered[i - 1]?.group && (
@@ -565,7 +499,15 @@ export function FieldInput(props: FieldInputProps) {
         </div>
       </div>
     );
-  } else if (field.type === 'mention') control = <MentionPicker value={draft} onChange={change} />;
+  } else if (field.type === 'mention')
+    control = (
+      <MentionPicker
+        label={field.name}
+        inline={props.inlineReferencePicker}
+        value={draft}
+        onChange={change}
+      />
+    );
   else if (['title', 'text', 'number', 'url', 'email', 'phone'].includes(field.type))
     control = (
       <input
@@ -602,16 +544,24 @@ export function FieldInput(props: FieldInputProps) {
       </span>
     );
   const dirty = JSON.stringify(draft) !== JSON.stringify(value ?? null);
+  const cancel =
+    onCancel ??
+    (['mention', 'relation'].includes(field.type)
+      ? () => {
+          setDraft(value ?? null);
+          setError('');
+        }
+      : undefined);
   return (
     <div
       role="group"
       aria-label={`${field.name} editor`}
       className="tio-field-input w-full min-w-0 space-y-2"
       onKeyDown={(e) => {
-        if (e.key === 'Escape' && onCancel) {
+        if (e.key === 'Escape' && cancel) {
           e.preventDefault();
           e.stopPropagation();
-          onCancel();
+          cancel();
         } else if (
           e.key === 'Enter' &&
           !e.nativeEvent.isComposing &&
@@ -633,8 +583,8 @@ export function FieldInput(props: FieldInputProps) {
       )}
       {(dirty || onCancel) && (
         <div className="flex justify-end gap-2 border-t border-line pt-2">
-          {onCancel && (
-            <Button type="button" onClick={onCancel}>
+          {cancel && (
+            <Button type="button" onClick={cancel}>
               {t('ui.cancel')}
             </Button>
           )}

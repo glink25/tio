@@ -11,6 +11,7 @@ export interface FieldInputProps {
   record?: TioObject;
   readOnly?: boolean;
   onCancel?: () => void;
+  inlineReferencePicker?: boolean;
   upload?: (file: File) => Promise<string>;
   resolve?: (ref: string) => Promise<string>;
   onOpen?: (record: TioObject) => void;

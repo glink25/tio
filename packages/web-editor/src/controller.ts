@@ -1,5 +1,6 @@
 import { AssetResolver, fileData } from '@tio/assets/browser';
 import {
+  HostError,
   id,
   object,
   textBlock,
@@ -181,6 +182,32 @@ export function useEditorController(props: EditorSurfaceProps) {
     );
     setEmbedPicker(false);
   }
+  async function deleteRecords(records: TioObject[]) {
+    try {
+      const expected = records.map((record) => {
+        const current = runtime.snapshot().find((o) => o.id === record.id);
+        if (!current || current.deleted || current.type !== 'record')
+          throw new HostError('conflict');
+        return current;
+      });
+      const guard = () => {
+        if (
+          readOnly ||
+          expected.some((record) => !editable(record) || !runtime.can(record, 'delete'))
+        )
+          throw new HostError('permission');
+      };
+      await runtime.checked(
+        expected,
+        expected.map((record) => ({ ...record, deleted: true })),
+        guard,
+      );
+      if (expected.some((record) => record.id === recordId)) setRecordId(null);
+    } catch (error) {
+      report(error);
+      throw error;
+    }
+  }
   function addRecord(db: TioObject) {
     const field = db.fields?.find((f) => f.type === 'title');
     const record = object('record', workspaceId, {
@@ -230,6 +257,9 @@ export function useEditorController(props: EditorSurfaceProps) {
     addPage,
     addDatabase,
     addRecord,
+    deleteRecords,
+    canDeleteRecord: (record: TioObject) =>
+      !readOnly && editable(record) && runtime.can(record, 'delete'),
     embed,
     upload,
     resolve: resolveAsset,

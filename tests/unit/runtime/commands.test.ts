@@ -205,3 +205,81 @@ it('automatically resolves concurrent body edits, durably records recovery, and 
   expect((await host.readSnapshot()).entries[0].object.title).toBe('After conflict');
   await runtime.close();
 });
+
+describe('batch record deletion through checked commands', () => {
+  async function recordsSetup() {
+    const { store, runtime, page } = await setup();
+    const database = object('database', 'workspace', {
+      fields: [{ id: 'title', name: 'Title', type: 'title' }],
+    });
+    const records = ['First', 'Second'].map((title) =>
+      object('record', 'workspace', {
+        databaseId: database.id,
+        blocks: [],
+        properties: { title },
+        future: { opaque: ['retained'] },
+      }),
+    );
+    runtime.create([database, ...records]);
+    await runtime.flush();
+    return {
+      store,
+      runtime,
+      page,
+      records: records.map((r) => runtime.snapshot().find((o) => o.id === r.id)!),
+    };
+  }
+  it('persists all deletions and restores the batch with one undo, retaining opaque data', async () => {
+    const { store, runtime, records } = await recordsSetup();
+    await runtime.checked(
+      records,
+      records.map((r) => ({ ...r, deleted: true })),
+      () => {},
+    );
+    for (const r of records) expect((await store.get(r.id))?.object.deleted).toBe(true);
+    runtime.undo();
+    await runtime.flush();
+    for (const r of records) {
+      const restored = (await store.get(r.id))?.object;
+      expect(restored?.deleted).toBeFalsy();
+      expect(restored?.future).toEqual({ opaque: ['retained'] });
+    }
+  });
+  it('rejects the whole batch when its permission guard rejects', async () => {
+    const { runtime, records } = await recordsSetup();
+    await expect(
+      runtime.checked(
+        records,
+        records.map((r) => ({ ...r, deleted: true })),
+        () => {
+          throw new Error('Permission denied');
+        },
+      ),
+    ).rejects.toThrow('Permission denied');
+    expect(
+      runtime
+        .snapshot()
+        .filter((o) => records.some((r) => r.id === o.id))
+        .every((o) => !o.deleted),
+    ).toBe(true);
+  });
+  it('retains optimistic batch deletions across persistence failure and retry', async () => {
+    const { store, runtime, records } = await recordsSetup();
+    vi.spyOn(store, 'commit').mockRejectedValueOnce(new Error('Disk full'));
+    const deletion = runtime.checked(
+      records,
+      records.map((r) => ({ ...r, deleted: true })),
+      () => {},
+    );
+    await expect(runtime.flush()).rejects.toThrow('Disk full');
+    expect(
+      runtime
+        .snapshot()
+        .filter((o) => records.some((r) => r.id === o.id))
+        .every((o) => o.deleted),
+    ).toBe(true);
+    await runtime.retry();
+    await deletion;
+    for (const r of records) expect((await store.get(r.id))?.object.deleted).toBe(true);
+  });
+});
