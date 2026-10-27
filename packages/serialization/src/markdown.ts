@@ -1,5 +1,6 @@
 import {
   isMentionReference,
+  codeText,
   plainText,
   titleOf,
   valueText,
@@ -60,12 +61,15 @@ export async function exportMarkdownZip(
           case 'quote':
             result = `> ${text}`;
             break;
-          case 'codeBlock':
-            result = plainText(b.content)
-              .split('\n')
-              .map((line) => `    ${line}`)
-              .join('\n');
+          case 'codeBlock': {
+            const source = codeText(b.content);
+            const fence = '`'.repeat(
+              Math.max(3, ...Array.from(source.matchAll(/`+/g), (match) => match[0].length + 1)),
+            );
+            const language = valueText(b.props.language).replace(/[^a-zA-Z0-9_+.#-]/g, '');
+            result = `${fence}${language}\n${source}\n${fence}`;
             break;
+          }
           case 'webSlice':
             result = `${escape(valueText(b.props.title))}\n\n${valueText(b.props.html)
               .split('\n')

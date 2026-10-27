@@ -329,3 +329,92 @@
 .tio-editor .bn-formatting-toolbar:empty {
   display: none;
 }
+
+.tio-editor .bn-block-content[data-content-type='codeBlock'] {
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+.tio-editor .tio-code-block {
+  width: 100%;
+  min-width: 0;
+}
+.tio-editor .tio-code-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-line);
+}
+.tio-editor .tio-code-toolbar select {
+  padding: 3px 6px;
+  font-size: 12px;
+}
+.tio-editor .tio-code-toolbar button {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.tio-editor .tio-code-toolbar button[aria-pressed='true'] {
+  background: var(--color-surface-hover);
+}
+.tio-editor .tio-code-body {
+  display: grid;
+  min-width: 0;
+}
+.tio-editor .tio-code-block[data-mode='split'] .tio-code-body {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.tio-editor .tio-code-source {
+  margin: 0;
+  padding: 16px;
+  overflow-x: auto;
+  white-space: pre;
+  tab-size: 2;
+  min-width: 0;
+}
+.tio-editor .tio-code-source[hidden] {
+  display: none;
+}
+.tio-editor .tio-code-source code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.tio-editor .tio-code-source .shiki {
+  color: var(--shiki-light);
+}
+.tio-editor.dark .tio-code-source .shiki {
+  color: var(--shiki-dark);
+}
+.tio-editor .tio-code-preview {
+  min-width: 0;
+  padding: 16px;
+  overflow: auto;
+}
+.tio-editor .tio-code-notice {
+  color: var(--color-secondary);
+  font-size: 13px;
+}
+.tio-editor .tio-code-notice pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tio-editor .tio-mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 767px) {
+  .tio-editor .tio-code-block[data-mode='split'] .tio-code-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tio-editor .tio-code-toolbar button {
+    min-height: 44px;
+  }
+}
+.tio-editor .tio-code-toolbar fieldset {
+  display: flex;
+  gap: 2px;
+}
+.tio-editor .tio-code-preview output {
+  display: block;
+}

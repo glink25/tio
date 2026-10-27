@@ -42,3 +42,25 @@ it('exports readable Markdown with stable links and portable attachments without
   expect(originals).toEqual([page, child, asset]);
   await expect(exportMarkdownZip(originals, async () => undefined)).rejects.toThrow('附件缺失');
 });
+
+it('exports language fences longer than source backticks and preserves Mermaid source', async () => {
+  const source = 'flowchart TD\n  A["``` source"] --> B';
+  const page = object('page', 'w', {
+    id: 'code',
+    title: 'Code',
+    blocks: [
+      {
+        id: 'diagram',
+        type: 'codeBlock',
+        props: { language: 'mermaid', displayMode: 'split' },
+        content: [
+          { type: 'text', text: source.slice(0, 5), styles: {} },
+          { type: 'text', text: source.slice(5), styles: {} },
+        ],
+        children: [],
+      },
+    ],
+  });
+  const files = unzipSync(await exportMarkdownZip([page], async () => undefined));
+  expect(strFromU8(files['documents/code.md'])).toContain('````mermaid\n' + source + '\n````');
+});

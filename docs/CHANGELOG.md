@@ -35,3 +35,10 @@
 - Unified block actions, destructive menus and thin fold chevrons; separated linked-text formatting from the caret link toolbar.
 - Replaced automatic child-page listings and backlinks with a distinct footer of explicit outgoing document references.
 - Fixed Chinese color submenu widths and slash shortcut badge colors; replaced blue selection/focus chrome with neutral feedback.
+
+## Code blocks and Mermaid — 2026-10-26
+
+- Added syntax highlighting with individually loaded common-language grammars and editor-scoped light/dark colors.
+- Added Mermaid diagrams with persisted Code/Preview/Split modes and temporary read-only source viewing.
+- Shared rendering between Web and standalone editors; optional rendering modules use dynamic imports while existing PWA precaching remains enabled.
+- Markdown exports now retain code languages and use fences that preserve embedded backticks. See [code blocks](code-blocks.md).

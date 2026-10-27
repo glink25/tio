@@ -297,6 +297,13 @@ export function textBlock(text: string, type = 'paragraph'): Block {
 export function titleOf(o: TioObject) {
   return o.title || o.name || '未命名';
 }
+/** Code is a literal stream: adjacent text runs must not introduce spaces. */
+export function codeText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(codeText).join('');
+  if (plain(value) && value.type === 'text' && typeof value.text === 'string') return value.text;
+  return '';
+}
 export function plainText(value: unknown): string {
   if (typeof value === 'string') return value;
   if (Array.isArray(value)) return value.map(plainText).join(' ');

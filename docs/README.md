@@ -4,6 +4,8 @@
 
 [简体中文](README.zh-CN.md) · [Architecture](architecture.md) · [Data format](data-format.md) · [Contributing](CONTRIBUTING.md) · [Verification](verification.md)
 
+Project vision and guiding principles: [tio 之禅](zen.md) (Chinese).
+
 Tio is a browser-based document and database workspace. Write locally, organize records in tables and boards, and optionally synchronize portable JSON files and attachments into a folder you control. No application server or cloud account is required.
 
 ## Quick start

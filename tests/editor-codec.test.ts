@@ -65,3 +65,26 @@ it('roundtrips atomic mentions in paragraphs, nested lists and table cells', () 
   ];
   expect(fromEditor(toEditor(blocks, configured), blocks)).toEqual(blocks);
 });
+
+it('roundtrips code source, display modes and unknown props without converting legacy blocks', () => {
+  const configured: ContentSchema = {
+    ...schema,
+    blockSchema: {
+      ...schema.blockSchema,
+      codeBlock: {
+        content: 'plain',
+        propSchema: {
+          language: { default: 'text' },
+          displayMode: { default: 'preview', values: ['code', 'preview', 'split'] },
+        },
+      },
+    },
+  };
+  for (const props of [
+    { language: 'js' },
+    { language: 'mermaid', displayMode: 'split', future: true },
+  ]) {
+    const block: Block = { ...textBlock('flowchart TD\n A --> B\n'), type: 'codeBlock', props };
+    expect(fromEditor(toEditor([block], configured), [block])).toEqual([block]);
+  }
+});

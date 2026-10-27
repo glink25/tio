@@ -4,6 +4,7 @@ import {
   defaultBlockSpecs,
   filterSuggestionItems,
 } from '@blocknote/core';
+import { SyntaxHighlightingExtension } from '@blocknote/core/extensions';
 import { zh, en } from '@blocknote/core/locales';
 import {
   createReactInlineContentSpec,
@@ -15,6 +16,7 @@ import {
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/shadcn';
 
+import { CodeBlock } from './code-block';
 import { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
 import { MentionMenu } from './mention-menu';
@@ -102,6 +104,7 @@ export const defaultEditorSchema = BlockNoteSchema.create({
   inlineContentSpecs: { ...defaultInlineContentSpecs, mention: MentionInline },
   blockSpecs: {
     ...defaultBlockSpecs,
+    codeBlock: CodeBlock,
     databaseView: DatabaseBlock,
     webSlice: WebSliceBlock,
     unsupported: OpaqueBlock,
@@ -169,6 +172,12 @@ export function EditorContent({
   const sent = useRef(new Set<string>());
   const editor = useCreateBlockNote({
     schema,
+    extensions: [
+      SyntaxHighlightingExtension({
+        createHighlighter: () =>
+          import('./code-block/highlighter').then((m) => m.createHighlighter()),
+      }),
+    ],
     dictionary: i18n.language === 'zh' ? zh : en,
     initialContent: blocks.length ? toEditor(blocks, schema, codecs) : undefined,
     uploadFile: upload,
@@ -287,6 +296,27 @@ export function EditorContent({
               filterSuggestionItems(
                 [
                   ...getDefaultReactSlashMenuItems(editor),
+                  ...(schema.blockSchema.codeBlock?.propSchema.displayMode
+                    ? [
+                        {
+                          title: 'Mermaid',
+                          group: t('workspace.name'),
+                          aliases: ['diagram', 'flowchart', '流程图', '图表'],
+                          icon: <Code size={18} />,
+                          onItemClick: () =>
+                            editor.insertBlocks(
+                              [
+                                {
+                                  type: 'codeBlock',
+                                  props: { language: 'mermaid', displayMode: 'split' },
+                                },
+                              ],
+                              editor.getTextCursorPosition().block,
+                              'after',
+                            ),
+                        },
+                      ]
+                    : []),
                   ...(renderWebSlice
                     ? [
                         {

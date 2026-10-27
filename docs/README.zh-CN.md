@@ -4,6 +4,8 @@
 
 [English](README.md) · [架构](architecture.md) · [数据协议](data-format.md) · [验证记录](verification.md)
 
+项目愿景与开发指导原则：[tio 之禅](zen.md)。
+
 Tio 是一个本地优先的浏览器工作空间。通过块式文档、表格、看板和关联记录组织内容，无需专用服务端或云端账号。
 
 ## 启动

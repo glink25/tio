@@ -33,3 +33,5 @@ The current AST uses BlockNote-compatible tables. This is an explicit format bou
 Workspace packages currently export TypeScript source for monorepo consumers. The standalone editor production bundle is a browser embedding artifact, not a published npm SDK with declarations and semver guarantees. Public SDK packaging and third-party plugin distribution are separate release work.
 
 The built-in `webSlice` block provides page-scoped HTML applications with host-owned permissions. Custom editor schemas should extend `defaultEditorSchema` to retain it. See [Web Slice SDK and embedding](web-slice.md).
+
+The default `codeBlock` spec includes common-language highlighting and Mermaid Code/Preview/Split modes. Extend the default schema to retain these controls. `displayMode` is a normal persisted block prop; read-only view changes stay local. See [code blocks and Mermaid](code-blocks.md) for lazy-loading and export behavior.

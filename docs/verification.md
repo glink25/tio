@@ -81,3 +81,9 @@ Browser regressions override permission results on genuine OPFS handles: both `p
 ## Architecture repair evidence
 
 The repair adds shared file chunk/index budgets and failure injection, per-instance domain validation, recursive table opacity, archive preflight, object-isolated sync, incremental host reads, and a 10,000-level navigation projection. See `repair-progress.md`, `file-storage.md` and `extensions.md`. Synthetic operation tests do not establish real-device latency or memory guarantees.
+
+## Code blocks and Mermaid — 2026-10-26
+
+`pnpm check` passed, including 164 unit tests, type checking, formatting, lint, package boundaries, both production builds and compiled CSS scoping. Four new production standalone browser tests passed: dual-theme highlighting/diagrams, persisted modes across instances and remounts, temporary read-only viewing, keyboard editing and real clipboard paste, syntax-error recovery, optional chunk requests and renderer-load failure isolation. The language test loads every offered grammar and verifies dual-theme tokens. A captured two-instance screenshot was inspected for light/dark presentation.
+
+The expanded editor/embedding browser run also exposed two existing fixture/expectation mismatches: `embedding.spec.ts` still selects the removed “Link to page” action and seeds a reserved `mention` with the obsolete `userId` shape. Those tests require updating for the current mention contract. A standalone multi-block selection failure in that expanded run passed when rerun with one worker, in both development and standalone builds.
