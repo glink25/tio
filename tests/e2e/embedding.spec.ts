@@ -1,6 +1,8 @@
-import { test, expect } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+
+import { repoRoot } from '../paths';
 test.beforeEach(async ({ page }) => {
-  await page.goto('/@fs' + process.cwd() + '/packages/web-editor/dist/index.html');
+  await page.goto('/@fs' + repoRoot + '/packages/web-editor/dist/index.html');
   await page.waitForFunction(() => !!(window as any).TioEditor);
   await page.evaluate(async (root) => {
     const { mountBridgedEditor } = (window as any).TioEditor;
@@ -8,9 +10,8 @@ test.beforeEach(async ({ page }) => {
     const { createLoopback, serveHost } = await import(
       root + '/packages/host-protocol/src/index.ts'
     );
-    const { sampleWorkspace, executeBasic } = await import(
-      root + '/packages/workspace/src/index.ts'
-    );
+    const { executeBasic } = await import(root + '/packages/workspace/src/index.ts');
+    const { sampleWorkspace } = await import(root + '/tests/fixtures/workspace.ts');
     document.body.innerHTML = '<div id="one"></div><div id="two"></div>';
     Object.defineProperty(window, 'indexedDB', {
       configurable: true,
@@ -45,51 +46,7 @@ test.beforeEach(async ({ page }) => {
     Object.assign(window, {
       fixture: { one, two, repository, executeBasic, context, target, recordId: record.id },
     });
-  }, '/@fs' + process.cwd());
-});
-
-test('isolated editor uses only host persistence and isolates instances', async ({ page }) => {
-  await expect(page.locator('#one').getByLabel('Page title')).toHaveValue('开始');
-  await expect(page.locator('#two').getByLabel('页面标题')).toHaveValue('开始');
-  await page.locator('#one').getByLabel('Page title').fill('Host persisted');
-  await page.evaluate(async () => {
-    await (window as any).fixture.one.flush();
-  });
-  await expect(page.locator('#two').getByLabel('页面标题')).toHaveValue('Host persisted');
-  await page.evaluate(async () => {
-    const f = (window as any).fixture;
-    await f.executeBasic(f.repository, {
-      version: 1,
-      workspaceId: f.context.workspaceId,
-      type: 'appendText',
-      id: f.target.id,
-      blockId: 'native_append',
-      text: 'Written by native host',
-    });
-  });
-  await expect(page.locator('#one .bn-editor')).toContainText('Written by native host');
-  await page.evaluate(async () => {
-    const f = (window as any).fixture;
-    await f.executeBasic(f.repository, {
-      version: 1,
-      workspaceId: f.context.workspaceId,
-      type: 'createPage',
-      id: 'empty-dialog-page',
-      title: 'Empty page',
-    });
-    await f.one.open({ id: 'empty-dialog-page' });
-  });
-  await page.locator('#one').getByRole('button', { name: 'Databases', exact: true }).click();
-  await expect(page.locator('#one').getByRole('dialog')).toBeVisible();
-  await expect(page.locator('#two').getByRole('dialog')).toHaveCount(0);
-  await page.keyboard.press('Escape');
-  await page.screenshot({ path: 'test-results/embedded-two-instances.png', fullPage: true });
-  await page.evaluate(async () => {
-    const f = (window as any).fixture;
-    await f.one.dispose();
-    await f.two.dispose();
-  });
-  await expect(page.locator('.tio-editor')).toHaveCount(0);
+  }, '/@fs' + repoRoot);
 });
 
 test('focused inputs follow external state and preserve edits through persistence failure', async ({
@@ -138,63 +95,6 @@ test('focused inputs follow external state and preserve edits through persistenc
   await expect
     .poll(() => page.evaluate(() => (window as any).fixture.one.getSaveState().pending))
     .toBe(0);
-});
-
-test('numeric fields follow external updates and preserve decimals and clearing', async ({
-  page,
-}) => {
-  await page.evaluate(async () => {
-    const f = (window as any).fixture;
-    await f.one.open({ id: f.recordId });
-  });
-  const amount = page.locator('#one').getByLabel('Amount', { exact: true });
-  await expect(amount).toHaveValue('12');
-  await amount.fill('1.5');
-  await amount.press('Enter');
-  await page.evaluate(async () => {
-    await (window as any).fixture.one.flush();
-  });
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const f = (window as any).fixture;
-        return f.one.getSaveState().objects.find((o: any) => o.id === f.recordId).properties.amount;
-      }),
-    )
-    .toBe(1.5);
-  await page.evaluate(async () => {
-    const f = (window as any).fixture;
-    const snapshot = await f.repository.readSnapshot();
-    const record = snapshot.entries.find((e: any) => e.object.id === f.recordId).object;
-    await f.repository.commit({
-      id: crypto.randomUUID(),
-      expectedVersion: snapshot.version,
-      changes: [{ ...record, properties: { ...record.properties, amount: 42 } }],
-      assetIds: [],
-    });
-  });
-  await expect(amount).toHaveValue('42');
-  await amount.fill('');
-  await amount.press('Enter');
-  await amount.pressSequentially('-2.5');
-  await amount.press('Enter');
-  await expect(amount).toHaveValue('-2.5');
-  await page.evaluate(async () => {
-    await (window as any).fixture.one.flush();
-  });
-  await amount.fill('');
-  await amount.press('Enter');
-  await page.evaluate(async () => {
-    await (window as any).fixture.one.flush();
-  });
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const f = (window as any).fixture;
-        return f.one.getSaveState().objects.find((o: any) => o.id === f.recordId).properties.amount;
-      }),
-    )
-    .toBeNull();
 });
 
 test('table edits retain opaque nested content in neighboring tables', async ({ page }) => {

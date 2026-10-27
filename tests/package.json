@@ -1,0 +1,33 @@
+{
+  "name": "@tio/tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "latest",
+    "@tio/core": "workspace:*",
+    "@tio/database": "workspace:*",
+    "@tio/editor-blocknote": "workspace:*",
+    "@tio/file-storage": "workspace:*",
+    "@tio/host-protocol": "workspace:*",
+    "@tio/local-store": "workspace:*",
+    "@tio/merge": "workspace:*",
+    "@tio/provider-github": "workspace:*",
+    "@tio/provider-memory": "workspace:*",
+    "@tio/serialization": "workspace:*",
+    "@tio/storage": "workspace:*",
+    "@tio/sync": "workspace:*",
+    "@tio/web-editor": "workspace:*",
+    "@tio/workspace": "workspace:*",
+    "@types/node": "^24.0.0",
+    "fake-indexeddb": "^6.2.4",
+    "postcss": "^8.5.31",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}

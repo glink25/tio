@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "wicg-file-system-access"],
+    "allowJs": true,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["**/*.ts", "../packages/**/*.d.ts"],
+  "exclude": ["node_modules", "test-results", "playwright-report", ".cache"]
+}

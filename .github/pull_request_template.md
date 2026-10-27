@@ -1,12 +1,11 @@
-## Change
+## 变更
 
-Describe the user-visible problem and resulting behavior.
+描述具体问题、修改后的行为及必要的边界。
 
-## Validation
+## 验证
 
 - [ ] `corepack pnpm check`
-- [ ] Relevant browser tests
-- [ ] Both languages and narrow-screen layout checked for UI changes
-- [ ] Data migration and unknown-data preservation considered
+- [ ] 涉及编辑交互时运行 `corepack pnpm test:e2e`
+- [ ] 当前数据契约与未知内容保留符合要求
 
-## Screenshots / compatibility notes
+填写本次实际验证及尚未验证的场景；测试范围见 [测试说明](../docs/development/testing.md)。

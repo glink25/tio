@@ -166,9 +166,6 @@ importers:
 
   .:
     devDependencies:
-      '@playwright/test':
-        specifier: latest
-        version: 1.64.1
       '@types/node':
         specifier: ^24.0.0
         version: 24.19.2
@@ -181,15 +178,6 @@ importers:
       '@types/wicg-file-system-access':
         specifier: ^2023.10.7
         version: 2023.10.7
-      '@vitest/coverage-v8':
-        specifier: 5.0.5
-        version: 5.0.5(vitest@5.0.5)
-      fake-indexeddb:
-        specifier: ^6.2.4
-        version: 6.2.6
-      fflate:
-        specifier: 0.8.3
-        version: 0.8.3
       oxfmt:
         specifier: 0.74.0
         version: 0.74.0
@@ -205,9 +193,6 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
-      vitest:
-        specifier: 5.0.5
-        version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(terser@5.51.2))
 
   apps/auth: {}
 
@@ -660,6 +645,69 @@ importers:
       zustand:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@18.3.31)(react@18.3.1)(use-sync-external-store@1.7.0(react@18.3.1))
+
+  tests:
+    devDependencies:
+      '@playwright/test':
+        specifier: latest
+        version: 1.64.1
+      '@tio/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@tio/database':
+        specifier: workspace:*
+        version: link:../packages/database
+      '@tio/editor-blocknote':
+        specifier: workspace:*
+        version: link:../packages/editor-blocknote
+      '@tio/file-storage':
+        specifier: workspace:*
+        version: link:../packages/file-storage
+      '@tio/host-protocol':
+        specifier: workspace:*
+        version: link:../packages/host-protocol
+      '@tio/local-store':
+        specifier: workspace:*
+        version: link:../packages/local-store
+      '@tio/merge':
+        specifier: workspace:*
+        version: link:../packages/merge
+      '@tio/provider-github':
+        specifier: workspace:*
+        version: link:../packages/provider-github
+      '@tio/provider-memory':
+        specifier: workspace:*
+        version: link:../packages/provider-memory
+      '@tio/serialization':
+        specifier: workspace:*
+        version: link:../packages/serialization
+      '@tio/storage':
+        specifier: workspace:*
+        version: link:../packages/storage
+      '@tio/sync':
+        specifier: workspace:*
+        version: link:../packages/sync
+      '@tio/web-editor':
+        specifier: workspace:*
+        version: link:../packages/web-editor
+      '@tio/workspace':
+        specifier: workspace:*
+        version: link:../packages/workspace
+      '@types/node':
+        specifier: ^24.0.0
+        version: 24.19.2
+      fake-indexeddb:
+        specifier: ^6.2.4
+        version: 6.2.6
+      postcss:
+        specifier: ^8.5.31
+        version: 8.5.31
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: 5.0.5
+        version: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(terser@5.51.2))
 
 packages:
 
@@ -5444,7 +5492,8 @@ snapshots:
     optionalDependencies:
       '@types/react': 18.3.31
 
-  '@bcoe/v8-coverage@1.0.2': {}
+  '@bcoe/v8-coverage@1.0.2':
+    optional: true
 
   '@blocknote/core@0.56.0(@lezer/common@1.5.4)(@lezer/highlight@1.2.5)(@types/hast@3.0.5)':
     dependencies:
@@ -6823,12 +6872,15 @@ snapshots:
       std-env: 4.3.0
       tinyrainbow: 3.2.0
       vitest: 5.0.5(@types/node@24.19.2)(@vitest/coverage-v8@5.0.5)(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(terser@5.51.2))
+    optional: true
 
-  '@vitest/istanbul-lib-coverage@1.0.2': {}
+  '@vitest/istanbul-lib-coverage@1.0.2':
+    optional: true
 
   '@vitest/istanbul-lib-report@1.0.2':
     dependencies:
       '@vitest/istanbul-lib-coverage': 1.0.2
+    optional: true
 
   '@vitest/mocker@5.0.5(vite@8.3.5(@types/node@24.19.2)(jiti@2.7.0)(terser@5.51.2))':
     dependencies:
@@ -6876,6 +6928,7 @@ snapshots:
       '@jridgewell/trace-mapping': 0.3.31
       estree-walker: 3.0.3
       js-tokens: 10.0.0
+    optional: true
 
   async-function@1.0.0: {}
 
@@ -7731,7 +7784,8 @@ snapshots:
 
   jiti@2.7.0: {}
 
-  js-tokens@10.0.0: {}
+  js-tokens@10.0.0:
+    optional: true
 
   js-tokens@4.0.0: {}
 
@@ -7904,6 +7958,7 @@ snapshots:
       '@babel/parser': 7.29.9
       '@babel/types': 7.29.8
       source-map-js: 1.2.2
+    optional: true
 
   marked@16.4.2: {}
 
@@ -8649,7 +8704,8 @@ snapshots:
 
   tinypool@2.2.0: {}
 
-  tinyrainbow@3.2.0: {}
+  tinyrainbow@3.2.0:
+    optional: true
 
   trim-lines@3.0.1: {}
 

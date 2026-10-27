@@ -12,9 +12,9 @@
     "**/node_modules/**",
     "pnpm-lock.yaml",
     ".tmp/**",
-    "test-results/**",
-    "playwright-report/**",
-    "coverage/**",
-    "docs/.local/**"
+    "docs/.local/**",
+    "tests/test-results/**",
+    "tests/playwright-report/**",
+    "tests/.cache/**"
   ]
 }

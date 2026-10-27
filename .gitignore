@@ -1,10 +1,10 @@
 node_modules/
 dist/
-playwright-report/
-test-results/
+/tests/playwright-report/
+/tests/test-results/
 .DS_Store
 .tmp/
-coverage/
+/tests/.cache/
 .env
 
 /docs/.local/

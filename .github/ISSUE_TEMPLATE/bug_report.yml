@@ -19,4 +19,4 @@ body:
     id: mode
     attributes:
       label: Storage mode
-      options: [Offline, Local Folder]
+      options: [Device, Local Folder, GitHub]
