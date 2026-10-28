@@ -141,7 +141,7 @@ export function OptionsPanel({
         onHighlight?.(id);
       }}
       shouldFilter={false}
-      className="flex max-h-[min(480px,calc(100dvh-24px),var(--radix-popover-content-available-height,480px))] min-h-0 flex-col"
+      className="flex max-h-[min(480px,calc(100dvh-24px),var(--radix-popover-content-available-height,480px))] min-h-0 min-w-0 flex-col"
       label={label}
       onKeyDownCapture={(e) => {
         if (
@@ -231,7 +231,7 @@ export function OptionsPanel({
       <CommandList
         ref={list}
         label={label}
-        className="!max-h-[320px] min-h-0 overflow-y-auto overscroll-contain py-1"
+        className="!max-h-[320px] min-h-0 flex-1 overflow-y-auto overscroll-contain py-1"
       >
         {!loading && (
           <CommandEmpty className="p-3 text-sm text-muted">{t('database.noOptions')}</CommandEmpty>

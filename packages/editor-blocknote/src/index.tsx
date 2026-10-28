@@ -11,7 +11,7 @@ import {
   createReactBlockSpec,
   useCreateBlockNote,
   SuggestionMenuController,
-  FormattingToolbarController,
+  DesktopFormattingToolbarController,
   SideMenuController,
   getDefaultReactSlashMenuItems,
 } from '@blocknote/react';
@@ -22,20 +22,13 @@ import { CodeBlock } from './code-block';
 import { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
 import { MentionMenu, SlashMenu } from './mention-menu';
+import { MobileEditorToolbar, TouchScroll, useTouchEditing } from './mobile-toolbar';
 import { useEditorMotion } from './motion';
 export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
 import { useT, useTranslation } from '@tio/i18n';
-import {
-  MentionLabel,
-  EmptyNotice,
-  useTheme,
-  useMobile,
-  IconButton,
-  PortalContext,
-  EditHistoryContext,
-} from '@tio/ui';
-import { FilePlus, Database, Bold, Italic, Code, Undo2, Redo2, Plus } from 'lucide-react';
+import { MentionLabel, EmptyNotice, useTheme, PortalContext, EditHistoryContext } from '@tio/ui';
+import { FilePlus, Database, Code } from 'lucide-react';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 
 import '@blocknote/core/fonts/inter.css';
@@ -207,30 +200,10 @@ export function EditorContent({
   const { schema, codecs, slashItems } = useContext(EditorSchemaContext);
   const { i18n } = useTranslation();
   const theme = useTheme();
-  const mobile = useMobile();
+  const touch = useTouchEditing();
   const portal = useContext(PortalContext);
+  const [chromePortal, setChromePortal] = useState<HTMLDivElement | null>(null);
   const history = useContext(EditHistoryContext);
-  const [focused, setFocused] = useState(false);
-  const [keyboardOffset, setKeyboardOffset] = useState(0);
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    const update = () =>
-      setKeyboardOffset(
-        Math.max(
-          0,
-          window.innerHeight -
-            (viewport?.height ?? window.innerHeight) -
-            (viewport?.offsetTop ?? 0),
-        ),
-      );
-    viewport?.addEventListener('resize', update);
-    viewport?.addEventListener('scroll', update);
-    update();
-    return () => {
-      viewport?.removeEventListener('resize', update);
-      viewport?.removeEventListener('scroll', update);
-    };
-  }, []);
   const original = useRef(blocks);
   const applying = useRef(false);
   const sent = useRef(new Set<string>());
@@ -238,6 +211,7 @@ export function EditorContent({
     schema,
     disableExtensions: history ? ['history'] : undefined,
     extensions: [
+      TouchScroll(),
       ClipboardMetadata({ originals: () => original.current }),
       SyntaxHighlightingExtension({
         createHighlighter: () =>
@@ -349,11 +323,13 @@ export function EditorContent({
         <BlockNoteView
           shadCNComponents={shadCNComponents}
           editor={editor}
-          portalElements={portal ? { default: portal } : undefined}
-          onFocusCapture={() => setFocused(true)}
-          onBlurCapture={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
-          }}
+          portalElements={
+            touch && chromePortal
+              ? { default: chromePortal }
+              : portal
+                ? { default: portal }
+                : undefined
+          }
           slashMenu={false}
           sideMenu={false}
           linkToolbar={false}
@@ -382,15 +358,16 @@ export function EditorContent({
           }}
         >
           {!readOnly && <MentionMenu />}
-          <FormattingToolbarController floatingUIOptions={floatingMotion} />
-          <EditorLinkToolbar />
-          <SideMenuController
-            sideMenu={EditorSideMenu}
-            floatingUIOptions={{
-              ...floatingMotion,
-              ...(mobile ? { useFloatingOptions: { placement: 'top-start' as const } } : {}),
-            }}
-          />
+          {!readOnly &&
+            (touch ? (
+              <MobileEditorToolbar onPortal={setChromePortal} />
+            ) : (
+              <>
+                <DesktopFormattingToolbarController floatingUIOptions={floatingMotion} />
+                <EditorLinkToolbar />
+                <SideMenuController sideMenu={EditorSideMenu} floatingUIOptions={floatingMotion} />
+              </>
+            ))}
           <SuggestionMenuController
             floatingUIOptions={floatingMotion}
             triggerCharacter="/"
@@ -466,60 +443,6 @@ export function EditorContent({
             }
           />
         </BlockNoteView>
-        {mobile && focused && !readOnly && (
-          <div
-            role="toolbar"
-            aria-label={t('common.edit')}
-            className="fixed inset-x-0 z-40 flex items-center justify-center gap-2 border-t border-line bg-panel px-3 py-1 shadow-lg"
-            style={{
-              bottom: keyboardOffset,
-              paddingBottom: 'max(4px, env(safe-area-inset-bottom))',
-            }}
-            onPointerDown={(e) => e.preventDefault()}
-          >
-            <IconButton
-              label={t('common.create')}
-              onClick={() => {
-                editor.focus();
-                editor.insertInlineContent('/');
-              }}
-            >
-              <Plus size={18} />
-            </IconButton>
-            <IconButton
-              label={i18n.language === 'zh' ? '粗体' : 'Bold'}
-              onClick={() => editor.toggleStyles({ bold: true })}
-            >
-              <Bold size={18} />
-            </IconButton>
-            <IconButton
-              label={i18n.language === 'zh' ? '斜体' : 'Italic'}
-              onClick={() => editor.toggleStyles({ italic: true })}
-            >
-              <Italic size={18} />
-            </IconButton>
-            <IconButton
-              label={i18n.language === 'zh' ? '代码' : 'Code'}
-              onClick={() => editor.toggleStyles({ code: true })}
-            >
-              <Code size={18} />
-            </IconButton>
-            <IconButton
-              label={t('common.undo')}
-              disabled={history && !history.canUndo}
-              onClick={() => (history ? history.undo() : editor.undo())}
-            >
-              <Undo2 size={18} />
-            </IconButton>
-            <IconButton
-              label={t('common.redo')}
-              disabled={history && !history.canRedo}
-              onClick={() => (history ? history.redo() : editor.redo())}
-            >
-              <Redo2 size={18} />
-            </IconButton>
-          </div>
-        )}
       </AppSliceContext.Provider>
     </EmbedContext.Provider>
   );

@@ -55,7 +55,7 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
       title={t('workspace.searchTitle')}
       close={() => m.setSearching(false)}
     >
-      <div className="grid gap-5 md:grid-cols-[1.3fr_1fr]">
+      <div className="grid min-w-0 gap-5 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <OptionsPanel
           label={t('workspace.search')}
           query={m.query}

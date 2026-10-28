@@ -53,7 +53,7 @@ export function WorkspaceSwitcher({
           aria-label={t('ui.switch')}
           className={cn(
             'min-w-0 justify-start gap-2 font-medium',
-            compact ? 'max-w-44 px-1 text-xs' : 'w-full px-2 text-sm',
+            compact ? 'max-w-44 shrink px-1 text-xs' : 'w-full px-2 text-sm',
           )}
         >
           <span className="truncate">{m.workspace?.name ?? m.session?.name}</span>
@@ -160,9 +160,9 @@ export function Sidebar({
           <WorkspaceSwitcher model={m} />
         </div>
         <IconButton
-          label={t('ui.collapse')}
-          className="hidden p-1 md:flex"
-          onClick={m.collapseSidebar}
+          label={t(mobile ? 'common.close' : 'ui.collapse')}
+          className="p-1"
+          onClick={() => (mobile ? m.setSidebar(false) : m.collapseSidebar())}
         >
           <PanelLeftClose size={16} />
         </IconButton>
@@ -171,7 +171,7 @@ export function Sidebar({
         <Button className="w-full justify-start text-sm" onClick={() => m.setSearching(true)}>
           <Search size={17} />
           {t('workspace.search')}
-          <kbd className="ml-auto text-[10px] text-muted">⌘ K</kbd>
+          <kbd className="tio-shortcut ml-auto text-[10px] text-muted">⌘ K</kbd>
         </Button>
         <Menu
           trigger={
@@ -303,8 +303,8 @@ export function Sidebar({
       )}
       <OverlayPresence>
         {m.sidebar && (
-          <Modal sheet title={t('workspace.sidebar')} close={() => m.setSidebar(false)}>
-            <div className="h-[calc(100dvh-100px)]">{content}</div>
+          <Modal sheet hideHeader title={t('workspace.sidebar')} close={() => m.setSidebar(false)}>
+            {content}
           </Modal>
         )}
       </OverlayPresence>

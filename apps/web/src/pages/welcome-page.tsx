@@ -32,7 +32,7 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
   }
   if (m.connection || m.loading || m.loadError)
     return (
-      <main className="mx-auto flex h-dvh w-full max-w-xl flex-col gap-8 p-6 md:py-16">
+      <main className="tio-connection-page mx-auto flex h-dvh w-full max-w-xl flex-col gap-8 p-6 md:py-16">
         <header className="flex shrink-0 items-center justify-between gap-4">
           {m.connection ? (
             <IconButton label={t('ui.back')} onClick={() => m.setLogoutOpen(true)}>

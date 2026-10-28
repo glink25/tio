@@ -39,6 +39,7 @@ export default function EmojiPicker({ onSelect }: { onSelect: (icon: string) => 
           onEmojiSelect: (emoji: { native: string }) => select.current(emoji.native),
         }) as unknown as HTMLElement;
         picker.style.width = '100%';
+        picker.classList.add('tio-emoji-picker');
         picker.style.setProperty('--shadow', 'none');
         picker.style.setProperty('--rgb-accent', theme === 'dark' ? '222, 222, 221' : '37, 37, 37');
         container.current?.appendChild(picker);

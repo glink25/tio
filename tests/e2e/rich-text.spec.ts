@@ -61,7 +61,7 @@ async function mount(page: Page) {
   }, '/@fs' + repoRoot);
   await expect(page.locator('#one .bn-editor')).toContainText('Select this text');
 }
-async function selectText(page: Page, root = '#one') {
+async function selectText(page: Page, root = '#one', touch = false) {
   await page.locator(`${root} [data-id="select"] .bn-inline-content`).click();
   await page.locator(`${root} .bn-editor`).evaluate((el) => {
     const editor = (el as HTMLElement & { editor: any }).editor;
@@ -76,7 +76,9 @@ async function selectText(page: Page, root = '#one') {
   await expect
     .poll(() => page.evaluate(() => window.getSelection()?.toString()))
     .toBe('Select this text');
-  await expect(page.locator(`${root} .bn-formatting-toolbar`)).toBeVisible();
+  await expect(
+    page.locator(touch ? '.tio-mobile-editor-toolbar' : `${root} .bn-formatting-toolbar`),
+  ).toBeVisible();
 }
 test.beforeEach(async ({ page }) => {
   await mount(page);
@@ -142,4 +144,33 @@ test('inline mentions support keyboard insertion, atomic deletion and undo', asy
   await page.keyboard.type(' @');
   await page.keyboard.press('Escape');
   await expect(page.locator('#one .bn-suggestion-menu')).toBeHidden();
+});
+
+// Touch formatting crosses a registered portal and keeps a native selection.
+// Desktop command tests do not protect this focus hand-off or its shared history.
+test.describe('touch editing', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+  test('toolbar formatting preserves the selection, saves and shares undo/redo', async ({
+    page,
+  }) => {
+    await selectText(page, '#one', true);
+    const toolbar = page.locator('.tio-mobile-editor-toolbar');
+    const text = page.locator('#one [data-id="select"] .bn-inline-content');
+    await toolbar.locator('[data-test="bold"]').tap();
+    await expect(text.locator('strong')).toHaveText('Select this text');
+    await page.evaluate(() => (window as any).chromeFixture.one.flush());
+    await toolbar.getByRole('button', { name: 'More actions', exact: true }).tap();
+    await page.getByRole('button', { name: 'Undo action', exact: true }).tap();
+    await expect(text.locator('strong')).toHaveCount(0);
+    await toolbar.getByRole('button', { name: 'More actions', exact: true }).tap();
+    await page.getByRole('button', { name: 'Redo action', exact: true }).tap();
+    await expect(text.locator('strong')).toHaveText('Select this text');
+    await page.evaluate(async () => {
+      const f = (window as any).chromeFixture;
+      await f.one.flush();
+      await f.one.open({ id: 'target' });
+      await f.one.open({ id: 'main' });
+    });
+    await expect(page.locator('#one [data-id="select"] strong')).toHaveText('Select this text');
+  });
 });

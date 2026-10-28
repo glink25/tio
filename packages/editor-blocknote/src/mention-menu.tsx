@@ -99,7 +99,7 @@ export function SlashMenu(props: SuggestionMenuProps<DefaultReactSuggestionItem>
   const editor = useBlockNoteEditor();
   const t = useT();
   return (
-    <div className="w-80 max-w-[calc(100vw-24px)] rounded-lg border border-line bg-panel p-1 shadow-xl">
+    <div className="tio-slash-menu bn-suggestion-menu w-80 max-w-[calc(100vw-24px)] rounded-lg border border-line bg-panel p-1 shadow-xl">
       <OptionsPanel
         label={t('common.edit')}
         search={false}

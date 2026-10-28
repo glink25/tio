@@ -71,7 +71,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
   const header = (actions: ReactNode, layout: { appMode: boolean }) =>
     layout.appMode ? (
       (mobile ? !m.sidebar : m.sidebarCollapsed) && (
-        <div className="fixed top-3 left-3 z-20 rounded-lg border border-line bg-panel/95 shadow-sm">
+        <div className="fixed top-[max(12px,env(safe-area-inset-top))] left-[max(12px,env(safe-area-inset-left))] z-20 rounded-lg border border-line bg-panel/95 shadow-sm">
           <IconButton
             label={t('workspace.sidebar')}
             className="p-2"
@@ -85,7 +85,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
         </div>
       )
     ) : (
-      <header className="sticky top-0 z-10 flex h-12 items-center justify-between gap-2 bg-panel/95 px-3 md:px-5">
+      <header className="tio-workspace-header sticky top-0 z-10 flex h-12 items-center justify-between gap-2 bg-panel/95 px-3 md:px-5">
         <div className="flex min-w-0 items-center gap-1 text-sm text-muted">
           <IconButton
             label={t('workspace.sidebar')}

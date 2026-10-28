@@ -15,7 +15,6 @@ import {
   useState,
   useRef,
   type ButtonHTMLAttributes,
-  type CSSProperties,
   type ReactNode,
 } from 'react';
 export { MentionContext, MentionLabel, MentionPicker } from './mentions';
@@ -26,6 +25,7 @@ import { useOverlayOpen } from './motion';
 export { OverlayPresence, useOverlayOpen, useReducedMotion, motion } from './motion';
 
 import { useMobileDialogPosition } from './mobile-dialog';
+import { registerOverlay } from './overlay-history';
 import { ChoiceSelect } from './select';
 export function cn(...values: ClassValue[]) {
   return twMerge(clsx(values));
@@ -73,8 +73,10 @@ export function Modal({
   trackHistory = true,
   header,
   footer,
+  hideHeader = false,
 }: {
   layout?: 'default' | 'workspace';
+  hideHeader?: boolean;
   trackHistory?: boolean;
   header?: ReactNode;
   footer?: ReactNode;
@@ -89,7 +91,7 @@ export function Modal({
   const t = useT();
   const open = useOverlayOpen();
   useOverlayBack(close, trackHistory && open);
-  const position = useMobileDialogPosition(mobilePlacement === 'center');
+  const position = useMobileDialogPosition();
   return (
     <Dialog.Root
       open={open}
@@ -100,6 +102,14 @@ export function Modal({
       <Dialog.Portal container={useContext(PortalContext)}>
         <Dialog.Overlay className="tio-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
         <Dialog.Content
+          onCloseAutoFocus={(event) => {
+            // A replacement dialog may already own focus when this exit finishes.
+            const focusedDialog = document.activeElement?.closest(
+              '.tio-dialog[data-state="open"], .tio-drawer[data-state="open"]',
+            );
+            if (focusedDialog && !focusedDialog.contains(event.target as Node))
+              event.preventDefault();
+          }}
           onEscapeKeyDown={(event) => {
             // Floating controls are portalled; their Escape must not dismiss the containing dialog.
             const floating = [
@@ -111,59 +121,54 @@ export function Modal({
               event.preventDefault();
           }}
           {...{ inert: !open ? '' : undefined }}
-          data-motion={sheet ? 'left' : layout === 'workspace' || wide ? 'center' : mobilePlacement}
-          style={
-            {
-              ...position,
-              '--tio-panel-position': position?.transform ?? 'translate(0, 0)',
-              '--tio-panel-rest': position?.transform ?? 'none',
-            } as CSSProperties
-          }
+          data-motion={sheet ? 'left' : mobilePlacement}
+          data-placement={sheet ? 'sidebar' : layout === 'workspace' ? 'full' : mobilePlacement}
+          data-wide={wide || undefined}
+          data-layout={layout}
+          data-headerless={hideHeader || undefined}
+          style={position}
           aria-describedby={undefined}
-          className={cn(
-            'tio-dialog fixed z-50 overflow-y-auto border border-line bg-panel p-5 text-ink shadow-xl outline-none',
-            layout === 'workspace'
-              ? 'inset-0 flex h-dvh flex-col overflow-hidden p-0 md:inset-auto md:top-[3dvh] md:left-1/2 md:h-[94dvh] md:w-[min(1600px,96vw)] md:-translate-x-1/2 md:rounded-xl'
-              : sheet
-                ? 'inset-y-0 left-0 w-[min(320px,90vw)]'
-                : wide
-                  ? 'inset-0 md:inset-auto md:top-[6dvh] md:left-1/2 md:max-h-[88dvh] md:w-[min(1100px,92vw)] md:-translate-x-1/2 md:rounded-xl'
-                  : 'bottom-0 left-0 max-h-[90dvh] w-full rounded-t-xl md:top-[12dvh] md:bottom-auto md:left-1/2 md:max-h-[76dvh] md:w-[min(550px,calc(100%-24px))] md:-translate-x-1/2 md:rounded-xl',
-            mobilePlacement === 'center' && 'max-md:rounded-xl',
-          )}
+          className="tio-dialog fixed z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border border-line bg-panel text-ink shadow-xl outline-none"
         >
-          <div
-            className={cn(
-              'flex items-center justify-between gap-4',
-              layout === 'workspace'
-                ? 'shrink-0 items-start border-b border-line px-4 py-3 md:items-center md:px-6'
-                : 'mb-5',
-            )}
-          >
-            {header ? (
-              <>
-                <Dialog.Title className="sr-only">{title}</Dialog.Title>
-                {header}
-              </>
-            ) : (
-              <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
-            )}
-            <Dialog.Close asChild>
-              <IconButton label={t('common.close')} className="p-1">
-                <X size={20} />
-              </IconButton>
-            </Dialog.Close>
-          </div>
+          {hideHeader ? (
+            <Dialog.Title className="sr-only">{title}</Dialog.Title>
+          ) : (
+            <div
+              className={cn(
+                'tio-dialog-header flex shrink-0 items-center justify-between gap-4',
+                layout === 'workspace'
+                  ? 'shrink-0 items-start border-b border-line px-4 py-3 md:items-center md:px-6'
+                  : 'px-4 py-3 md:px-5 md:py-4',
+              )}
+            >
+              {header ? (
+                <>
+                  <Dialog.Title className="sr-only">{title}</Dialog.Title>
+                  {header}
+                </>
+              ) : (
+                <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+              )}
+              <Dialog.Close asChild>
+                <IconButton label={t('common.close')} className="p-1">
+                  <X size={20} />
+                </IconButton>
+              </Dialog.Close>
+            </div>
+          )}
           {description && (
-            <Dialog.Description className="mb-5 text-sm text-muted">
+            <Dialog.Description className="shrink-0 px-4 pb-3 text-sm text-muted md:px-5">
               {description}
             </Dialog.Description>
           )}
-          {layout === 'workspace' ? (
-            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-          ) : (
-            children
-          )}
+          <div
+            className={cn(
+              'tio-dialog-body min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain',
+              layout === 'default' && !hideHeader && 'px-4 pb-4 md:px-5 md:pb-5',
+            )}
+          >
+            {children}
+          </div>
           {footer && (
             <div className="shrink-0 border-t border-line bg-panel px-4 py-3 md:px-6">{footer}</div>
           )}
@@ -186,6 +191,7 @@ export function Drawer({
   closeLabel?: string;
 }) {
   const t = useT();
+  const position = useMobileDialogPosition();
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const open = useOverlayOpen();
   useOverlayBack(close, open);
@@ -200,11 +206,12 @@ export function Drawer({
         <Dialog.Overlay className="tio-overlay fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
         <Dialog.Content
           {...{ inert: !open ? '' : undefined }}
+          style={position}
           ref={setPortalContainer}
           aria-describedby={undefined}
-          className="tio-drawer fixed inset-y-0 right-0 z-50 w-full max-w-2xl overflow-y-auto bg-panel shadow-xl"
+          className="tio-drawer fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col overflow-hidden bg-panel shadow-xl"
         >
-          <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel px-6 py-3">
+          <header className="tio-drawer-header z-10 flex shrink-0 items-center justify-between border-b border-line bg-panel px-4 py-3 md:px-6">
             <Dialog.Title className="text-sm text-secondary">{title}</Dialog.Title>
             <div className="flex items-center gap-2">
               {actions}
@@ -216,7 +223,9 @@ export function Drawer({
             </div>
           </header>
           <PortalContext.Provider value={portalContainer ?? undefined}>
-            {children}
+            <div className="tio-drawer-body min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+              {children}
+            </div>
           </PortalContext.Provider>
         </Dialog.Content>
       </Dialog.Portal>
@@ -325,12 +334,6 @@ export {
   toast,
   useMobile,
 } from './overlays';
-// One stack per document: Back removes only surfaces above the destination entry.
-const overlays: { key: string; close: () => void }[] = [];
-function dismissOverlayHistory() {
-  const index = overlays.findIndex((entry) => entry.key === history.state?.tioOverlay);
-  for (const entry of overlays.slice(index + 1).reverse()) entry.close();
-}
 export function useOverlayBack(close: () => void, enabled = true) {
   const open = useOverlayOpen();
   enabled = enabled && open;
@@ -338,16 +341,7 @@ export function useOverlayBack(close: () => void, enabled = true) {
   closeRef.current = close;
   useEffect(() => {
     if (!enabled) return;
-    const key = crypto.randomUUID();
-    if (!overlays.length) window.addEventListener('popstate', dismissOverlayHistory);
-    overlays.push({ key, close: () => closeRef.current() });
-    history.pushState({ ...history.state, tioOverlay: key }, '');
-    return () => {
-      const index = overlays.findIndex((entry) => entry.key === key);
-      if (index >= 0) overlays.splice(index, 1);
-      if (!overlays.length) window.removeEventListener('popstate', dismissOverlayHistory);
-      if (history.state?.tioOverlay === key) history.back();
-    };
+    return registerOverlay(() => closeRef.current());
   }, [enabled]);
 }
 

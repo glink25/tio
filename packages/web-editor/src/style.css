@@ -257,6 +257,10 @@
     center / 16px 16px no-repeat;
 }
 @media (max-width: 767px) {
+  .tio-editor .bn-root.bn-root[data-color-scheme],
+  .tio-editor .bn-block-content {
+    font-size: 16px;
+  }
   .tio-editor .bn-side-menu .tio-block-action,
   .tio-editor .bn-toggle-button {
     min-width: 44px;
@@ -469,4 +473,124 @@
   .tio-editor .tio-cover-actions {
     transition: none;
   }
+}
+
+/* A zero-size, scoped portal outside page scrolling, within the owning modal if any. */
+.tio-editor.tio-editor-chrome {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+.tio-editor-chrome .bn-root {
+  pointer-events: auto;
+}
+.tio-editor-chrome
+  :is(
+    [data-slot='popover-content'],
+    [data-slot='dropdown-menu-content'],
+    [data-slot='select-content'],
+    [data-slot='dropdown-menu-sub-content'],
+    .bn-suggestion-menu
+  ) {
+  pointer-events: auto;
+  max-width: min(360px, calc(var(--bn-vv-width, 100vw) - 16px));
+  max-height: min(var(--available-height, 100dvh), calc(var(--bn-vv-height, 100dvh) - 80px));
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+.tio-editor .tio-mobile-editor-toolbar {
+  position: fixed;
+  top: calc(var(--bn-vv-top, 0px) + var(--bn-vv-height, 100dvh) - 8px);
+  left: calc(var(--bn-vv-left, 0px) + 8px + env(safe-area-inset-left, 0px));
+  width: calc(
+    var(--bn-vv-width, 100vw) - 16px - env(safe-area-inset-left, 0px) -
+      env(safe-area-inset-right, 0px)
+  );
+  translate: 0 -100%;
+  z-index: 60;
+  pointer-events: auto;
+}
+.tio-editor .tio-mobile-editor-toolbar[data-keyboard='false'] {
+  top: calc(
+    var(--bn-vv-top, 0px) + var(--bn-vv-height, 100dvh) - max(8px, env(safe-area-inset-bottom, 0px))
+  );
+}
+.tio-editor .tio-touch-toolbar {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--popover);
+  box-shadow: 0 4px 20px #00000014;
+}
+.tio-editor .tio-touch-toolbar-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x pinch-zoom;
+  scrollbar-width: none;
+}
+.tio-editor .tio-touch-toolbar .bn-toolbar {
+  width: max-content;
+  flex-wrap: nowrap;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.tio-editor .tio-touch-toolbar :is(button, [role='combobox']),
+.tio-editor .tio-mobile-more button {
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+  touch-action: manipulation;
+}
+.tio-editor .tio-touch-toolbar .tio-touch-done {
+  border-left: 1px solid var(--border);
+  border-radius: 0 8px 8px 0;
+}
+.tio-editor .tio-mobile-more {
+  max-width: calc(var(--bn-vv-width, 100vw) - 16px);
+  touch-action: pan-y pinch-zoom;
+}
+@media (hover: none) and (pointer: coarse) {
+  .tio-editor .bn-root.bn-root[data-color-scheme],
+  .tio-editor .bn-block-content,
+  .tio-editor input,
+  .tio-editor textarea {
+    font-size: 16px;
+  }
+  .tio-editor .bn-editor {
+    padding-bottom: 80px;
+  }
+  .tio-editor .bn-suggestion-menu {
+    max-height: calc(var(--bn-vv-height, 100dvh) - 80px);
+  }
+}
+.tio-editor .tio-mobile-more .grid button {
+  min-width: 0;
+  justify-content: flex-start;
+  white-space: normal;
+  text-align: left;
+}
+.tio-editor .tio-mobile-more .grid button svg {
+  flex-shrink: 0;
+}
+.tio-editor-chrome .bn-panel {
+  width: min(360px, calc(var(--bn-vv-width, 100vw) - 16px));
+  max-height: calc(var(--bn-vv-height, 100dvh) - 80px);
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  border: 1px solid var(--border);
+  background: var(--popover);
+  box-shadow: 0 4px 20px #00000014;
 }

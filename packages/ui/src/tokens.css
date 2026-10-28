@@ -64,14 +64,17 @@
 .tio-dialog:has(.page-preview) {
   padding: 0;
 }
-.tio-dialog:has(.page-preview) > div:first-child {
+.tio-dialog:has(.page-preview) > .tio-dialog-body {
+  padding: 0;
+}
+.tio-dialog:has(.page-preview) > .tio-dialog-header {
   position: absolute;
   right: 16px;
   top: 12px;
   z-index: 1;
   margin: 0;
 }
-.tio-dialog:has(.page-preview) > div:first-child h2 {
+.tio-dialog:has(.page-preview) > .tio-dialog-header h2 {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -91,9 +94,6 @@
   .tio-popover {
     max-height: 72dvh;
     overflow: auto;
-  }
-  .tio-dialog {
-    padding-bottom: max(20px, env(safe-area-inset-bottom));
   }
   .tio-editor .bn-editor {
     padding-inline: 0 !important;
@@ -123,4 +123,158 @@
 /* Keep button foregrounds explicit at the independently mounted editor boundary. */
 .tio-editor .tio-button[data-variant='primary'] {
   color: var(--color-on-accent);
+}
+
+/* Keep gesture policy on controls; native text selection and editor gestures stay intact. */
+.tio-button,
+.tio-menu [role^='menuitem'],
+.tio-popover [role='tab'],
+.tio-dialog [role='tab'],
+[cmdk-item],
+.tio-settings a,
+a[href] {
+  touch-action: manipulation;
+}
+.tio-dialog {
+  --tio-panel-rest: none;
+  --tio-panel-position: translate(0, 0);
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: 90dvh;
+  border-radius: 12px 12px 0 0;
+}
+.tio-dialog[data-placement='full'] {
+  top: 0;
+  bottom: auto;
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+}
+.tio-dialog[data-placement='sidebar'] {
+  top: 0;
+  bottom: auto;
+  width: min(320px, 90vw);
+  height: 100dvh;
+  max-height: 100dvh;
+  border-radius: 0;
+  background: var(--color-surface);
+}
+.tio-dialog-body,
+.tio-drawer-body {
+  scroll-padding-block: 12px;
+}
+.tio-dialog[data-headerless] > .tio-dialog-body {
+  padding: 0;
+}
+@media (min-width: 768px) {
+  .tio-dialog:not([data-placement='sidebar']) {
+    top: 12dvh;
+    bottom: auto;
+    left: 50%;
+    translate: -50% 0;
+    width: min(550px, calc(100% - 24px));
+    max-height: 76dvh;
+    border-radius: 12px;
+  }
+  .tio-dialog[data-wide='true']:not([data-placement='sidebar']) {
+    top: 6dvh;
+    width: min(1100px, 92vw);
+    height: auto;
+    max-height: 88dvh;
+  }
+  .tio-dialog[data-layout='workspace']:not([data-placement='sidebar']) {
+    top: 3dvh;
+    width: min(1600px, 96vw);
+    height: 94dvh;
+    max-height: 94dvh;
+  }
+}
+@media (max-width: 767px) {
+  .tio-dialog,
+  .tio-drawer {
+    --tio-viewport-top: 0px;
+    --tio-viewport-left: 0px;
+    --tio-viewport-width: 100vw;
+    --tio-viewport-height: 100dvh;
+    top: var(--tio-viewport-top);
+    bottom: auto;
+    left: var(--tio-viewport-left);
+    width: var(--tio-viewport-width);
+    max-height: var(--tio-viewport-height);
+    padding: 0;
+  }
+  .tio-dialog[data-placement='sheet']:not([data-wide='true']) {
+    top: calc(var(--tio-viewport-top) + var(--tio-viewport-height));
+    translate: 0 -100%;
+    max-height: calc(var(--tio-viewport-height) - 12px - env(safe-area-inset-top, 0px));
+  }
+  .tio-dialog[data-placement='center'] {
+    top: calc(
+      var(--tio-viewport-top) +
+        (
+          var(--tio-viewport-height) + env(safe-area-inset-top, 0px) -
+            env(safe-area-inset-bottom, 0px)
+        ) /
+        2
+    );
+    left: calc(
+      var(--tio-viewport-left) +
+        (
+          var(--tio-viewport-width) + env(safe-area-inset-left, 0px) -
+            env(safe-area-inset-right, 0px)
+        ) /
+        2
+    );
+    translate: -50% -50%;
+    width: calc(
+      var(--tio-viewport-width) - 24px - env(safe-area-inset-left, 0px) -
+        env(safe-area-inset-right, 0px)
+    );
+    max-height: calc(
+      var(--tio-viewport-height) - 24px - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px)
+    );
+    border-radius: 12px;
+  }
+  .tio-dialog[data-placement='full'],
+  .tio-dialog[data-wide='true']:not([data-placement='center']),
+  .tio-drawer {
+    height: var(--tio-viewport-height);
+    border-radius: 0;
+  }
+  .tio-dialog[data-placement='sidebar'] {
+    width: min(320px, calc(var(--tio-viewport-width) - 32px));
+    height: var(--tio-viewport-height);
+    padding-left: env(safe-area-inset-left, 0px);
+  }
+  .tio-dialog[data-placement='sidebar'],
+  .tio-dialog[data-placement='full'],
+  .tio-dialog[data-wide='true']:not([data-placement='center']),
+  .tio-drawer {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .tio-dialog:not([data-placement='center']),
+  .tio-drawer {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .tio-dialog:not([data-placement='sidebar']):not([data-placement='center']),
+  .tio-drawer {
+    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+  }
+  :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='range']):not(
+      [type='file']
+    ) {
+    font-size: 16px;
+  }
+  .tio-emoji-picker {
+    /* Emoji Mart's search field subtracts 1px from this public token. */
+    --font-size: 17px;
+    max-width: 100%;
+  }
+}
+@media (hover: none) and (pointer: coarse) {
+  .tio-shortcut {
+    display: none;
+  }
 }
