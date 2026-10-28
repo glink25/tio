@@ -65,6 +65,9 @@ export class WorkspaceServices {
   get hasReplicaSync() {
     return !!this.runner;
   }
+  get manualSync() {
+    return !!this.runner && !this.runner.automaticEnabled;
+  }
   get contentReady() {
     return this.active
       ? (this.binding?.isContentReady?.(this.active.session.workspaceId) ?? true)
@@ -185,6 +188,8 @@ export class WorkspaceServices {
       repository: WorkspaceRepository & { close(): void };
       runner?: HostSyncRunner;
       unsubscribe?: () => void;
+      ready?: Promise<void>;
+      configureSync?: (discovered?: TioObject) => Promise<void>;
     }
   >();
   private active?: { session: WorkspaceSession; runtime: WorkspaceRuntime };
@@ -225,7 +230,8 @@ export class WorkspaceServices {
       this.connection = saved.connection;
       this.handle = saved.handle;
       this.bind();
-      if (this.binding?.sync) for (const session of await this.sessions()) this.repository(session);
+      if (this.binding?.sync)
+        for (const session of await this.sessions()) await this.repository(session);
     }
   }
   async connect(kind: Connection['kind'], handle?: FileSystemDirectoryHandle) {
@@ -265,7 +271,10 @@ export class WorkspaceServices {
       binding = this.binding;
     if (!this.syncStarted) {
       this.syncStarted = true;
-      for (const entry of this.repositories.values()) entry.runner?.start();
+      for (const entry of this.repositories.values()) {
+        await entry.ready;
+        entry.runner?.start();
+      }
     }
     if (!binding || !binding.adapter.supportsSync) return;
     if (!(await this.checkAccess())) {
@@ -286,7 +295,7 @@ export class WorkspaceServices {
       if (generation !== this.generation) return;
       const existing = saved.find((s) => s.workspaceId === workspace.id);
       if (existing) {
-        if (binding.sync) this.repository(existing);
+        if (binding.sync) await this.repository(existing, workspace);
         continue;
       }
       const session = {
@@ -297,7 +306,7 @@ export class WorkspaceServices {
       };
       if (await this.catalog.read('workspace-lifecycle/' + session.id)) continue;
       await this.catalog.saveSession(session);
-      if (binding.sync) this.repository(session);
+      if (binding.sync) await this.repository(session, workspace);
     }
     this.onChange();
   }
@@ -309,7 +318,7 @@ export class WorkspaceServices {
     this.assertLive();
     return this.catalog.saveSession(session);
   }
-  private repository(session: WorkspaceSession) {
+  private async repository(session: WorkspaceSession, discovered?: TioObject) {
     this.assertLive();
     let entry = this.repositories.get(session.id);
     if (!entry) {
@@ -323,13 +332,18 @@ export class WorkspaceServices {
       const synchronization = this.binding?.sync?.(session.workspaceId, repository);
       const content = synchronization?.content;
       if (content && synchronization) {
-        const runner = new HostSyncRunner(
+        const runner: HostSyncRunner = new HostSyncRunner(
           synchronization.store,
           content,
           synchronization.endpoint,
           session.workspaceId,
           {
             pollMs: synchronization?.pollMs,
+            automatic: false,
+            beforeAutomaticSync: async () => {
+              await configureSync();
+              return runner.automaticEnabled;
+            },
             beforeSync: async () => {
               const allowed = await this.checkAccess(session.workspaceId);
               const access = this.accessFor(session.workspaceId);
@@ -379,6 +393,20 @@ export class WorkspaceServices {
           },
         );
         entry.runner = runner;
+        let fallback = discovered;
+        let updates = Promise.resolve();
+        const configureSync = (workspace?: TioObject) => {
+          if (workspace) fallback = workspace;
+          const next = updates.then(async () => {
+            const local = await synchronization.store.get(session.workspaceId);
+            const workspace = local?.object ?? fallback;
+            // An empty replica waits for discovery to supply its initial policy.
+            runner.setAutomatic(!!workspace && workspace.manualSync !== true);
+          });
+          updates = next.catch(() => {});
+          return next;
+        };
+        entry.configureSync = configureSync;
         let completing = false;
         runner.onStatus = () => {
           if (runner.status === 'synced' && !completing) {
@@ -399,11 +427,19 @@ export class WorkspaceServices {
           this.status();
         };
         entry.unsubscribe = repository.subscribeChanges((event) => {
-          if (event.origin !== 'sync') runner.schedule();
+          void configureSync()
+            .then(() => {
+              if (event.origin !== 'sync') runner.schedule();
+            })
+            .catch((error) => this.reportStatusError(error));
         });
-        if (this.syncStarted) runner.start();
+        entry.ready = configureSync().then(() => {
+          if (this.syncStarted) runner.start();
+        });
       }
     }
+    await entry.ready;
+    if (discovered) await entry.configureSync?.(discovered);
     return entry;
   }
   async create(
@@ -429,7 +465,7 @@ export class WorkspaceServices {
             a.id.localeCompare(b.id),
         )[0]?.id,
     };
-    const { repository } = this.repository(session);
+    const { repository } = await this.repository(session, workspace);
     const runtime = await WorkspaceRuntime.open(repository);
     if (this.abandoning) {
       runtime.dispose(true);
@@ -450,7 +486,7 @@ export class WorkspaceServices {
     return this.transition(async () => {
       await this.lifecycle.assertOpen(session.id);
       await this.active?.runtime.flush();
-      const entry = this.repository(session);
+      const entry = await this.repository(session);
       if (
         entry.repository.storageCapabilities?.offline === false &&
         !(await this.checkAccess(session.workspaceId))
@@ -505,7 +541,7 @@ export class WorkspaceServices {
       await this.refreshRemote();
       await Promise.all(
         [...this.repositories.values()].flatMap((entry) =>
-          entry.runner ? [entry.runner.sync()] : [],
+          entry.runner ? [entry.runner.backgroundSync()] : [],
         ),
       );
     }
@@ -531,7 +567,7 @@ export class WorkspaceServices {
         else await this.active?.runtime.flush();
         await Promise.all(
           [...this.repositories.values()].flatMap((entry) =>
-            entry.runner ? [entry.runner.sync()] : [],
+            entry.runner ? [entry.runner.backgroundSync()] : [],
           ),
         );
       })
@@ -541,11 +577,20 @@ export class WorkspaceServices {
     this.authorization = work;
     return work;
   }
-  async sync() {
-    await this.active?.runtime.flush();
-    await this.refreshRemote();
-    await this.runner?.sync();
-    if (!this.runner && this.active) await this.active.runtime.poll();
+  private syncing?: Promise<void>;
+  sync() {
+    if (this.syncing) return this.syncing;
+    const active = this.active;
+    this.syncing = (async () => {
+      await active?.runtime.flush();
+      await this.refreshRemote();
+      if (active !== this.active) return;
+      await this.runner?.sync();
+      if (!this.runner && active) await active.runtime.poll();
+    })().finally(() => {
+      this.syncing = undefined;
+    });
+    return this.syncing;
   }
   async discard(id: string) {
     await this.active?.runtime.flush();

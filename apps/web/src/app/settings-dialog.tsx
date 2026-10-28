@@ -100,6 +100,27 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
                     <ConnectionInfo identity={m.identity} />
                   </div>
                 </SettingsGroup>
+                {m.hasReplicaSync && m.workspace && (
+                  <SettingsGroup title={t('settings.synchronization')}>
+                    <SettingsRow
+                      title={t('settings.manualSync')}
+                      description={t('settings.manualSyncDescription')}
+                    >
+                      <input
+                        type="checkbox"
+                        role="switch"
+                        aria-checked={m.manualSync}
+                        aria-label={t('settings.manualSync')}
+                        className="h-4 w-4 accent-ink"
+                        checked={m.manualSync}
+                        disabled={!m.canSetManualSync}
+                        onChange={(event) =>
+                          m.patch(m.workspace!, { manualSync: event.target.checked })
+                        }
+                      />
+                    </SettingsRow>
+                  </SettingsGroup>
+                )}
                 <SettingsGroup title={t('workspace.manage')}>
                   {actions.share && (
                     <SettingsRow title={t('workspace.share')}>

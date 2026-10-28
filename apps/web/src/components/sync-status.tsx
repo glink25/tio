@@ -40,6 +40,11 @@ export function SyncStatus({ model: m }: { model: WorkspaceController }) {
         <p className="text-sm" aria-live="polite">
           {m.status.save === 'loading' ? <LoadingIndicator label={label} /> : label}
         </p>
+        {m.hasReplicaSync && (
+          <Button variant="outline" disabled={m.syncing} onClick={() => void m.syncWorkspace()}>
+            {t('sync.now')}
+          </Button>
+        )}
         {errors.map((error) => (
           <p key={error} className="text-sm text-secondary">
             {error}

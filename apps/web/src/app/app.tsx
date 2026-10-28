@@ -23,6 +23,20 @@ export function App() {
   }, [model.error]);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
+      if (
+        model.session &&
+        model.manualSync &&
+        !model.openingWorkspace &&
+        (e.metaKey || e.ctrlKey) &&
+        e.key.toLowerCase() === 's' &&
+        !e.altKey &&
+        !e.shiftKey &&
+        !e.isComposing
+      ) {
+        e.preventDefault();
+        if (!e.repeat) void model.syncWorkspace();
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === 'k' && model.session) {
         e.preventDefault();
         model.setSearching(true);

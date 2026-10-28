@@ -48,6 +48,8 @@ export function useWorkspace() {
   const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
   const [selected, setSelected] = useState('');
   const [syncStatus, setSyncStatus] = useState<SyncSnapshot>({ phase: 'idle' });
+  const [syncing, setSyncing] = useState(false);
+  const syncRequest = useRef<Promise<void> | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -633,7 +635,27 @@ export function useWorkspace() {
       services.reportStatusError(error);
     }
   };
+  function syncWorkspace() {
+    if (syncRequest.current) return syncRequest.current;
+    if (syncStatus.phase === 'syncing') return Promise.resolve();
+    setSyncing(true);
+    const request = services
+      .sync()
+      .catch((error) => services.reportStatusError(error))
+      .finally(() => {
+        syncRequest.current = null;
+        setSyncing(false);
+      });
+    syncRequest.current = request;
+    return request;
+  }
   return {
+    hasReplicaSync: services.hasReplicaSync,
+    manualSync:
+      services.hasReplicaSync && (workspace ? workspace.manualSync === true : services.manualSync),
+    canSetManualSync: !!workspace && editable(workspace) && !!runtime?.can(workspace),
+    syncing: syncing || syncStatus.phase === 'syncing',
+    syncWorkspace,
     workspaceAction,
     actionBusy,
     actionError,
@@ -645,13 +667,7 @@ export function useWorkspace() {
     executeWorkspaceAction,
     status,
     contentReady: services.contentReady,
-    retryInitialization: async () => {
-      try {
-        await services.sync();
-      } catch (error) {
-        services.reportStatusError(error);
-      }
-    },
+    retryInitialization: syncWorkspace,
     restoreAuthorization,
     canReauthorize: services.canReauthorize,
     statusError: services.statusError,

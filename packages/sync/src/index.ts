@@ -22,6 +22,7 @@ export class HostSyncRunner {
   progress?: { loaded: number; total: number };
   onStatus = () => {};
   private running: Promise<void> | null = null;
+  private currentRun?: { started: boolean };
   private debounce?: ReturnType<typeof setTimeout>;
   private rerun = false;
   private poll?: ReturnType<typeof setInterval>;
@@ -29,6 +30,9 @@ export class HostSyncRunner {
   private attempts = 0;
   private retryAt = 0;
   private disposed = false;
+  private started = false;
+  private automatic: boolean;
+  private dirty = false;
   private unsubscribe?: () => void;
   constructor(
     readonly store: SyncRepository,
@@ -38,6 +42,8 @@ export class HostSyncRunner {
     private host: {
       types?: ObjectRegistry;
       pollMs?: number;
+      automatic?: boolean;
+      beforeAutomaticSync?: () => Promise<boolean>;
       beforeSync?: () => Promise<boolean>;
       onError?: (error: unknown) => void;
       normalizeError?: (error: unknown) => unknown;
@@ -46,6 +52,7 @@ export class HostSyncRunner {
       lock?: (name: string, work: () => Promise<void>) => Promise<void>;
     } = {},
   ) {
+    this.automatic = host.automatic ?? true;
     this.core = new SyncCore(store, provider, endpoint, workspaceId, host.types);
     this.core.onDirty = () => this.schedule();
     this.core.onProgress = (loaded, total) => {
@@ -61,6 +68,8 @@ export class HostSyncRunner {
     this.onStatus();
   }
   start() {
+    if (this.started) return;
+    this.started = true;
     this.disposed = false;
     this.core.stopped = false;
     this.poll = setInterval(() => {
@@ -69,22 +78,41 @@ export class HostSyncRunner {
     this.unsubscribe = this.host.onActive?.(() => {
       if (this.host.isActive?.() !== false) void this.backgroundSync();
     });
-    void this.sync();
+    if (this.automatic) void this.run(true);
   }
-  private async backgroundSync() {
-    if (!this.debounce && this.canRetry()) await this.sync();
+  get automaticEnabled() {
+    return this.automatic;
+  }
+  setAutomatic(enabled: boolean) {
+    if (this.automatic === enabled) return;
+    this.automatic = enabled;
+    if (!enabled) {
+      clearTimeout(this.debounce);
+      this.debounce = undefined;
+      clearTimeout(this.retry);
+      this.rerun = false;
+    } else if (this.started) void this.backgroundSync();
+    this.onStatus();
+  }
+  async backgroundSync() {
+    if (this.automatic && !this.debounce && this.canRetry()) await this.run(true);
   }
   schedule() {
-    if (this.disposed || !this.canRetry()) return;
+    if (this.disposed) return;
+    this.dirty = true;
+    if (!this.running && !this.issues.length) this.state('pending');
+    if (!this.automatic) return;
+    if (!this.canRetry()) return;
     clearTimeout(this.debounce);
     if (!this.running) this.state('pending');
     this.debounce = setTimeout(() => {
       this.debounce = undefined;
-      void this.sync();
+      void this.backgroundSync();
     }, 1000);
   }
   async stop() {
     this.disposed = true;
+    this.started = false;
     this.core.stopped = true;
     clearTimeout(this.debounce);
     clearTimeout(this.retry);
@@ -93,18 +121,34 @@ export class HostSyncRunner {
     await this.running;
   }
   async sync() {
+    return this.run(false);
+  }
+  private async run(automatic: boolean): Promise<void> {
     if (this.disposed || this.retryAt > Date.now()) return;
     if (this.running) {
-      this.rerun = true;
-      return this.running;
+      if (automatic) this.rerun = true;
+      const request = this.currentRun;
+      await this.running;
+      if (!automatic && request && !request.started) return this.run(false);
+      return;
     }
     clearTimeout(this.debounce);
     this.debounce = undefined;
+    const request = { started: false };
+    this.currentRun = request;
     const work = async () => {
       try {
+        if (
+          automatic &&
+          (!this.automatic ||
+            (this.host.beforeAutomaticSync && !(await this.host.beforeAutomaticSync())))
+        )
+          return;
         if (this.disposed || (this.host.beforeSync && !(await this.host.beforeSync()))) return;
-        if (this.disposed) return;
+        if (this.disposed || (automatic && !this.automatic)) return;
         this.state('syncing');
+        request.started = true;
+        this.dirty = false;
         this.core.issues = [];
         await this.core.run();
         this.issues = this.core.issues;
@@ -112,7 +156,7 @@ export class HostSyncRunner {
           this.state(this.issues.some((i) => i.code === 'permission') ? 'permission' : 'issues');
         else {
           this.attempts = 0;
-          this.state(this.debounce || this.rerun ? 'pending' : 'synced');
+          this.state(this.dirty || this.debounce || this.rerun ? 'pending' : 'synced');
         }
       } catch (caught) {
         const e = this.host.normalizeError?.(caught) ?? caught;
@@ -123,7 +167,7 @@ export class HostSyncRunner {
         this.state(issue.code === 'permission' ? 'permission' : 'failed');
       } finally {
         this.onStatus();
-        if (this.issues.length && this.canRetry() && !this.disposed) {
+        if (this.automatic && this.issues.length && this.canRetry() && !this.disposed) {
           clearTimeout(this.retry);
           this.retry = setTimeout(
             () => void this.backgroundSync(),
@@ -140,7 +184,8 @@ export class HostSyncRunner {
       else await work();
     })().finally(() => {
       this.running = null;
-      if (this.rerun && !this.disposed) {
+      this.currentRun = undefined;
+      if (this.rerun && this.automatic && !this.disposed) {
         this.rerun = false;
         if (!this.debounce) this.schedule();
       }

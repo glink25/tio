@@ -100,6 +100,7 @@ export interface TioObject {
   order?: number;
   blocks?: Block[];
   appMode?: boolean;
+  manualSync?: boolean;
   fields?: Field[];
   databaseId?: string;
   properties?: Record<string, unknown>;
@@ -179,6 +180,12 @@ export function validateBuiltin(object: TioObject): TioObject {
     throw new Error('非法删除状态');
   if (input.type === 'workspace' && input.id !== input.workspaceId)
     throw new Error('Workspace 身份不匹配');
+  if (
+    input.type === 'workspace' &&
+    input.manualSync !== undefined &&
+    typeof input.manualSync !== 'boolean'
+  )
+    throw new Error('Invalid manual sync setting');
   if (
     ['page', 'database'].includes(input.type) &&
     input.parentId !== null &&

@@ -145,14 +145,14 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
               m.contentReady
                 ? undefined
                 : () =>
-                    m.status.visual === 'attention' ? (
+                    m.status.visual === 'attention' || (m.manualSync && !m.syncing) ? (
                       <div
                         role="alert"
                         className="flex min-h-[60dvh] flex-col items-center justify-center gap-4 p-12 text-center text-sm"
                       >
                         <p>{statusLabel(m.status)}</p>
                         <Button variant="outline" onClick={() => void m.retryInitialization()}>
-                          {t('common.retry')}
+                          {t(m.manualSync ? 'sync.now' : 'common.retry')}
                         </Button>
                       </div>
                     ) : (

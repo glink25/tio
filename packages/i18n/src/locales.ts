@@ -7,6 +7,10 @@ export const en = {
   'settings.connection': 'Connection',
   'settings.preferences': 'Preferences',
   'settings.data': 'Workspace data',
+  'settings.synchronization': 'Synchronization',
+  'settings.manualSync': 'Manual sync',
+  'settings.manualSyncDescription':
+    'Save locally as usual. Sync this workspace only using Sync now or Ctrl/Cmd+S. This setting is shared when you sync.',
   'settings.appearanceDescription': 'Choose how Tio looks on this device.',
   'settings.languageDescription': 'Choose the language used for menus and controls.',
   'settings.importDescription': 'Import a Tio workspace archive.',
@@ -624,6 +628,10 @@ export const zh: Record<keyof typeof en, string> = {
   'settings.connection': '连接信息',
   'settings.preferences': '偏好设置',
   'settings.data': '空间数据',
+  'settings.synchronization': '同步',
+  'settings.manualSync': '手动同步',
+  'settings.manualSyncDescription':
+    '继续自动保存到本地，仅通过“立即同步”或 Ctrl/Cmd+S 同步此空间。此设置随同步共享。',
   'settings.appearanceDescription': '选择此设备上 Tio 的显示外观。',
   'settings.languageDescription': '选择菜单和控件使用的语言。',
   'settings.importDescription': '导入 Tio 工作空间归档文件。',

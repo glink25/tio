@@ -4,7 +4,7 @@
 
 | 类型         | 主要字段                                                     |
 | ------------ | ------------------------------------------------------------ |
-| workspace    | name                                                         |
+| workspace    | name、可选 manualSync                                        |
 | page         | title、parentId、order、blocks、可选 icon/cover              |
 | database     | name、parentId、order、fields、可选 icon/cover               |
 | record       | databaseId、按字段 ID 保存的 properties、blocks              |
@@ -17,6 +17,8 @@
 图片 `url` 使用 `asset:<assetId>` 或 HTTP(S) 链接，不保存 Blob URL。图标与封面修改及定位保存经过统一命令并推进自身修改时间；定位拖动和取消仅影响临时 UI。上传图片沿用附件存储、备份及同步链路。Markdown/PDF 的阅读投影与静态站点模板不自动包含文档装饰。
 
 新建页面和数据库默认排在同级最前；导航按 `order` 排序，同序按 ID 稳定排序。拖动排序与跨层移动通过统一运行时命令提交，支持撤销和重做。导航由 `parentId/order` 派生，不保存第二份权威子节点清单。删除父节点隐藏其导航子树。数据库嵌入通过 databaseId/viewId 引用；删除嵌入不删除数据库。
+
+工作空间 `manualSync` 是可选布尔值，缺省为 `false`，随业务对象同步共享。具备副本同步能力的宿主在值为 `true` 时仅通过用户操作同步；本地自动保存不受影响。开启时允许已开始的同步完成，取消后续自动调度；关闭时恢复自动同步。设置本身不额外触发发布，其他设备收到配置后才改变策略。
 
 ## 系统时间
 

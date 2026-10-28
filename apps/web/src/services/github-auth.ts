@@ -46,7 +46,8 @@ export async function accessToken(): Promise<string> {
   const work = async () => {
     const saved = credentials();
     if (!saved) throw new GitHubError(401, '请重新连接 GitHub');
-    if (!saved.expiresAt || saved.expiresAt > Date.now() + 60000) return saved.accessToken;
+    if (!saved.expiresAt || saved.expiresAt > Date.now() + 4 * 60 * 60 * 1000)
+      return saved.accessToken;
     if (!saved.refreshToken || !authOrigin || (saved.refreshExpiresAt ?? Infinity) <= Date.now())
       throw new GitHubError(401, '请重新授权 GitHub');
     const response = await fetch(`${authOrigin}/api/github/refresh`, {
