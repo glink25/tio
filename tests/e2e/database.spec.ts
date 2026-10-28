@@ -35,6 +35,7 @@ test.beforeEach(async ({ page }) => {
         editor,
         repository,
         databaseId: database.id,
+        pageId: objects.find((o: any) => o.type === 'page').id,
         recordId: objects.find((o: any) => o.type === 'record').id,
       },
     });
@@ -181,4 +182,38 @@ test('cell drafts and committed cells share keyboard and menu undo/redo without 
   await page.locator('canvas').first().focus();
   await page.keyboard.press('ControlOrMeta+Shift+z');
   await expect.poll(async () => Object.values(await properties(page))).toContain('Changed draft');
+
+  // A retained document range must never replace text when returning from a
+  // canvas selection. Existing cell-only checks cannot protect this handoff.
+  await page.evaluate(() => {
+    const f = (window as any).databaseFixture;
+    return f.editor.open({ id: f.pageId });
+  });
+  const paragraph = page
+    .locator('.bn-inline-content')
+    .filter({ hasText: 'Type / to add content.' })
+    .first();
+  await paragraph.click();
+  await paragraph.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = document.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await expect.poll(() => page.evaluate(() => document.getSelection()?.isCollapsed)).toBe(false);
+  await rowClick(page, 0);
+  await expect.poll(() => page.evaluate(() => document.getSelection()?.toString())).toBe('');
+  await paragraph.click({ position: { x: 2, y: 8 } });
+  await page.keyboard.insertText('Safe boundary ');
+  await expect(paragraph).toContainText('Safe boundary ');
+  await expect(paragraph).toContainText('Type / to add content.');
+  await page.evaluate(() => (window as any).databaseFixture.editor.flush());
+  const blocks = await page.evaluate(async () => {
+    const f = (window as any).databaseFixture;
+    const snapshot = await f.repository.readSnapshot();
+    return snapshot.entries.find((e: any) => e.object.id === f.pageId).object.blocks;
+  });
+  expect(JSON.stringify(blocks)).toContain('Safe boundary ');
+  expect(Object.values(await properties(page))).toContain('Changed draft');
 });

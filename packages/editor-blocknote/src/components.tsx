@@ -14,6 +14,7 @@ import {
   type ComponentProps,
 } from '@blocknote/react';
 import { ShadCNDefaultComponents } from '@blocknote/shadcn';
+import { interactionOwner, interactionHasKind } from '@tio/ui';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { forwardRef, type ReactElement, type MouseEventHandler } from 'react';
 
@@ -32,7 +33,15 @@ const defaults = ShadCNDefaultComponents;
 // Formatting commands restore the caret themselves. A closing Base UI popup
 // must not subsequently move focus back to its trigger and clear a new range.
 function preserveEditorFocus() {
-  return !document.activeElement?.closest('.bn-editor');
+  const owner = interactionOwner(document);
+  // A formatting popup must not reclaim focus after a document, embedded
+  // application or another overlay has taken over the interaction.
+  return (
+    owner?.kind !== 'document' &&
+    owner?.kind !== 'overlay' &&
+    !interactionHasKind(owner, 'widget') &&
+    !document.activeElement?.closest('.bn-editor')
+  );
 }
 export const shadCNComponents = {
   Button: { Button: bridge(defaults.Button.Button) },

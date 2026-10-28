@@ -367,3 +367,15 @@ export { ChoiceSelect, SelectInput } from './select';
 export { usePagedOptions } from './use-paged-options';
 
 export { SettingsGroup, SettingsRow, SettingsAction } from './settings';
+
+export {
+  InteractionBoundary,
+  useInteractionExit,
+  useInteractionOwner,
+  interactionHasKind,
+  registerInteraction,
+  interactionScopeAt,
+  interactionOwner,
+  claimInteraction,
+  withinInteraction,
+} from './interaction';

@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { claimInteraction, interactionOwner, registerInteraction } from './interaction';
+
 const layers = new Set<HTMLElement>();
 
 /** Touch dismissal consumes one gesture; it must never activate the editor below. */
 export function useOverlayInteraction(open: boolean, close: () => void, restoreFocus?: () => void) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const ownership = useRef<ReturnType<typeof registerInteraction> | null>(null);
   const attach = useCallback((element: HTMLDivElement | null) => {
+    ownership.current?.dispose();
+    if (element)
+      ownership.current = registerInteraction(element, 'overlay', {
+        parent: interactionOwner(element.ownerDocument),
+      });
+    if (ownership.current && element)
+      claimInteraction(element.ownerDocument, ownership.current.scope);
     ref.current = element;
     setNode(element);
   }, []);
@@ -90,7 +100,11 @@ export function useOverlayInteraction(open: boolean, close: () => void, restoreF
       const focused = document.activeElement?.closest(
         '.tio-dialog[data-state="open"], .tio-drawer[data-state="open"], .tio-popover[data-state="open"], .tio-menu[data-state="open"]',
       );
-      if (outsideTouch.current || (focused && !ref.current?.contains(focused))) {
+      if (
+        outsideTouch.current ||
+        (ownership.current && !ownership.current.canRestore()) ||
+        (focused && !ref.current?.contains(focused))
+      ) {
         event.preventDefault();
       } else if (restoreFocus) {
         event.preventDefault();

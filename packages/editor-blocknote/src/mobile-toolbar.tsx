@@ -20,7 +20,15 @@ import {
   useVirtualKeyboard,
 } from '@blocknote/react';
 import { useT, useTranslation } from '@tio/i18n';
-import { EditHistoryContext, MentionContext, useTheme } from '@tio/ui';
+import {
+  EditHistoryContext,
+  MentionContext,
+  useTheme,
+  useInteractionOwner,
+  interactionHasKind,
+  registerInteraction,
+  interactionScopeAt,
+} from '@tio/ui';
 import { undoDepth, redoDepth } from '@tiptap/pm/history';
 import { Plugin, Selection } from '@tiptap/pm/state';
 import {
@@ -230,17 +238,8 @@ export function MobileEditorToolbar({
   const keyboard = useVirtualKeyboard();
   const focused = useEditorFocus({ includeEditorUI: true });
   const dom = useEditorDOMElement();
-  const [embeddedFocus, setEmbeddedFocus] = useState(false);
-  useEffect(() => {
-    if (!dom) return;
-    const update = () => {
-      const active = dom.ownerDocument.activeElement;
-      setEmbeddedFocus(!!active && dom.contains(active) && !!active.closest('.database-embed'));
-    };
-    update();
-    dom.ownerDocument.addEventListener('focusin', update);
-    return () => dom.ownerDocument.removeEventListener('focusin', update);
-  }, [dom]);
+  const owner = useInteractionOwner(dom?.ownerDocument);
+  const embeddedFocus = interactionHasKind(owner, 'widget');
   const theme = useTheme();
   const { i18n } = useTranslation();
   const [portal, setPortal] = useState<HTMLDivElement | null>(null);
@@ -251,6 +250,13 @@ export function MobileEditorToolbar({
     },
     [onPortal],
   );
+  useEffect(() => {
+    if (!portal || !dom) return;
+    const registration = registerInteraction(portal, 'editor-ui', {
+      parent: interactionScopeAt(dom),
+    });
+    return () => registration.dispose();
+  }, [portal, dom]);
   const target = dom?.closest('[role="dialog"]') ?? dom?.ownerDocument.body;
   if (!target) return null;
   return (

@@ -10,7 +10,7 @@ import DataEditor, {
 import { isDerivedField } from '@tio/core';
 import { isFieldError } from '@tio/database';
 import { useT } from '@tio/i18n';
-import { useTheme, Popover, Button } from '@tio/ui';
+import { useTheme, Popover, Button, useInteractionExit } from '@tio/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useDisplayValue } from './display-value';
@@ -26,6 +26,10 @@ export function GridView(props: RowsProps) {
   const t = useT();
   const [cellSelection, setCellSelection] = useState<GridSelection>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  useInteractionExit(() => {
+    setCellSelection(undefined);
+    setSelectedIds([]);
+  });
   const [deleting, setDeleting] = useState(false);
   const selectionKey = JSON.stringify([view, props.searchQuery, rows.map((r) => r.id)]);
   useEffect(() => {
