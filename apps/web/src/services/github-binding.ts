@@ -4,12 +4,13 @@ import type { Connection, TioObject, SearchQuery, PageQuery } from '@tio/core';
 import { WorkerSearch } from '@tio/database/search-browser';
 import { FileWorkspaceContent } from '@tio/file-storage';
 import { t } from '@tio/i18n';
-import { LocalStore } from '@tio/local-store';
+import { LocalStore, RemoteFileCache } from '@tio/local-store';
 import {
   GitHubClient,
   GitHubProvider,
   GitHubError,
   type GitHubEndpoint,
+  type GitHubSnapshotState,
 } from '@tio/provider-github';
 import { StorageError } from '@tio/storage';
 
@@ -43,12 +44,28 @@ export function githubBinding(connection: Connection): ConnectionBinding {
     },
   );
   const contents = new Map<string, FileWorkspaceContent>();
+  const caches = new Map<string, RemoteFileCache<GitHubSnapshotState>>();
+  const provider = (endpoint: GitHubEndpoint) => {
+    const namespace = [
+      connection.id,
+      String(endpoint.repositoryId),
+      endpoint.branch,
+      endpoint.workspaceId,
+    ];
+    const key = JSON.stringify(namespace);
+    let cache = caches.get(key);
+    if (!cache) {
+      cache = new RemoteFileCache<GitHubSnapshotState>(namespace);
+      caches.set(key, cache);
+    }
+    return new GitHubProvider(client, endpoint, cache);
+  };
   const content = (workspaceId: string) => {
     let value = contents.get(workspaceId);
     if (!value) {
       const endpoint = endpoints.get(workspaceId);
       if (!endpoint) throw new Error('GitHub workspace is not bound');
-      value = new FileWorkspaceContent(new GitHubProvider(client, endpoint), workspaceId);
+      value = new FileWorkspaceContent(provider(endpoint), workspaceId);
       contents.set(workspaceId, value);
     }
     return value;
@@ -115,6 +132,7 @@ export function githubBinding(connection: Connection): ConnectionBinding {
   return {
     dispose: () => {
       collaborators.clear();
+      caches.clear();
       disposed = true;
     },
     identity: {
@@ -193,10 +211,7 @@ export function githubBinding(connection: Connection): ConnectionBinding {
         const bound = endpoints.get(item.workspaceId);
         if (bound && bound.repositoryId !== item.repo.id) continue;
         try {
-          const candidate = new FileWorkspaceContent(
-            new GitHubProvider(client, item.endpoint),
-            item.workspaceId,
-          );
+          const candidate = new FileWorkspaceContent(provider(item.endpoint), item.workspaceId);
           const workspace = await candidate.read(item.workspaceId);
           if (workspace?.type === 'workspace') {
             endpoints.set(item.workspaceId, item.endpoint);

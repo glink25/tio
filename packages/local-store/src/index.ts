@@ -480,6 +480,7 @@ export class LocalStore {
 
 export { LocalCatalog } from './catalog';
 export { RecoveryJournal } from './journal';
+export { RemoteFileCache } from './remote-cache';
 
 /** Permanently remove one instance, including staged assets, receipts and recovery history. */
 export async function deleteLocalWorkspace(instanceId: string) {
