@@ -15,6 +15,7 @@
     "docs/.local/**",
     "tests/test-results/**",
     "tests/playwright-report/**",
-    "tests/.cache/**"
+    "tests/.cache/**",
+    "tests/tmp/**"
   ]
 }

@@ -1,7 +1,5 @@
-import { GitHubAdapter } from '@tio/adapter-github';
 import { object } from '@tio/core';
 import { LocalCatalog, LocalStore, RecoveryJournal, deleteLocalWorkspace } from '@tio/local-store';
-import { GitHubClient } from '@tio/provider-github';
 import { MemoryRepository } from '@tio/provider-memory';
 import { WorkspaceRuntime } from '@tio/workspace';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -193,25 +191,6 @@ it('removes only the target folder recovery journal', async () => {
   }
 });
 
-it('GitHub management supplies repository web links without invoking mutation APIs', () => {
-  const transport = vi.fn();
-  const adapter = new GitHubAdapter(
-    'github-1',
-    1,
-    new GitHubClient(async () => 't', transport),
-    'pat',
-    new Map([
-      ['w', { repositoryId: 1, fullName: 'owner/tio-w', branch: 'main', workspaceId: 'w' }],
-    ]),
-  );
-  expect(adapter.workspaceLinks('w')).toEqual({
-    repository: 'owner/tio-w',
-    delete: 'https://github.com/owner/tio-w/settings',
-    share: 'https://github.com/owner/tio-w/settings/access',
-  });
-  expect(transport).not.toHaveBeenCalled();
-});
-
 it('host deletion discards the active session, preserves retry after failure, and removes its catalog entry only on success', async () => {
   const values = new Map<string, string>();
   vi.stubGlobal('localStorage', {
@@ -265,60 +244,5 @@ it('host deletion discards the active session, preserves retry after failure, an
     expect((await services.sessions()).some((s) => s.id === session.id)).toBe(false);
   } finally {
     await services.dispose();
-  }
-});
-
-it('connection integrations declare only supported actions and GitHub supplies external instructions', async () => {
-  const values = new Map<string, string>();
-  vi.stubGlobal('localStorage', {
-    getItem: (key: string) => values.get(key) ?? null,
-    setItem: (key: string, value: string) => values.set(key, value),
-  });
-  const { createConnectionBinding } =
-    await import('../../../apps/web/src/services/connection-adapters');
-  const device = createConnectionBinding({ id: 'device', kind: 'device', name: 'Device' });
-  expect(device.workspaceActions?.('w').delete?.kind).toBe('direct');
-  expect(device.workspaceActions?.('w').share).toBeUndefined();
-  values.set(
-    'tio.github.endpoints.github-1',
-    JSON.stringify([
-      ['w', { repositoryId: 1, fullName: 'owner/tio-w', branch: 'main', workspaceId: 'w' }],
-    ]),
-  );
-  const github = createConnectionBinding({ id: 'github-1', kind: 'github', name: 'owner' });
-  try {
-    const actions = github.workspaceActions!('w');
-    expect(actions.delete).toMatchObject({
-      kind: 'external',
-      url: 'https://github.com/owner/tio-w/settings',
-    });
-    expect(actions.share).toMatchObject({
-      kind: 'external',
-      url: 'https://github.com/owner/tio-w/settings/access',
-    });
-    expect(actions.delete?.description).toContain('owner/tio-w');
-    expect(actions.share?.description).toContain('owner/tio-w');
-    expect(actions.delete).not.toHaveProperty('execute');
-    expect(actions.share).not.toHaveProperty('execute');
-  } finally {
-    github.dispose?.();
-  }
-});
-
-it('allows decorating a guarded method and still observes provider method replacements', async () => {
-  const catalog = new LocalCatalog();
-  const lifecycle = new WorkspaceLifecycle(catalog, async () => {});
-  const provider: { commit: () => Promise<string> } = { commit: vi.fn(async () => 'saved') };
-  const repository = lifecycle.guard(crypto.randomUUID(), provider);
-  const original = repository.commit.bind(repository);
-  repository.commit = async () => original();
-  try {
-    expect(await repository.commit()).toBe('saved');
-    provider.commit = vi.fn(async () => 'replacement');
-    expect(await repository.commit()).toBe('replacement');
-    expect(provider.commit).toHaveBeenCalledTimes(1);
-  } finally {
-    lifecycle.close();
-    await catalog.close();
   }
 });

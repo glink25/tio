@@ -8,6 +8,7 @@ const port = Number(process.env.TIO_TEST_PORT ?? 6789);
 const baseURL = `http://127.0.0.1:${port}`;
 export default defineConfig({
   testDir: resolve(testsRoot, 'e2e'),
+  testIgnore: ['**/tmp/**'],
   outputDir: resolve(testsRoot, 'test-results'),
   timeout: 60000,
   fullyParallel: false,

@@ -4,7 +4,9 @@
 
 渲染和文件输出分开：`ssr` 只投影当前块为 HTML；`page` 接收显式路由计划，处理页面引用和附件；Node 宿主复用 `FileWorkspaceContent` 读取标准对象及分片。博客模板通过 PageMap 的页面提及、Tags 关系与发布字段决定输出，不依赖编辑器生命周期。下文记录的 Urodele 转换属于外部博客导入，不构成历史 Tio 格式兼容要求。Tio Pages 遵循[0.2.0 兼容性里程碑原则](../zen.md)：正式发布 0.2.0 前，数据结构、协议和接口按全新设计，不考虑历史兼容、迁移或升级；0.2.0 及后续版本无需兼容或迁移此前数据。从 0.2.0 开始，后续变更才考虑对 0.2.0 及以后版本的兼容性、迁移和升级，具体方案届时设计。
 
-## 本次本地验收（2026-10-27）
+## 历史本地验收（2026-10-27）
+
+下文为既往实现与验收记录，不代表当前测试范围或本次验证结果。静态发布专项测试、预览服务、发布验收脚本及专用夹具已移除；后续专项验证放在 Git 忽略的 `tests/tmp/`，当前长期保障范围见[测试说明](testing.md)。
 
 实际读取公开博客源 commit `e122064cdcd0d50ea8a2dd004a310edb764f061e`，迁移命令通过运行时与文件仓库创建新空间，没有改动原博客仓库。
 
@@ -38,7 +40,7 @@
 
 - 独立临时工作空间只靠自己的 `.tio-page/` 更换作者模板、CSS、JS、路径及主题，重复构建正确替换旧输出；拒绝覆盖工作空间数据。
 - Pages 逻辑测试 10 项通过；完整检查通过（17 个测试文件、124 项测试、类型/lint/边界/生产构建）。
-- `corepack pnpm test:pages` 的 2 条真实 Chromium 用例通过，覆盖两种预览的三种初始模式与切换、HTML 沙箱、真实 Mermaid SVG、失败后源码、深浅高亮颜色、无 JS 阅读与按需请求。390px viewport 无页面横向溢出。
+- 当时的静态发布浏览器套件（现已移除）2 条真实 Chromium 用例通过，覆盖两种预览的三种初始模式与切换、HTML 沙箱、真实 Mermaid SVG、失败后源码、深浅高亮颜色、无 JS 阅读与按需请求。390px viewport 无页面横向溢出。
 - 深浅主题 HTML/Mermaid 分屏和 390px 上下分屏已截图复核，稳定块截图位于 `tests/.cache/pages-preview-visual/*-stable.png`。
 - GitHub Actions 已加入相同浏览器用例。没有声称本地运行等于云端部署成功。
 
@@ -61,13 +63,12 @@ npm 上传与本地验收分开记录：本次只执行打包、安装与 publis
 - Mermaid 改为构建时使用 Puppeteer 与官方 Mermaid 库生成深浅 SVG。站点只包含 `<picture>` 与 SVG；模式切换是原生 radio + CSS，无浏览器 Mermaid 模块。非法 Mermaid 使构建失败，既有输出不受影响。
 - 浏览器实测：Mermaid 单独页面请求零 JavaScript；禁用 JavaScript 后图表、code/preview/split 均可用。SVG 图片确实解码成功；HTML 沙箱与高亮深浅主题、390px 布局检查通过。
 - 实际博客 61 页中，57 页没有 Tio 注入脚本，4 页仅注入同一个 466 字节 HTML 初始化脚本；另有 40 次第三方 giscus 引用。当前博客没有 Mermaid 块，Mermaid 通过专用真实渲染夹具验证（2 页、4 个 SVG、1 个 HTML 初始化脚本）。
-- 审计脚本 `tests/scripts/audit-pages-output.mjs` 检查 JavaScript 文件、脚本引用、编辑器属性、重复源码与 SVG 可执行内容。真实 tarball 安装测试也调用该审计，并验证非法 Mermaid 不覆盖已生成页面。
+- 当时的产物审计脚本（现已移除）检查 JavaScript 文件、脚本引用、编辑器属性、重复源码与 SVG 可执行内容。真实 tarball 安装测试也调用该审计，并验证非法 Mermaid 不覆盖已生成页面。
 
-复现审计：
+构建命令（产物审计按需在 `tests/tmp/` 中执行）：
 
 ```sh
 corepack pnpm pages:build ../tio-blog
-node tests/scripts/audit-pages-output.mjs ../tio-blog/.tio-page/dist tests/.cache/blog-static-audit.json
 ```
 
 本次构建测试使用已有 Playwright Chromium。Puppeteer 默认下载在本机返回了无效压缩包，因此不将自动下载行为记为已验证；可按包文档指定现有 Chrome。构建端浏览器与解析库没有进入静态站点。
@@ -96,6 +97,6 @@ PageMap 的 `path` 文本列改为可选的 `slug`。站点配置通过 `slugify
 
 ## 正式 npm 包与独立博客
 
-移除本体 `examples/blog` 及其迁移、构建、预览快捷命令。个人站点由同级 `tio-blog` 维护；本体仅在 `tests/fixtures/pages/blog` 保留排序、SSR 和发布产物测试所需的固定夹具。目标 workspace 直接通过 npm 的 `@glink25/tio-pages@0.1.0` 构建。
+移除本体 `examples/blog` 及其迁移、构建、预览快捷命令。个人站点由同级 `tio-blog` 维护；当时本体保留的博客测试夹具现已随静态发布专项测试移除。目标 workspace 直接通过 npm 的 `@glink25/tio-pages@0.1.0` 构建。
 
 正式发布：`@glink25/tio-pages@0.1.0` 已通过 npm 账号双重认证上传 registry；目标博客的构建命令和 GitHub Actions 均固定使用该版本，本地预览使用 workspace 内独立 Node 脚本。

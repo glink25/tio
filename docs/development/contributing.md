@@ -2,7 +2,7 @@
 
 阅读[架构](../architecture/overview.md)与[数据契约](../protocols/data-format.md)，AI 协作遵循根目录 [AGENTS.md](../../AGENTS.md)。
 
-使用 Node.js 24、仓库锁定的 pnpm，执行 `corepack pnpm install --frozen-lockfile` 和 `corepack pnpm dev`。修改后执行 `corepack pnpm check`；涉及编辑交互再运行 `corepack pnpm test:e2e`。具体命令与测试范围见[测试说明](testing.md)。
+使用 Node.js 24、仓库锁定的 pnpm，执行 `corepack pnpm install --frozen-lockfile` 和 `corepack pnpm dev`。修改后执行 `corepack pnpm check`；涉及编辑交互再运行 `corepack pnpm test:e2e`。具体命令与测试范围见[测试说明](testing.md)。长期测试仅保护核心数据与编辑主链路；新增测试须说明核心风险和现有用例不足，优先扩充已有用例。非核心测试、一次性复现和排查脚本只放 Git 忽略的 `tests/tmp/`，不得纳入合并。
 
 Oxfmt 负责格式、导入与 Tailwind 排序；Oxlint 负责正确性与类型感知检查；TypeScript 独立严格检查。使用 `.vscode/` 推荐的 Oxc 扩展，不并行引入 ESLint/Prettier。工具与依赖维护见[依赖约定](dependencies.md)。
 
@@ -29,4 +29,4 @@ Web 连接入口注册于 `apps/web/src/services/connection-entry/`。各集成�
 
 空状态插画源位于 `packages/ui/src/illustrations/`，由 `EmptyStateIllustration` 统一提供尺寸、主题颜色和读屏文案。页面采用空白纸张，工作空间采用打开的空收纳盒，回收站采用掀盖的空桶，以可见内腔表达无内容；使用原创 SVG，不增加插画库依赖。设计参考 [Ant Design Empty](https://ant.design/components/empty/) 的空容器表达，以及 [Atlassian Illustrations](https://atlassian.design/foundations/illustrations) 的中性、单一概念原则。
 
-独立静态发布包的构建与 npm 发行见 [Tio Pages](../../packages/pages/README.md)。完整检查先构建该包，再检查消费者类型；修改公开接口或打包方式后另运行 `corepack pnpm test:pages-package`，验证真实 tarball，不能仅以 monorepo 内导入成功替代发布验收。
+独立静态发布包的构建与 npm 发行见 [Tio Pages](../../packages/pages/README.md)。完整检查先构建该包，再检查消费者类型；公开接口或打包方式的专项发布验收按需在 `tests/tmp/` 中执行；需要发布时验证真实 tarball，并记录实际结果，不能仅以 monorepo 内导入成功替代发布验收。

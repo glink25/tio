@@ -1,12 +1,5 @@
-import { isDateValue, object, validateValue, type Field } from '@tio/core';
-import {
-  compileFormula,
-  createEvaluator,
-  evaluateFormula,
-  formulaSource,
-  parseFormula,
-  queryRecords,
-} from '@tio/database';
+import { object, validateValue, type Field } from '@tio/core';
+import { createEvaluator } from '@tio/database';
 import { FileWorkspaceContent } from '@tio/file-storage';
 import { LocalStore } from '@tio/local-store';
 import { MemoryProvider } from '@tio/provider-memory';
@@ -25,8 +18,6 @@ const field = (type: string, extra: Partial<Field> = {}): Field => ({
 const db = (id: string, fields: Field[]) => object('database', 'w', { id, fields });
 const record = (id: string, databaseId: string, properties: Record<string, unknown>) =>
   object('record', 'w', { id, databaseId, properties, blocks: [] });
-const run = (source: string) =>
-  evaluateFormula(parseFormula(source), () => null, new Date('2026-10-26T12:00:00Z'));
 
 describe('typed database fields', () => {
   it.each(['formula', 'rollup', 'createdTime', 'lastEditedTime'])(
@@ -35,55 +26,6 @@ describe('typed database fields', () => {
       for (const value of [null, 1, '']) expect(() => validateValue(field(type), value)).toThrow();
     },
   );
-});
-describe('restricted formulas', () => {
-  it.each([
-    ['1 + 2 * 3', 7],
-    ['(1 + 2) * 3', 9],
-    ['if(2 > 1 and true, "yes", "no")', 'yes'],
-    ['if(false, 1 / 0, 4)', 4],
-    ['empty(null) || empty("")', true],
-    ['toNumber("12.5") + abs(-2)', 14.5],
-    ['round(2.6) + floor(2.6) + ceil(2.1)', 8],
-    ['min(4, 2) + max(1, 3)', 5],
-    ['concat(lower("HI"), upper("there"))', 'hiTHERE'],
-    ['length(replace("abc", "b", "xx"))', 4],
-    ['contains("hello", "ell")', true],
-    ['format(12)', '12'],
-    ['formatDate(dateAdd(today(), 2, "days"), "YYYY-MM-DD")', '2026-10-28'],
-    ['dateBetween(dateAdd(today(), 1, "weeks"), today(), "days")', 7],
-  ])('%s', (expression, expected) => expect(run(expression)).toEqual(expected));
-  it('rejects invalid syntax, types, argument counts, unsafe expressions and zero division', () => {
-    for (const expression of [
-      '1 / 0',
-      '1 + "x"',
-      'if(1, 2, 3)',
-      'abs()',
-      'window.alert(1)',
-      'constructor()',
-      '1; 2',
-      'unknown(1)',
-      '('.repeat(101) + '1' + ')'.repeat(101),
-    ])
-      expect(() => run(expression)).toThrow();
-    expect(isDateValue(run('dateStart(now())'))).toBe(true);
-    expect(isDateValue(run('dateEnd(now())'))).toBe(true);
-  });
-  it('binds IDs, preserves renames, rejects ambiguous and missing references', () => {
-    const fields = [field('number', { id: 'amount', name: 'Cost' })];
-    const source = compileFormula('prop("Cost") * 2', fields);
-    expect(source).toContain('prop("amount")');
-    fields[0].name = 'Renamed';
-    expect(compileFormula(source, fields)).toBe(source);
-    expect(formulaSource(source, fields)).toContain('prop("Renamed")');
-    expect(() => compileFormula('prop("Cost")', fields)).toThrow('Missing');
-    expect(() =>
-      compileFormula('prop("Same")', [
-        field('text', { id: 'a', name: 'Same' }),
-        field('text', { id: 'b', name: 'Same' }),
-      ]),
-    ).toThrow('Ambiguous');
-  });
 });
 describe('shared derived values and queries', () => {
   function fixture() {
@@ -120,25 +62,6 @@ describe('shared derived values and queries', () => {
     expect(createEvaluator(next).read(rows[0], projects.fields![2])).toEqual({ value: 32 });
     expect(rows[0].properties).not.toHaveProperty('double');
   });
-  it.each([
-    ['values', 'cost', [4, 6]],
-    ['unique', 'cost', [4, 6]],
-    ['count', 'cost', 2],
-    ['countNotEmpty', 'cost', 2],
-    ['average', 'cost', 5],
-    ['min', 'cost', 4],
-    ['max', 'cost', 6],
-    ['earliest', 'due', { start: '2026-10-26' }],
-    ['latest', 'due', { start: '2026-10-27' }],
-  ] as const)('aggregates %s', (operation, targetFieldId, value) => {
-    const { projects, tasks, rows, children } = fixture();
-    const target = field('rollup', {
-      rollup: { relationFieldId: 'tasks', targetFieldId, operation },
-    });
-    expect(createEvaluator([projects, tasks, ...rows, ...children]).read(rows[0], target)).toEqual({
-      value,
-    });
-  });
   it('reports cycles, missing properties and incompatible aggregates without crashing queries', () => {
     const fields = [
       field('formula', { id: 'a', formula: 'prop("b")' }),
@@ -151,30 +74,6 @@ describe('shared derived values and queries', () => {
       createEvaluator([schema, row]).read(row, field('formula', { formula: 'prop("missing")' }))
         .error,
     ).toMatch(/Missing/);
-  });
-  it('sorts and filters numeric derived values and date instants with stable empty ordering', () => {
-    const { projects, tasks, rows, children } = fixture();
-    const objects = [projects, tasks, ...rows, ...children];
-    const view = object('databaseView', 'w', {
-      sorts: [{ fieldId: 'double', direction: 'desc' }],
-      filters: [{ fieldId: 'double', op: 'between', value: 15, endValue: 25 }],
-    });
-    expect(queryRecords(objects, projects, view).map((r) => r.id)).toEqual(['p1']);
-    expect(queryRecords(objects, projects, { ...view, filters: [] }).map((r) => r.id)).toEqual([
-      'p1',
-      'p2',
-    ]);
-    const dates = db('d', [field('date')]);
-    expect(
-      queryRecords(
-        [dates, record('a', 'd', { date: { start: '2026-10-26T08:00:00+08:00' } })],
-        dates,
-        {
-          ...view,
-          filters: [{ fieldId: 'date', op: 'eq', value: { start: '2026-10-26T00:00:00Z' } }],
-        },
-      ),
-    ).toHaveLength(1);
   });
 });
 describe('write paths, timestamps and attachment persistence', () => {

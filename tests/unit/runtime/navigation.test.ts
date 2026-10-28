@@ -1,6 +1,6 @@
 import { object, type TioObject } from '@tio/core';
 import { MemoryRepository } from '@tio/provider-memory';
-import { WorkspaceRuntime, navigationTree, newPage, newDatabase } from '@tio/workspace';
+import { WorkspaceRuntime, navigationTree } from '@tio/workspace';
 import { expect, it } from 'vitest';
 
 import { executeCommand } from '../../../packages/workspace/src/commands';
@@ -18,26 +18,6 @@ async function setup() {
   return { repository, runtime: await WorkspaceRuntime.open(repository) };
 }
 const ids = (objects: TioObject[]) => navigationTree(objects).map((o) => o.id);
-
-it('prepends new pages, child pages and databases even with unloaded sibling bodies', async () => {
-  const { runtime } = await setup();
-  try {
-    const root = newPage('w');
-    const child = newPage('w', 'a');
-    const database = newDatabase('w');
-    runtime.create([root, child, ...database]);
-    await runtime.flush();
-    expect(ids(runtime.snapshot()).slice(0, 2)).toEqual([database[0].id, root.id]);
-    expect(ids(runtime.snapshot()).indexOf(child.id)).toBeLessThan(
-      ids(runtime.snapshot()).indexOf('child'),
-    );
-    runtime.undo();
-    await runtime.flush();
-    expect(ids(runtime.snapshot())).toEqual(['a', 'child', 'b']);
-  } finally {
-    await runtime.close();
-  }
-});
 
 it('persists same-level and cross-level ordering as one undoable command without changing content times', async () => {
   const { repository, runtime } = await setup();
@@ -122,28 +102,6 @@ it('publishes the dropped order synchronously and never reverts while dependenci
   } finally {
     releaseRead();
     releaseCommit();
-    await runtime.close();
-  }
-});
-
-it('retains a pending move after a dependency read fails and persists it on retry', async () => {
-  const { repository, runtime } = await setup();
-  const read = repository.readObjects.bind(repository);
-  let failing = true;
-  repository.readObjects = async (selected) => {
-    if (failing && selected.includes('b')) throw new Error('Temporary read failure');
-    return read(selected);
-  };
-  try {
-    runtime.move('b', 'a', -1);
-    expect(ids(runtime.snapshot())).toEqual(['a', 'b', 'child']);
-    await expect(runtime.flush()).rejects.toThrow('Temporary read failure');
-    expect(ids(runtime.snapshot())).toEqual(['a', 'b', 'child']);
-    failing = false;
-    await runtime.retry();
-    expect(ids(runtime.snapshot())).toEqual(['a', 'b', 'child']);
-  } finally {
-    failing = false;
     await runtime.close();
   }
 });

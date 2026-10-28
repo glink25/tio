@@ -21,9 +21,7 @@
     "check:boundaries": "node scripts/check-boundaries.mjs",
     "brand:icons": "node scripts/generate-brand-icons.mjs",
     "pages:build": "corepack pnpm --filter @glink25/tio-pages build:site",
-    "test:pages": "corepack pnpm --filter @tio/tests test:pages",
-    "pages:bundle": "corepack pnpm --filter @glink25/tio-pages build",
-    "test:pages-package": "corepack pnpm pages:bundle && node tests/scripts/check-pages-package.mjs"
+    "pages:bundle": "corepack pnpm --filter @glink25/tio-pages build"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

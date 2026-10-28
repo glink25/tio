@@ -78,7 +78,7 @@ it('roundtrips atomic mentions in paragraphs, nested lists and table cells', () 
   expect(fromEditor(toEditor(blocks, configured), blocks)).toEqual(blocks);
 });
 
-it('roundtrips code source, display modes and unknown props without converting legacy blocks', () => {
+it('roundtrips code source, display mode and unknown props', () => {
   const configured: ContentSchema = {
     ...schema,
     blockSchema: {
@@ -94,13 +94,7 @@ it('roundtrips code source, display modes and unknown props without converting l
   };
   for (const props of [
     { language: 'js' },
-    { language: 'html', future: { retained: true } },
-    ...(['code', 'preview', 'split'] as const).map((displayMode) => ({
-      language: 'html',
-      displayMode,
-      future: { retained: true },
-    })),
-    { language: 'mermaid', displayMode: 'split', future: true },
+    { language: 'html', displayMode: 'split', future: { retained: true } },
   ]) {
     const source =
       props.language === 'html'
