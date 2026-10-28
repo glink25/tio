@@ -84,6 +84,8 @@ test('focused inputs follow external state and preserve edits through persistenc
   await expect
     .poll(() => page.evaluate(() => (window as any).fixture.one.getSaveState().status))
     .toBe('error');
+  await expect(page.locator('#one').getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('#one header')).not.toContainText('save failed');
   await title.pressSequentially(' plus input');
   await expect(title).toHaveValue('Unsaved title plus input');
   await page.evaluate(async () => {
@@ -155,4 +157,97 @@ test('table edits retain opaque nested content in neighboring tables', async ({ 
   expect(JSON.stringify(blocks.find((b: any) => b.id === 'editable-table'))).toContain('updated');
   expect(blocks.find((b: any) => b.id === 'opaque-table')).toEqual(opaque);
   await expect(page.locator('#two .bn-editor table').first()).toContainText('updated');
+});
+
+test('document information exposes read-only system times updated by content edits', async ({
+  page,
+}) => {
+  const before = await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    return (await f.repository.readSnapshot()).entries.find(
+      (entry: any) => entry.object.id === f.target.id,
+    ).object;
+  });
+  await page.locator('#one').getByLabel('Page title').fill('Timestamped content');
+  await page.evaluate(async () => (window as any).fixture.one.flush());
+  const after = await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    return (await f.repository.readSnapshot()).entries.find(
+      (entry: any) => entry.object.id === f.target.id,
+    ).object;
+  });
+  expect(after.createdAt).toBe(before.createdAt);
+  expect(Date.parse(after.updatedAt)).toBeGreaterThan(Date.parse(before.updatedAt));
+  await page.locator('#one').getByRole('button', { name: 'More actions', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Document information', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'Document information', exact: true });
+  await expect(dialog.locator('time').nth(0)).toHaveAttribute('datetime', after.createdAt);
+  await expect(dialog.locator('time').nth(1)).toHaveAttribute('datetime', after.updatedAt);
+  await expect(dialog.getByRole('textbox')).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    await f.one.open({ id: f.recordId });
+    await f.one.open(f.target);
+  });
+  const reopened = await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    return (await f.repository.readSnapshot()).entries.find(
+      (entry: any) => entry.object.id === f.target.id,
+    ).object;
+  });
+  expect(reopened.createdAt).toBe(after.createdAt);
+  expect(reopened.updatedAt).toBe(after.updatedAt);
+});
+
+test('numbered lists with an explicit start remain editable and persist as lists', async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    const snapshot = await f.repository.readSnapshot();
+    const current = snapshot.entries.find((entry: any) => entry.object.id === f.target.id).object;
+    await f.repository.commit({
+      id: crypto.randomUUID(),
+      expectedVersion: snapshot.version,
+      assetIds: [],
+      changes: [
+        {
+          ...current,
+          blocks: [
+            {
+              id: 'numbered-first',
+              type: 'numberedListItem',
+              props: { start: 3 },
+              content: [{ type: 'text', text: 'First list item', styles: {} }],
+              children: [],
+            },
+            {
+              id: 'numbered-second',
+              type: 'numberedListItem',
+              props: {},
+              content: [{ type: 'text', text: 'Second list item', styles: {} }],
+              children: [],
+            },
+          ],
+        },
+      ],
+    });
+  });
+  const lists = page.locator('#one [data-content-type="numberedListItem"]');
+  await expect(lists).toHaveCount(2);
+  await expect(lists.first()).toContainText('First list item');
+  await lists.first().click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' edited');
+  await page.evaluate(async () => (window as any).fixture.one.flush());
+  const saved = await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    return (await f.repository.readSnapshot()).entries.find(
+      (entry: any) => entry.object.id === f.target.id,
+    ).object.blocks;
+  });
+  expect(saved[0].type).toBe('numberedListItem');
+  expect(saved[0].props.start).toBe(3);
+  expect(JSON.stringify(saved[0].content)).toContain('First list item edited');
 });

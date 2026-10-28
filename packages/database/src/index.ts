@@ -1,6 +1,7 @@
 import {
   isMentionReference,
   mentionKey,
+  mentionReferences,
   mentionTitle,
   isDateValue,
   isDerivedField,
@@ -191,10 +192,14 @@ export function displayValue(
   language: 'en' | 'zh' = 'zh',
 ): string {
   if (value == null) return '';
-  if (field.type === 'mention' && isMentionReference(value))
-    return (
-      mentionTitle(value, objects) ?? (language === 'zh' ? '引用不可用' : 'Unavailable reference')
-    );
+  if (field.type === 'mention')
+    return mentionReferences(value)
+      .map(
+        (ref) =>
+          mentionTitle(ref, objects) ??
+          (language === 'zh' ? '引用不可用' : 'Unavailable reference'),
+      )
+      .join(', ');
   if (isFieldError(value)) return `⚠ ${value.fieldError}`;
   if (['select', 'multiSelect', 'status'].includes(field.type))
     return (Array.isArray(value) ? value : [value])
@@ -301,12 +306,13 @@ export function queryRecords(
         case 'notEmpty':
           return !isEmpty(value);
         case 'eq':
-          if (field.type === 'mention')
+          if (field.type === 'mention') {
+            const target = filter.value;
             return (
-              isMentionReference(value) &&
-              isMentionReference(filter.value) &&
-              mentionKey(value) === mentionKey(filter.value)
+              isMentionReference(target) &&
+              mentionReferences(value).some((ref) => mentionKey(ref) === mentionKey(target))
             );
+          }
           return Array.isArray(value) ? value.includes(filter.value) : a === b;
         case 'gt':
         case 'gte':

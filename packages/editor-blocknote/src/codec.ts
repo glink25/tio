@@ -1,11 +1,14 @@
-import { isMentionReference } from '@tio/core';
+import { id, isMentionReference } from '@tio/core';
 import type { Block } from '@tio/core';
 export interface ContentSchema {
   blockSchema: Record<
     string,
     {
       content: string;
-      propSchema: Record<string, { default: unknown; values?: readonly unknown[] }>;
+      propSchema: Record<
+        string,
+        { default: unknown; type?: 'string' | 'number' | 'boolean'; values?: readonly unknown[] }
+      >;
     }
   >;
   styleSchema: Record<string, { propSchema: string }>;
@@ -105,7 +108,9 @@ export function toEditor(
         // Unknown properties are retained by fromEditor; known invalid values must not be coerced.
         return (
           !prop ||
-          (typeof value === typeof prop.default && (!prop.values || prop.values.includes(value)))
+          (value === undefined && prop.default === undefined) ||
+          (typeof value === (prop.type ?? typeof prop.default) &&
+            (!prop.values || prop.values.includes(value)))
         );
       });
     if (
@@ -159,7 +164,23 @@ export function fromEditor(
   };
   walk(previous);
   const convert = (block: any): Block => {
-    if (block.type === 'unsupported') return { ...JSON.parse(block.props.raw), id: block.id };
+    if (block.type === 'unsupported') {
+      const raw = JSON.parse(block.props.raw) as Block;
+      // The outer opaque node receives a fresh paste ID; its hidden descendants must too.
+      const copy = (value: Block): Block => ({
+        ...value,
+        id: id('block'),
+        children: value.children.map(copy),
+      });
+      return {
+        ...raw,
+        id: block.id,
+        children:
+          raw.id === block.id
+            ? raw.children
+            : (originals.get(block.id)?.children ?? raw.children.map(copy)),
+      };
+    }
     const old = originals.get(block.id);
     const codec = codecs[block.type];
     let content = codec ? codec.fromEditor(block.content) : (block.content ?? []);

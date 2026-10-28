@@ -1,5 +1,5 @@
 import { chooseFolder } from '@tio/adapter-local-folder';
-import { id, visibility, editable, type TioObject } from '@tio/core';
+import { id, visibility, editable, ConnectionAccessError, type TioObject } from '@tio/core';
 import type { WorkspaceSession, Connection } from '@tio/core';
 import { t, i18n, errorMessage } from '@tio/i18n';
 import { exportZip, exportMarkdownZip, importZip } from '@tio/serialization';
@@ -25,7 +25,7 @@ import {
 import { logoutCoordinator } from '../../services/logout';
 import { readRoute, writeRoute } from '../../services/navigation';
 import { WorkspaceServices } from '../../services/workspace-services';
-import { statusModel, type StatusAction } from './status';
+import { statusModel } from './status';
 const emptyStore = createStore(() => emptyWorkspaceState);
 export function useWorkspace() {
   const [services] = useState(() => new WorkspaceServices());
@@ -78,7 +78,6 @@ export function useWorkspace() {
   const [searching, setSearching] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [moveTarget, setMoveTarget] = useState<string | null>(null);
-  const [issuesOpen, setIssuesOpen] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -92,11 +91,19 @@ export function useWorkspace() {
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, []);
+  function reportError(error: unknown) {
+    if (runtimeRef.current?.state.getState().error === error) return;
+    if (sessionRef.current && error instanceof ConnectionAccessError) {
+      services.reportStatusError(error);
+      return;
+    }
+    setError(errorMessage(error));
+  }
   const refreshSessions = async () => setSessions(await services.sessions());
   useEffect(() => {
     let disposed = false;
     services.onChange = () => {
-      if (!disposed) void refreshSessions().catch((e) => setError(errorMessage(e)));
+      if (!disposed) void refreshSessions().catch((e) => reportError(e));
     };
     void (async () => {
       const loggedIn = await finishGitHubLogin();
@@ -134,14 +141,11 @@ export function useWorkspace() {
     return () => {
       disposed = true;
       services.onChange = () => {};
-      void services.dispose().catch((e) => setError(errorMessage(e)));
+      void services.dispose().catch((e) => reportError(e));
     };
     // Bootstrap once per service lifetime; activation reads session state from refs.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [services]);
-  useEffect(() => {
-    if (state.error) setError(errorMessage(state.error));
-  }, [state.error]);
   async function activate(s: WorkspaceSession, fromHistory = false) {
     if (activating.current) return;
     activating.current = true;
@@ -180,7 +184,7 @@ export function useWorkspace() {
       services.startSync(setSyncStatus);
       return true;
     } catch (error) {
-      setError(errorMessage(error));
+      reportError(error);
       const previous = sessionRef.current;
       if (previous) writeRoute(previous.workspaceId, previous.selectedId ?? '', true);
     } finally {
@@ -250,7 +254,7 @@ export function useWorkspace() {
     try {
       if (runtimeRef.current) action(runtimeRef.current);
     } catch (error) {
-      setError(errorMessage(error));
+      reportError(error);
     }
   }
   function patch(target: TioObject, changes: Partial<TioObject>, remember = false) {
@@ -273,7 +277,7 @@ export function useWorkspace() {
       const next = { ...s, selectedId: o.id };
       sessionRef.current = next;
       setSession(next);
-      void services.saveSession(next).catch((e) => setError(errorMessage(e)));
+      void services.saveSession(next).catch((e) => reportError(e));
     }
   }
   async function loadSpaces() {
@@ -316,7 +320,7 @@ export function useWorkspace() {
       await refreshSessions();
       if (await activate(s)) setCreating(false);
     } catch (e) {
-      setError(errorMessage(e));
+      reportError(e);
     } finally {
       creation.current.running = false;
       setBusy(false);
@@ -342,7 +346,8 @@ export function useWorkspace() {
       setGithubOpen(false);
       await loadSpaces();
     } catch (e) {
-      setError(errorMessage(e));
+      if (sessionRef.current) services.reportStatusError(e);
+      else reportError(e);
     } finally {
       setBusy(false);
     }
@@ -356,7 +361,7 @@ export function useWorkspace() {
       services.startSync(setSyncStatus);
       await loadSpaces();
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') setError(errorMessage(e));
+      if ((e as Error).name !== 'AbortError') reportError(e);
     } finally {
       setBusy(false);
     }
@@ -424,7 +429,7 @@ export function useWorkspace() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      setError(errorMessage(e));
+      reportError(e);
     }
   }
   async function importFile(file: File) {
@@ -434,7 +439,7 @@ export function useWorkspace() {
       const rekeySlices = (blocks: import('@tio/core').Block[]): import('@tio/core').Block[] =>
         blocks.map((block) => ({
           ...block,
-          ...(block.type === 'webSlice' ? { id: id('block') } : {}),
+          ...(block.type === 'appSlice' ? { id: id('block') } : {}),
           children: rekeySlices(block.children),
         }));
       const s = await services.create(
@@ -454,12 +459,13 @@ export function useWorkspace() {
             },
           ]),
         ),
+        true,
       );
       setConnection(services.connection);
       await refreshSessions();
       await activate(s);
     } catch (e) {
-      setError(errorMessage(e));
+      reportError(e);
     }
   }
   const isVisible = visibility(objects);
@@ -478,7 +484,7 @@ export function useWorkspace() {
     };
     setSession(s);
     sessionRef.current = s;
-    void services.saveSession(s).catch((e) => setError(errorMessage(e)));
+    void services.saveSession(s).catch((e) => reportError(e));
   }
 
   const movePage = (source: string, parent: string | null, order?: number) =>
@@ -493,48 +499,25 @@ export function useWorkspace() {
   }
 
   const issues = services.issues;
-  const syncNow = async () => {
+  const status = statusModel(
+    saveStatus,
+    syncStatus,
+    services.hasReplicaSync,
+    issues.length > 0,
+    services.statusError,
+  );
+  const restoreAuthorization = async () => {
     try {
-      if (syncStatus.access?.code === 'reauthorization-required' && services.canReauthorize)
-        await authorize();
-      else await services.sync();
-    } catch (e) {
-      setError(errorMessage(e));
+      await authorize();
+    } catch (error) {
+      services.reportStatusError(error);
     }
-  };
-  const discardDraft = async (id: string) => {
-    try {
-      await services.discard(id);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
-  const restoreFile = async (id: string) => {
-    try {
-      await services.restore(id);
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
-  const retrySave = async () => {
-    try {
-      await runtimeRef.current?.retry();
-      setError('');
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  };
-  const status = statusModel(saveStatus, syncStatus, services.supportsSync, issues.length > 0);
-  const statusActions: Record<StatusAction, () => void | Promise<void>> = {
-    'retry-save': retrySave,
-    reauthorize: syncNow,
-    issues: () => setIssuesOpen(true),
-    sync: syncNow,
-    none: () => {},
   };
   return {
     status,
-    activateStatus: () => statusActions[status.action](),
+    restoreAuthorization,
+    canReauthorize: services.canReauthorize,
+    statusError: services.statusError,
     identity: services.identity,
     loading,
     loadError,
@@ -567,7 +550,6 @@ export function useWorkspace() {
     connection,
     supportsSync: services.supportsSync,
     runtime,
-    retrySave,
     renaming,
     setRenaming,
     renameWorkspace,
@@ -576,6 +558,7 @@ export function useWorkspace() {
     objects,
     selected,
     saveStatus,
+    saveError: state.error,
     syncStatus,
     error,
     busy,
@@ -583,7 +566,6 @@ export function useWorkspace() {
     sidebar,
     query,
     searching,
-    issuesOpen,
     importRef,
     current,
     workspace,
@@ -595,7 +577,6 @@ export function useWorkspace() {
     setSidebar,
     setQuery,
     setSearching,
-    setIssuesOpen,
     setMoveTarget,
     activate,
     offline,
@@ -610,9 +591,6 @@ export function useWorkspace() {
     importFile,
     favorite,
     movePage,
-    syncNow,
-    restoreFile,
-    discardDraft,
   };
 }
 export type WorkspaceController = ReturnType<typeof useWorkspace>;

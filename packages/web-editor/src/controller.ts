@@ -12,21 +12,22 @@ import {
 } from '@tio/core';
 import type { EditorSchema } from '@tio/editor-blocknote';
 import { useT, useTranslation } from '@tio/i18n';
+import { useNotify } from '@tio/ui';
 import type { EditHistory } from '@tio/ui';
 import type { ViewExtensions } from '@tio/views';
 import { newPage, newDatabase, type EditorSession } from '@tio/workspace';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useStore } from 'zustand';
 
+import { memoryPermissions, type AppSliceOptions } from './app-slice/types';
 import { createMentionService } from './mentions';
-import { memoryPermissions, type WebSliceOptions } from './web-slice/types';
 export interface EditorTarget {
   id: string;
   mode?: 'page' | 'preview';
 }
 export interface EditorSurfaceProps {
   mentions?: import('@tio/core').MentionService;
-  webSlice?: WebSliceOptions;
+  appSlice?: AppSliceOptions;
   views?: ViewExtensions;
   extensions?: EditorSchema;
   runtime: EditorSession;
@@ -37,7 +38,6 @@ export interface EditorSurfaceProps {
   pageActions?: ReactNode;
   onOpen?: (target: EditorTarget) => void;
   readOnly?: boolean;
-  showSaveState?: boolean;
   onNavigate: (target: EditorTarget) => void;
   onError?: (error: unknown) => void;
 }
@@ -51,15 +51,16 @@ export function useEditorController(props: EditorSurfaceProps) {
       createMentionService(runtime, workspaceId, (id) => navigateRef.current({ id })),
     [props.mentions, runtime, workspaceId],
   );
-  const sliceStore = useMemo(() => {
+  const appSliceStore = useMemo(() => {
     void runtime;
     return memoryPermissions();
   }, [runtime]);
-  const webSlice = {
-    ...props.webSlice,
-    permissionStore: props.webSlice?.permissionStore ?? sliceStore,
+  const appSlice = {
+    ...props.appSlice,
+    permissionStore: props.appSlice?.permissionStore ?? appSliceStore,
   };
   const t = useT();
+  const notify = useNotify();
   const { i18n } = useTranslation();
   const state = useStore(runtime.state);
   useEffect(() => {
@@ -110,7 +111,9 @@ export function useEditorController(props: EditorSurfaceProps) {
   const activeDb = objects.find((o) => o.id === record?.databaseId);
   const fieldTarget = objects.find((o) => o.id === fieldDb);
   function report(error: unknown) {
-    setError(error instanceof Error ? error.message : String(error));
+    // Persistence failures are exposed through the runtime to the host.
+    if (runtime.state.getState().error !== error)
+      setError(error instanceof Error ? error.message : String(error));
     props.onError?.(error);
   }
   function command(action: () => void) {
@@ -234,14 +237,13 @@ export function useEditorController(props: EditorSurfaceProps) {
   };
   const upload = async (file: File) => {
     if (readOnly) throw new Error('Read only');
-    if (runtime.state.getState().error) await runtime.retry();
     const ref = runtime.upload(workspaceId, await fileData(file));
     await runtime.flush();
     return ref;
   };
   return {
     mentions,
-    webSlice,
+    appSlice,
     hostReadOnly: !!props.readOnly,
     runtime,
     openFull: (id: string) => onNavigate({ id, mode: 'page' }),
@@ -277,8 +279,24 @@ export function useEditorController(props: EditorSurfaceProps) {
     resolve: resolveAsset,
     cell: (record: TioObject, field: Field, value: unknown) =>
       command(() => runtime.cell(record.id, field.id, value)),
-    changeFields: (db: TioObject, fields: Field[]) =>
-      command(() => runtime.fields(db.id, fields, db.fields ?? [])),
+    changeFields: (db: TioObject, fields: Field[]) => {
+      const changed = fields.find((field) =>
+        db.fields?.some(
+          (old) =>
+            old.id === field.id &&
+            (old.type !== field.type ||
+              (['mention', 'relation'].includes(field.type) &&
+                (old.multiple !== false) !== (field.multiple !== false))),
+        ),
+      );
+      if (changed) {
+        if (readOnly) return Promise.reject(new HostError('permission'));
+        return runtime.convertField(db.id, changed).then((cleared) => {
+          notify(t('transfer.converted', { count: cleared }));
+        });
+      }
+      command(() => runtime.fields(db.id, fields, db.fields ?? []));
+    },
     changeBlocks: (page: TioObject, blocks: Block[], previous: Block[], group?: string | null) =>
       command(() => {
         if (editable(page)) runtime.blocks(page.id, blocks, previous, group);

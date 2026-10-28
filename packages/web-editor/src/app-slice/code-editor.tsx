@@ -28,7 +28,7 @@ export function HtmlEditor({
         EditorView.editable.of(!readOnly),
         html(),
         EditorView.lineWrapping,
-        EditorView.contentAttributes.of({ 'aria-label': 'HTML', 'data-testid': 'slice-html' }),
+        EditorView.contentAttributes.of({ 'aria-label': 'HTML', 'data-testid': 'app-slice-html' }),
         EditorView.theme({
           '&': {
             height: 'min(420px, 44dvh)',

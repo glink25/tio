@@ -25,6 +25,14 @@ const table = (content: unknown): Block => ({
     rows: [{ cells: [{ type: 'tableCell', props: {}, content }] }],
   },
 });
+it('pasted opaque descendants receive stable independent IDs', () => {
+  const original = { ...textBlock('opaque'), type: 'future', children: [textBlock('nested')] };
+  const encoded = toEditor([original], schema);
+  encoded[0].id = 'pasted';
+  const pasted = fromEditor(encoded, [original]);
+  expect(pasted[0].children[0].id).not.toBe(original.children[0].id);
+  expect(fromEditor(encoded, pasted)).toEqual(pasted);
+});
 it('opaque table content preserves unknown nested inline and style data while adjacent text changes', () => {
   for (const content of [
     [{ type: 'mention', id: 'person' }],
@@ -114,4 +122,28 @@ it('does not persist BlockNote undefined content on atomic mentions', () => {
   const saved = fromEditor(source, []);
   expect(Object.keys((saved[0].content as object[])[0])).toEqual(['type', 'props']);
   expect(toEditor(saved, configured).map((block) => block.type)).toEqual(['paragraph', 'table']);
+});
+
+it('accepts explicitly typed optional props such as numbered list start without losing unknown props', () => {
+  const configured: ContentSchema = {
+    ...schema,
+    blockSchema: {
+      ...schema.blockSchema,
+      numberedListItem: {
+        content: 'inline',
+        propSchema: { start: { default: undefined, type: 'number' } },
+      },
+    },
+  };
+  for (const props of [{ start: 3, extension: 'kept' }, {}, { start: undefined }]) {
+    const original = { ...textBlock('Numbered item'), type: 'numberedListItem', props };
+    expect(toEditor([original], configured)[0].type).toBe('numberedListItem');
+    expect(fromEditor(toEditor([original], configured), [original])).toEqual([original]);
+  }
+  expect(
+    toEditor(
+      [{ ...textBlock('Invalid'), type: 'numberedListItem', props: { start: '3' } }],
+      configured,
+    )[0].type,
+  ).toBe('unsupported');
 });

@@ -1,7 +1,11 @@
 packages:
   - apps/*
   - packages/*
+  - examples/*
   - tests
 minimumReleaseAgeExclude:
   - i18next@26.5.5
   - react-i18next@17.1.1
+allowBuilds:
+  esbuild: true
+  puppeteer: true

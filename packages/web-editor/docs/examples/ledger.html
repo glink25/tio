@@ -71,7 +71,7 @@
         const generation = ++refreshGeneration;
         const context = await tio.context.get();
         const writable = context.permissions.data === 'readWrite';
-        const database = (await tio.databases.list()).find((d) => d.name === 'Web Slice Ledger');
+        const database = (await tio.databases.list()).find((d) => d.name === 'App Slice Ledger');
         if (generation !== refreshGeneration) return;
         db = database;
         el('init').hidden = !!db;
@@ -124,7 +124,7 @@
         el('init').disabled = true;
         try {
           await tio.databases.create({
-            name: 'Web Slice Ledger',
+            name: 'App Slice Ledger',
             fields: [
               { id: 'note', name: '备注 / Note', type: 'title' },
               { id: 'amount', name: '金额 / Amount', type: 'number' },

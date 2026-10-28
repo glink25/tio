@@ -53,8 +53,9 @@ export function DatabaseView(props: ViewProps) {
     )
     .sort(
       (a, b) =>
+        Number(b.type === 'title') - Number(a.type === 'title') ||
         (order.indexOf(a.id) < 0 ? 999 : order.indexOf(a.id)) -
-        (order.indexOf(b.id) < 0 ? 999 : order.indexOf(b.id)),
+          (order.indexOf(b.id) < 0 ? 999 : order.indexOf(b.id)),
     );
   const childProps = {
     ...props,

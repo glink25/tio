@@ -101,7 +101,6 @@ export class HostSyncRunner {
     clearTimeout(this.debounce);
     this.debounce = undefined;
     const work = async () => {
-      this.issues = [];
       try {
         if (this.disposed || (this.host.beforeSync && !(await this.host.beforeSync()))) return;
         if (this.disposed) return;
@@ -120,7 +119,7 @@ export class HostSyncRunner {
         this.retryAt = (e as { retryAt?: number } | null)?.retryAt ?? 0;
         this.host.onError?.(e);
         const issue = syncIssue('', e);
-        this.issues.push(issue);
+        this.issues = [issue];
         this.state(issue.code === 'permission' ? 'permission' : 'failed');
       } finally {
         this.onStatus();
@@ -151,11 +150,9 @@ export class HostSyncRunner {
   private canRetry() {
     return !this.issues.some(
       (issue) =>
-        issue.code === 'permission' ||
-        (issue.error instanceof ConnectionAccessError &&
-          (issue.error.state.code === 'reauthorization-required' ||
-            issue.error.state.code === 'forbidden' ||
-            issue.error.state.code === 'unrecoverable')),
+        issue.error instanceof ConnectionAccessError &&
+        (issue.error.state.code === 'reauthorization-required' ||
+          issue.error.state.code === 'unrecoverable'),
     );
   }
   async discard(id: string) {

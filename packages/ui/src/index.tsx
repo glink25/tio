@@ -221,6 +221,7 @@ export {
   Menu,
   MenuItem,
   MenuSeparator,
+  MenuSub,
   Popover,
   Tooltip,
   Command,

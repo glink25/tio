@@ -1,5 +1,5 @@
 import type { DateValue, Field, TioObject } from './index';
-import { isMentionReference } from './mentions';
+import { isMentionReference, mentionKey } from './mentions';
 
 export const isDerivedField = (field: Field) =>
   ['formula', 'rollup', 'createdTime', 'lastEditedTime'].includes(field.type);
@@ -92,6 +92,8 @@ export function isDateValue(value: unknown): value is DateValue {
   );
 }
 export function validateFieldDefinition(field: Field) {
+  if (field.multiple !== undefined && typeof field.multiple !== 'boolean')
+    throw new Error('Invalid multiple setting');
   if (field.numberFormat && !['number', 'percent', 'currency'].includes(field.numberFormat))
     throw new Error('Invalid number format');
   if (field.currency && !/^[A-Z]{3}$/.test(field.currency)) throw new Error('Invalid currency');
@@ -123,7 +125,9 @@ export function validateFieldReference(
   if (value == null) return;
   if (
     field.type === 'mention' &&
-    (!isMentionReference(value) || value.workspaceId !== record.workspaceId)
+    (Array.isArray(value) ? value : [value]).some(
+      (ref) => !isMentionReference(ref) || ref.workspaceId !== record.workspaceId,
+    )
   )
     throw new Error('Invalid mention workspace');
   if (field.type === 'relation') {
@@ -163,7 +167,15 @@ export function validateFieldReference(
 }
 export function createFieldRegistry() {
   const registry = new FieldRegistry();
-  registry.register({ type: 'mention', validate: isMentionReference });
+  registry.register({
+    type: 'mention',
+    validate: (value, field) =>
+      field.multiple === false
+        ? isMentionReference(value)
+        : Array.isArray(value) &&
+          value.every(isMentionReference) &&
+          new Set(value.map(mentionKey)).size === value.length,
+  });
   for (const type of ['title', 'text', 'phone'])
     registry.register({
       type,

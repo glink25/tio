@@ -1,6 +1,6 @@
 import {
-  isMentionReference,
   mentionKey,
+  mentionReferences,
   type MentionService,
   type MentionReference,
   type MentionResolution,
@@ -121,10 +121,12 @@ export function MentionPicker({
   value,
   onChange,
   inline = false,
+  multiple = false,
   label,
 }: {
   value: unknown;
-  onChange: (value: MentionReference | null) => void;
+  onChange: (value: MentionReference | MentionReference[] | null) => void;
+  multiple?: boolean;
   inline?: boolean;
   label?: string;
 }) {
@@ -181,18 +183,12 @@ export function MentionPicker({
     <ReferencePicker
       label={label ?? (zh ? '搜索提及目标' : 'Search mention targets')}
       inline={inline}
-      selected={
-        isMentionReference(value)
-          ? [
-              {
-                id: mentionKey(value),
-                kind: value.kind,
-                text: zh ? '提及' : 'Mention',
-                label: <MentionLabel reference={value} />,
-              },
-            ]
-          : []
-      }
+      selected={mentionReferences(value).map((ref) => ({
+        id: mentionKey(ref),
+        kind: ref.kind,
+        text: zh ? '提及' : 'Mention',
+        label: <MentionLabel reference={ref} />,
+      }))}
       options={items.map((item) => ({
         id: mentionKey(item.reference),
         kind: item.reference.kind,
@@ -207,9 +203,20 @@ export function MentionPicker({
       onActiveChange={setActive}
       onSelect={(id) => {
         const item = items.find((i) => mentionKey(i.reference) === id);
-        if (item) onChange(item.reference);
+        if (item) {
+          const selected = mentionReferences(value);
+          onChange(
+            multiple
+              ? selected.some((ref) => mentionKey(ref) === id)
+                ? selected.filter((ref) => mentionKey(ref) !== id)
+                : [...selected, item.reference]
+              : item.reference,
+          );
+        }
       }}
-      onRemove={() => onChange(null)}
+      onRemove={(id) =>
+        onChange(multiple ? mentionReferences(value).filter((ref) => mentionKey(ref) !== id) : null)
+      }
       loading={loading}
       error={error}
       retry={() => setRetry((n) => n + 1)}

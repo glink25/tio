@@ -18,9 +18,24 @@ export function FieldMenu(
   const [deleting, setDeleting] = useState<Field | null>(null);
   const all = p.database.fields ?? [];
   const move = (f: Field, delta: number) => {
-    const ids = p.view.fieldOrder?.length ? [...p.view.fieldOrder] : all.map((f) => f.id);
+    const order = p.view.fieldOrder ?? all.map((field) => field.id);
+    const ids = [...all]
+      .sort(
+        (a, b) =>
+          Number(b.type === 'title') - Number(a.type === 'title') ||
+          (order.indexOf(a.id) < 0 ? 999 : order.indexOf(a.id)) -
+            (order.indexOf(b.id) < 0 ? 999 : order.indexOf(b.id)),
+      )
+      .map((field) => field.id);
     const i = ids.indexOf(f.id);
-    if (i < 0 || i + delta < 0 || i + delta >= ids.length) return;
+    if (
+      f.type === 'title' ||
+      i < 0 ||
+      i + delta < 0 ||
+      i + delta >= ids.length ||
+      all.find((field) => field.id === ids[i + delta])?.type === 'title'
+    )
+      return;
     [ids[i], ids[i + delta]] = [ids[i + delta], ids[i]];
     p.onView({ fieldOrder: ids });
   };
@@ -68,10 +83,17 @@ export function FieldMenu(
           {t('database.desc')}
         </MenuItem>
         <MenuSeparator />
-        <MenuItem disabled={p.readOnly} onSelect={() => move(f, -1)}>
+        <MenuItem
+          disabled={
+            p.readOnly ||
+            f.type === 'title' ||
+            p.fields.findIndex((field) => field.id === f.id) <= 1
+          }
+          onSelect={() => move(f, -1)}
+        >
           {t('ui.left')}
         </MenuItem>
-        <MenuItem disabled={p.readOnly} onSelect={() => move(f, 1)}>
+        <MenuItem disabled={p.readOnly || f.type === 'title'} onSelect={() => move(f, 1)}>
           {t('ui.right')}
         </MenuItem>
         <MenuItem

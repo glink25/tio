@@ -12,7 +12,7 @@ export function FieldManager({
 }: {
   database: TioObject;
   objects: TioObject[];
-  onChange: (fields: Field[]) => void;
+  onChange: (fields: Field[]) => void | Promise<void>;
 }) {
   const t = useT();
   const [editing, setEditing] = useState<string | null>(null);
@@ -63,7 +63,7 @@ export function FieldManager({
           <Button
             variant="primary"
             onClick={() => {
-              onChange(fields.filter((f) => f.id !== deleting.id));
+              void onChange(fields.filter((f) => f.id !== deleting.id));
               setDeleting(null);
             }}
           >

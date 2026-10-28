@@ -16,4 +16,4 @@ Mermaid 与 HTML 共用 `code / preview / split` 展示模式。通过代码块�
 
 HTML 原始源码直接交给 `srcdoc` iframe，支持片段、完整文档以及内联和外部 JavaScript；源码修改防抖 300ms 后重新加载，code 模式卸载 iframe。预览宽度随容器，高度固定 400px，超出内容在 iframe 内滚动。空源码显示提示；脚本错误留在 iframe 内。用户 HTML 自行决定样式，宿主主题变化不重载预览。
 
-iframe 使用 `sandbox="allow-scripts"` 和 `referrerPolicy="no-referrer"`，不授予同源权限。不注入 Web Slice SDK、通信通道或资源限制 CSP，不提供 Tio 数据读写或尺寸 API。外部资源默认放行，实际加载仍受浏览器、宿主 CSP、混合内容及服务端 CORS 等规则约束。保存及 Markdown/HTML 导出保留源码，不保存运行结果。
+iframe 使用 `sandbox="allow-scripts"` 和 `referrerPolicy="no-referrer"`，不授予同源权限。不注入 App Slice SDK、通信通道或资源限制 CSP，不提供 Tio 数据读写或尺寸 API。外部资源默认放行，实际加载仍受浏览器、宿主 CSP、混合内容及服务端 CORS 等规则约束。保存及 Markdown/HTML 导出保留源码，不保存运行结果。

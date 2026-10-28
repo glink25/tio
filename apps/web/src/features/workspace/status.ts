@@ -4,12 +4,11 @@ import type { SyncPhase, SyncSnapshot } from '@tio/sync';
 import type { WorkspaceRuntime } from '@tio/workspace';
 
 export type SaveStatus = ReturnType<WorkspaceRuntime['state']['getState']>['status'];
-export type StatusAction = 'retry-save' | 'reauthorize' | 'issues' | 'sync' | 'none';
 export interface StatusModel {
   visual: 'attention' | 'busy' | 'cloud' | 'saved';
-  action: StatusAction;
   save: SaveStatus;
   sync?: SyncSnapshot;
+  access?: SyncSnapshot['access'];
   hasIssues: boolean;
 }
 export function statusModel(
@@ -17,9 +16,11 @@ export function statusModel(
   sync: SyncSnapshot,
   supportsSync: boolean,
   hasIssues: boolean,
+  error?: unknown,
 ): StatusModel {
-  const accessProblem = supportsSync && sync.access && sync.access.code !== 'available';
+  const accessProblem = sync.access && sync.access.code !== 'available';
   const attention =
+    !!error ||
     save === 'error' ||
     hasIssues ||
     accessProblem ||
@@ -27,6 +28,7 @@ export function statusModel(
       (sync.phase === 'failed' || sync.phase === 'permission' || sync.phase === 'issues'));
   return {
     save,
+    access: sync.access,
     sync: supportsSync ? sync : undefined,
     hasIssues,
     visual: attention
@@ -36,16 +38,6 @@ export function statusModel(
         : supportsSync
           ? 'cloud'
           : 'saved',
-    action:
-      save === 'error'
-        ? 'retry-save'
-        : supportsSync && sync.access?.code === 'reauthorization-required'
-          ? 'reauthorize'
-          : hasIssues
-            ? 'issues'
-            : supportsSync
-              ? 'sync'
-              : 'none',
   };
 }
 const saveKeys = {
@@ -72,10 +64,10 @@ const accessKeys = {
 } satisfies Record<ConnectionAccessCode, TranslationKey>;
 export function statusLabel(model: StatusModel): string {
   const labels = [t(saveKeys[model.save])];
+  if (model.access && model.access.code !== 'available')
+    labels.push(t(accessKeys[model.access.code]));
   const sync = model.sync;
   if (sync) {
-    if (sync.access && sync.access.code !== 'available')
-      labels.push(t(accessKeys[sync.access.code]));
     const progress = sync.phase === 'syncing' ? sync.progress : undefined;
     labels.push(
       t(syncKeys[sync.phase]) + (progress ? ` ${progress.loaded}/${progress.total}` : ''),

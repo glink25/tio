@@ -5,8 +5,8 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 
 import type { EditorController } from '../controller';
 import { Frame } from './frame';
-import type { WebSlicePermission } from './types';
-import type { SliceLog } from './view';
+import type { AppSlicePermission } from './types';
+import type { AppSliceLog } from './view';
 
 const HtmlEditor = lazy(() => import('./code-editor').then((m) => ({ default: m.HtmlEditor })));
 const input =
@@ -37,7 +37,7 @@ function Toggle({
   );
 }
 
-export default function SliceSettings({
+export default function AppSliceSettings({
   model: m,
   page,
   block,
@@ -55,13 +55,13 @@ export default function SliceSettings({
   model: EditorController;
   page: TioObject;
   block: Block;
-  permission: WebSlicePermission;
-  setPermission: (p: WebSlicePermission) => void;
+  permission: AppSlicePermission;
+  setPermission: (p: AppSlicePermission) => void;
   permissionKey: string;
   running: boolean;
   setRunning: (r: boolean) => void;
   restart: () => void;
-  logs: SliceLog[];
+  logs: AppSliceLog[];
   log: (s: string) => void;
   clearLogs: () => void;
   close: () => void;
@@ -113,9 +113,9 @@ export default function SliceSettings({
       return false;
     }
   };
-  const grant = (next: WebSlicePermission) => {
+  const grant = (next: AppSlicePermission) => {
     try {
-      m.webSlice.permissionStore!.set(permissionKey, next);
+      m.appSlice.permissionStore!.set(permissionKey, next);
       setPermission(next);
       setFeedback(tr('已保存', 'Saved'));
     } catch {
@@ -133,7 +133,7 @@ export default function SliceSettings({
     <>
       <Drawer
         closeLabel={tr('关闭', 'Close')}
-        title={tr('Web Slice 设置', 'Web Slice settings')}
+        title={tr('App Slice 设置', 'App Slice settings')}
         close={requestClose}
       >
         <div className="flex h-[calc(100dvh-53px)] min-h-0 flex-col px-6 pb-5 text-sm">
@@ -146,8 +146,8 @@ export default function SliceSettings({
               <button
                 key={id}
                 role="tab"
-                id={`slice-tab-${block.id}-${id}`}
-                aria-controls={`slice-panel-${block.id}`}
+                id={`app-slice-tab-${block.id}-${id}`}
+                aria-controls={`app-slice-panel-${block.id}`}
                 aria-selected={tab === id}
                 tabIndex={tab === id ? 0 : -1}
                 onKeyDown={(e) => {
@@ -156,7 +156,7 @@ export default function SliceSettings({
                     e.preventDefault();
                     const next = ids[(i + (e.key === 'ArrowRight' ? 1 : 2)) % 3]!;
                     changeTab(next);
-                    document.getElementById(`slice-tab-${block.id}-${next}`)?.focus();
+                    document.getElementById(`app-slice-tab-${block.id}-${next}`)?.focus();
                   }
                 }}
                 onClick={() => changeTab(id)}
@@ -177,8 +177,8 @@ export default function SliceSettings({
           )}
           <div
             role="tabpanel"
-            id={`slice-panel-${block.id}`}
-            aria-labelledby={`slice-tab-${block.id}-${tab}`}
+            id={`app-slice-panel-${block.id}`}
+            aria-labelledby={`app-slice-tab-${block.id}-${tab}`}
             className="min-h-0 flex-1 overflow-auto py-4"
           >
             {tab === 'code' && (

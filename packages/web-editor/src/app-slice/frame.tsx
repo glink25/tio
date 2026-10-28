@@ -4,9 +4,9 @@ import { useTheme } from '@tio/ui';
 import { useEffect, useMemo, useRef } from 'react';
 
 import type { EditorController } from '../controller';
-import { SliceBroker } from './broker';
+import { AppSliceBroker } from './broker';
 import { runnerDocument } from './runner';
-import { defaultPermission, MAX_MESSAGE, type WebSlicePermission } from './types';
+import { defaultPermission, MAX_MESSAGE, type AppSlicePermission } from './types';
 export function Frame({
   model: m,
   page,
@@ -23,7 +23,7 @@ export function Frame({
   page: TioObject;
   block: Block;
   html: string;
-  permission: WebSlicePermission;
+  permission: AppSlicePermission;
   preview?: boolean;
   height: number;
   onHeight: (height: number) => void;
@@ -64,13 +64,13 @@ export function Frame({
     let requests = 0,
       logs = 0,
       started = Date.now();
-    const broker = new SliceBroker({
+    const broker = new AppSliceBroker({
       runtime: m.runtime,
       pageId: page.id,
       blockId: block.id,
       workspaceId: page.workspaceId,
       permission: () => {
-        const settings = live.current.m.webSlice;
+        const settings = live.current.m.appSlice;
         const key = JSON.stringify([
           settings.namespace ?? 'local',
           page.workspaceId,
@@ -210,13 +210,13 @@ export function Frame({
     <iframe
       key={token}
       ref={ref}
-      title={preview ? 'Web Slice preview' : String(block.props.title)}
+      title={preview ? 'App Slice preview' : String(block.props.title)}
       sandbox="allow-scripts"
       referrerPolicy="no-referrer"
-      srcDoc={m.webSlice.runtimeUrl ? undefined : srcDoc}
+      srcDoc={m.appSlice.runtimeUrl ? undefined : srcDoc}
       src={
-        m.webSlice.runtimeUrl
-          ? `${m.webSlice.runtimeUrl}${m.webSlice.runtimeUrl.includes('?') ? '&' : '?'}external=${permission.allowExternalResources ? '1' : '0'}#token=${token}`
+        m.appSlice.runtimeUrl
+          ? `${m.appSlice.runtimeUrl}${m.appSlice.runtimeUrl.includes('?') ? '&' : '?'}external=${permission.allowExternalResources ? '1' : '0'}#token=${token}`
           : undefined
       }
       style={{ width: '100%', height, border: 0, background: 'white', colorScheme: 'light' }}

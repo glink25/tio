@@ -17,7 +17,7 @@ corepack pnpm dev
 
 ## 能力与边界
 
-已实现富文本、多级页面、提及、表格/看板、多种字段、公式、汇总、回收站、JSON 备份、Markdown 导出、代码高亮、Mermaid 和 Web Slice。完整编辑器可独立嵌入。
+已实现富文本、多级页面、提及、表格/看板、多种字段、公式、汇总、回收站、JSON 备份、Markdown 导出、代码高亮、Mermaid 和 App Slice。完整编辑器可独立嵌入。
 
 文件发布为尽力而为，不承诺多文件原子可见，也不能保证任意外部并发写入下零丢失；后台同步需要宿主运行。尚无原生应用、WebDAV、实时协作或删除标记/分片自动清理。浏览器数据可能被清理，重要内容应备份。原生目录权限及真实设备输入法需人工验证。
 
@@ -27,7 +27,7 @@ corepack pnpm dev
 - [整体架构](architecture/overview.md) · [提供方读取与恢复](architecture/provider-access.md)
 - [数据契约](protocols/data-format.md) · [扩展约定](protocols/extensions.md)
 - [开发与贡献](development/contributing.md) · [测试](development/testing.md)
-- [编辑器接入](../packages/web-editor/docs/integration.md) · [Web Slice](../packages/web-editor/docs/web-slice.md)
+- [编辑器接入](../packages/web-editor/docs/integration.md) · [App Slice](../packages/web-editor/docs/app-slice.md)
 - [文件存储](../packages/file-storage/docs/storage.md) · [GitHub 存储](../packages/provider-github/docs/storage.md)
 - [数据库字段](../packages/database/docs/fields.md) · [代码块](../packages/editor-blocknote/docs/code-blocks.md)
 - [安全说明](governance/SECURITY.md) · [第三方声明](governance/THIRD_PARTY_NOTICES.md) · [变更记录](governance/CHANGELOG.md)

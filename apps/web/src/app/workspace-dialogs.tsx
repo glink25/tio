@@ -1,5 +1,5 @@
 import { titleOf } from '@tio/core';
-import { t, errorMessage } from '@tio/i18n';
+import { t } from '@tio/i18n';
 import { Button, Modal } from '@tio/ui';
 import { FileText } from 'lucide-react';
 
@@ -81,28 +81,6 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
               <EmptyStateIllustration kind="trash" />
             </div>
           )}
-        </Modal>
-      )}
-      {m.issuesOpen && (
-        <Modal title={t('sync.issues')} close={() => m.setIssuesOpen(false)}>
-          {m.issues.map((issue, i) => (
-            <div className="border-b border-line py-3 text-sm" key={i}>
-              <strong>{errorMessage(issue.error)}</strong>
-              <code className="mt-2 block text-xs break-all text-muted">{issue.path}</code>
-              {issue.code === 'permission' && issue.id && (
-                <div className="flex gap-2">
-                  <Button onClick={() => void m.syncNow()}>{t('common.retry')}</Button>
-                  <Button onClick={() => void m.download()}>{t('workspace.exportFull')}</Button>
-                  <Button onClick={() => void m.discardDraft(issue.id!)}>
-                    {t('sync.discardDraft')}
-                  </Button>
-                </div>
-              )}
-              {issue.code === 'missing' && issue.id && (
-                <Button onClick={() => void m.restoreFile(issue.id!)}>{t('sync.restore')}</Button>
-              )}
-            </div>
-          ))}
         </Modal>
       )}
       {m.moveTarget && (

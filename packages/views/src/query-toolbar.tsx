@@ -379,7 +379,11 @@ export function QueryToolbar(p: RowsProps) {
                     <input
                       type="checkbox"
                       disabled={f.type === 'title'}
-                      checked={!view.visibleFieldIds?.length || view.visibleFieldIds.includes(f.id)}
+                      checked={
+                        f.type === 'title' ||
+                        !view.visibleFieldIds?.length ||
+                        view.visibleFieldIds.includes(f.id)
+                      }
                       onChange={(e) => {
                         const visible = view.visibleFieldIds?.length
                           ? view.visibleFieldIds

@@ -1,7 +1,8 @@
-import { editable } from '@tio/core';
+import { editable, knownTypes } from '@tio/core';
 import { Editor } from '@tio/editor-blocknote';
-import { useT } from '@tio/i18n';
+import { useTranslation, useT } from '@tio/i18n';
 import {
+  Modal,
   MentionContext,
   EditHistoryContext,
   Button,
@@ -16,6 +17,7 @@ import {
 } from '@tio/ui';
 import { RecordQueryContext } from '@tio/views';
 import {
+  Info,
   MoreHorizontal,
   Trash2,
   Undo2,
@@ -28,16 +30,19 @@ import {
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 
+import { AppSlice } from './app-slice/view';
 import { useEditorController, type EditorSurfaceProps } from './controller';
 import { DatabaseEmbed } from './database-embed';
 import { EditorDialogs } from './dialogs';
 import { useHistoryShortcuts } from './history';
 import { LoadNotice } from './load-notice';
 import { RecordContent } from './record-detail';
-import { WebSlice } from './web-slice/view';
+import { useTransferMenu } from './transfer/menu';
 
 export function EditorSurface(props: EditorSurfaceProps) {
   const t = useT();
+  const { i18n } = useTranslation();
+  const [showInfo, setShowInfo] = useState(false);
   const toast = useNotify();
   const m = useEditorController(props);
   const current = m.current;
@@ -46,6 +51,7 @@ export function EditorSurface(props: EditorSurfaceProps) {
     (query: import('@tio/core').RecordQuery) => m.runtime.records(query),
     [m.runtime],
   );
+  const transfer = useTransferMenu(m, props);
   const titleRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (props.autoFocusTitle) {
@@ -65,17 +71,6 @@ export function EditorSurface(props: EditorSurfaceProps) {
   }
   const actions = (
     <>
-      {props.showSaveState && (
-        <span className="text-xs text-muted" aria-live="polite">
-          {t(
-            m.state.status === 'error'
-              ? 'status.saveFailed'
-              : m.state.status === 'saving'
-                ? 'status.saving'
-                : 'status.saved',
-          )}
-        </span>
-      )}
       {current && (
         <Menu
           trigger={
@@ -85,6 +80,12 @@ export function EditorSurface(props: EditorSurfaceProps) {
           }
         >
           {props.pageActions}
+          {knownTypes.has(current.type) && (
+            <MenuItem onSelect={() => setShowInfo(true)}>
+              <Info size={15} />
+              {t('ui.documentInfo')}
+            </MenuItem>
+          )}
           {current.type === 'page' && (
             <>
               <MenuItem
@@ -107,6 +108,7 @@ export function EditorSurface(props: EditorSurfaceProps) {
               </MenuItem>
             </>
           )}
+          {transfer.menu}
           <MenuSeparator />
           <MenuItem disabled={!m.history.canUndo} onSelect={m.history.undo}>
             <Undo2 size={15} />
@@ -155,22 +157,33 @@ export function EditorSurface(props: EditorSurfaceProps) {
                 {actions}
               </header>
             )}
-            {(m.error || m.state.status === 'error') && (
-              <div
-                role="alert"
-                className="mx-4 flex items-center gap-3 rounded border border-red-300 p-3 text-sm"
-              >
-                <span className="flex-1">{m.error || t('ui.saveError')}</span>
-                <Button
-                  onClick={() =>
-                    void m.runtime
-                      .retry()
-                      .then(() => m.setError(''))
-                      .catch((e) => m.setError(String(e)))
-                  }
-                >
-                  {t('common.retry')}
-                </Button>
+            {showInfo && current && (
+              <Modal title={t('ui.documentInfo')} close={() => setShowInfo(false)}>
+                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+                  {(['createdAt', 'updatedAt'] as const).map((field) => (
+                    <div key={field} className="contents">
+                      <dt className="text-muted">
+                        {t(field === 'createdAt' ? 'ui.createdAt' : 'ui.updatedAt')}
+                      </dt>
+                      <dd className="m-0">
+                        <time dateTime={current[field]}>
+                          {current[field]
+                            ? new Intl.DateTimeFormat(i18n.language, {
+                                dateStyle: 'medium',
+                                timeStyle: 'long',
+                              }).format(new Date(current[field]!))
+                            : '—'}
+                        </time>
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </Modal>
+            )}
+            {transfer.picker}
+            {m.error && (
+              <div role="alert" className="mx-4 rounded border border-red-300 p-3 text-sm">
+                {m.error}
               </div>
             )}
             {!current && props.target.id ? (
@@ -224,8 +237,8 @@ export function EditorSurface(props: EditorSurfaceProps) {
                       onChange={(b, p, group) => m.changeBlocks(current, b, p, group)}
                       upload={m.upload}
                       resolve={m.resolve}
-                      renderWebSlice={(block) => (
-                        <WebSlice model={m} page={current} block={block} />
+                      renderAppSlice={(block) => (
+                        <AppSlice model={m} page={current} block={block} />
                       )}
                       renderDatabase={(databaseId, viewId) => (
                         <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />

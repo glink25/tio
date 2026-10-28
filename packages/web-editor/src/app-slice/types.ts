@@ -1,24 +1,24 @@
-export interface WebSlicePermission {
+export interface AppSlicePermission {
   data: 'read' | 'readWrite';
   allowExternalResources: boolean;
 }
-export const defaultPermission: WebSlicePermission = {
+export const defaultPermission: AppSlicePermission = {
   data: 'read',
   allowExternalResources: false,
 };
-export interface WebSlicePermissionStore {
-  get(key: string): WebSlicePermission | undefined;
-  set(key: string, permission: WebSlicePermission): void;
+export interface AppSlicePermissionStore {
+  get(key: string): AppSlicePermission | undefined;
+  set(key: string, permission: AppSlicePermission): void;
   subscribe?(key: string, listener: () => void): () => void;
 }
-export interface WebSliceOptions {
-  permissionStore?: WebSlicePermissionStore;
+export interface AppSliceOptions {
+  permissionStore?: AppSlicePermissionStore;
   /** Optional trusted endpoint serving the same trusted bootstrap on an isolated origin. */
   runtimeUrl?: string;
   namespace?: string;
 }
-export function memoryPermissions(): WebSlicePermissionStore {
-  const values = new Map<string, WebSlicePermission>();
+export function memoryPermissions(): AppSlicePermissionStore {
+  const values = new Map<string, AppSlicePermission>();
   const listeners = new Map<string, Set<() => void>>();
   return {
     get: (key) => values.get(key),
@@ -37,7 +37,7 @@ export function memoryPermissions(): WebSlicePermissionStore {
     },
   };
 }
-export class SliceError extends Error {
+export class AppSliceError extends Error {
   constructor(
     readonly code: string,
     message = code,

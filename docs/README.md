@@ -17,7 +17,7 @@ Open `http://localhost:6789`. For a production build, run `corepack pnpm build` 
 
 ## Capabilities and limits
 
-Rich text, nested pages, mentions, table/board views, typed fields, formulas, rollups, trash, JSON backups, Markdown exports, code highlighting, Mermaid and Web Slice are implemented. The editor can also be embedded independently.
+Rich text, nested pages, mentions, table/board views, typed fields, formulas, rollups, trash, JSON backups, Markdown exports, code highlighting, Mermaid and App Slice are implemented. The editor can also be embedded independently.
 
 File publication is best effort; it does not guarantee atomic multi-file visibility or zero loss with arbitrary external writers. Synchronization runs while the host is active. Native apps, WebDAV, real-time collaboration and automatic tombstone/chunk cleanup are not implemented. Browser data can be evicted; keep backups. Native folder permissions and real-device IME behavior require manual verification.
 
@@ -29,7 +29,7 @@ The detailed documentation is maintained in Chinese.
 - [Architecture](architecture/overview.md) · [Provider reads](architecture/provider-access.md)
 - [Data contract](protocols/data-format.md) · [Extensions](protocols/extensions.md)
 - [Development](development/contributing.md) · [Testing](development/testing.md)
-- [Embedding](../packages/web-editor/docs/integration.md) · [Web Slice](../packages/web-editor/docs/web-slice.md)
+- [Embedding](../packages/web-editor/docs/integration.md) · [App Slice](../packages/web-editor/docs/app-slice.md)
 - [File storage](../packages/file-storage/docs/storage.md) · [GitHub](../packages/provider-github/docs/storage.md)
 - [Database fields](../packages/database/docs/fields.md) · [Code blocks](../packages/editor-blocknote/docs/code-blocks.md)
 - [Security](governance/SECURITY.md) · [Third-party notices](governance/THIRD_PARTY_NOTICES.md) · [Changelog](governance/CHANGELOG.md)

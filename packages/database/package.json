@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./repository": "./src/repository.ts",
-    "./search-browser": "./src/search-browser.ts"
+    "./search-browser": "./src/search-browser.ts",
+    "./conversion": "./src/conversion.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

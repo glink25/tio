@@ -15,11 +15,18 @@
     "lint": "oxlint --type-aware --deny-warnings",
     "format": "oxfmt --write .",
     "format:check": "oxfmt --check .",
-    "check": "corepack pnpm format:check && corepack pnpm lint && corepack pnpm check:boundaries && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
+    "check": "corepack pnpm pages:bundle && corepack pnpm format:check && corepack pnpm lint && corepack pnpm check:boundaries && corepack pnpm typecheck && corepack pnpm test && corepack pnpm build",
     "test:watch": "corepack pnpm --filter @tio/tests test:watch",
     "lint:fix": "oxlint --type-aware --fix",
     "check:boundaries": "node scripts/check-boundaries.mjs",
-    "brand:icons": "node scripts/generate-brand-icons.mjs"
+    "brand:icons": "node scripts/generate-brand-icons.mjs",
+    "blog:migrate": "corepack pnpm --filter @tio/blog migrate",
+    "blog:build": "corepack pnpm --filter @tio/blog build",
+    "blog:preview": "corepack pnpm --filter @tio/blog preview",
+    "pages:build": "corepack pnpm --filter @glink25/tio-pages build:site",
+    "test:pages": "corepack pnpm --filter @tio/tests test:pages",
+    "pages:bundle": "corepack pnpm --filter @glink25/tio-pages build",
+    "test:pages-package": "corepack pnpm pages:bundle && node tests/scripts/check-pages-package.mjs"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",

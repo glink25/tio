@@ -1,10 +1,12 @@
 export * from './diagnostics';
-import { validDatePart, validateFieldDefinition } from './fields';
+import { validateFieldDefinition } from './fields';
 import { assertJson } from './json';
 import { contentMentions } from './mentions';
 import { createDefaultRegistry } from './registry';
 export { assertJson } from './json';
 export * from './fields';
+export * from './timestamps';
+import { validateTimestamps } from './timestamps';
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export * from './mentions';
 export type FieldType =
@@ -118,7 +120,15 @@ export function object(
   workspaceId: string,
   props: Partial<TioObject> = {},
 ): TioObject {
-  return { id: id(type), workspaceId, type, schemaVersion: 1, ...props };
+  const timestamp = new Date().toISOString();
+  return {
+    id: id(type),
+    workspaceId,
+    type,
+    schemaVersion: 1,
+    ...(knownTypes.has(type) ? { createdAt: timestamp, updatedAt: timestamp } : {}),
+    ...props,
+  };
 }
 const plain = (x: unknown): x is Record<string, unknown> =>
   !!x && typeof x === 'object' && !Array.isArray(x);
@@ -149,6 +159,7 @@ export function validate(input: unknown): TioObject {
   return createDefaultRegistry().decode(input);
 }
 export function validateBuiltin(object: TioObject): TioObject {
+  validateTimestamps(object);
   const input = object as unknown as Record<string, unknown> & { type: string };
   if (input.deleted !== undefined && typeof input.deleted !== 'boolean')
     throw new Error('非法删除状态');
@@ -164,13 +175,6 @@ export function validateBuiltin(object: TioObject): TioObject {
   if (['page', 'record'].includes(input.type)) validateBlocks(input.blocks);
   if (['record', 'databaseView'].includes(input.type) && typeof input.databaseId !== 'string')
     throw new Error('缺少数据库引用');
-  for (const key of ['createdAt', 'updatedAt'])
-    if (
-      input.type === 'record' &&
-      input[key] !== undefined &&
-      (typeof input[key] !== 'string' || !input[key].includes('T') || !validDatePart(input[key]))
-    )
-      throw new Error('Invalid record timestamp');
   if (input.type === 'record' && !plain(input.properties)) throw new Error('非法记录字段');
   if (input.type === 'database') {
     if (!Array.isArray(input.fields)) throw new Error('缺少字段定义');
@@ -262,7 +266,7 @@ function validateBlocks(value: unknown, ids = new Set<string>()) {
       ids.has(b.id)
     )
       throw new Error('非法或重复 Block');
-    if (b.type === 'webSlice') {
+    if (b.type === 'appSlice') {
       const p = b.props;
       if (
         typeof p.html !== 'string' ||
@@ -278,7 +282,7 @@ function validateBlocks(value: unknown, ids = new Set<string>()) {
         !Array.isArray(b.children) ||
         b.children.length
       )
-        throw new Error('Invalid Web Slice');
+        throw new Error('Invalid App Slice');
     }
     contentMentions(b.content);
     ids.add(b.id);

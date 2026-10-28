@@ -1,13 +1,7 @@
-import {
-  isMentionReference,
-  codeText,
-  plainText,
-  titleOf,
-  valueText,
-  type Block,
-  type TioObject,
-} from '@tio/core';
+import { titleOf, valueText, type Block, type TioObject } from '@tio/core';
 import { strToU8, zipSync } from 'fflate';
+
+import { markdownBlocks } from './page';
 const escape = (value: string) => value.replace(/[\\`*_[\]<>|]/g, '\\$&');
 /** A reading projection, deliberately separate from the lossless JSON backup format. */
 export async function exportMarkdownZip(
@@ -26,89 +20,17 @@ export async function exportMarkdownZip(
     const target = byId.get(id);
     return target ? `[${escape(label(target))}](${id}.md)` : escape(id);
   };
-  const inline = (value: unknown): string => {
-    if (Array.isArray(value)) return value.map(inline).join('');
-    if (value && typeof value === 'object') {
-      const node = value as Record<string, unknown>;
-      if (node.type === 'mention' && isMentionReference(node.props)) {
-        const target = byId.get(node.props.id);
-        return target?.workspaceId === node.props.workspaceId && target.type === node.props.kind
-          ? reference(target.id)
-          : '[Unavailable reference]';
-      }
-      if (node.content) return inline(node.content);
-    }
-    return escape(plainText(value));
-  };
-  const blocks = (items: Block[], depth = 0): string =>
-    items
-      .map((b) => {
-        const text = inline(b.content).trim();
-        let result = text;
-        switch (b.type) {
-          case 'heading':
-            result = `${'#'.repeat(Math.min(6, Math.max(1, Number(b.props.level) || 2)))} ${text}`;
-            break;
-          case 'bulletListItem':
-            result = `- ${text}`;
-            break;
-          case 'numberedListItem':
-            result = `1. ${text}`;
-            break;
-          case 'checkListItem':
-            result = `- [${b.props.checked ? 'x' : ' '}] ${text}`;
-            break;
-          case 'quote':
-            result = `> ${text}`;
-            break;
-          case 'codeBlock': {
-            const source = codeText(b.content);
-            const fence = '`'.repeat(
-              Math.max(3, ...Array.from(source.matchAll(/`+/g), (match) => match[0].length + 1)),
-            );
-            const language = valueText(b.props.language).replace(/[^a-zA-Z0-9_+.#-]/g, '');
-            result = `${fence}${language}\n${source}\n${fence}`;
-            break;
-          }
-          case 'webSlice':
-            result = `${escape(valueText(b.props.title))}\n\n${valueText(b.props.html)
-              .split('\n')
-              .map((line) => '    ' + line)
-              .join('\n')}`;
-            break;
-          case 'databaseView':
-            result = reference(valueText(b.props.databaseId));
-            break;
-          case 'image':
-          case 'file':
-          case 'video':
-          case 'audio': {
-            const ref = valueText(b.props.url);
-            const asset = ref.startsWith('asset:') ? byId.get(ref.slice(6)) : undefined;
-            const url = asset ? `../${asset.assetPath}` : /^https?:\/\//.test(ref) ? ref : '';
-            result = url
-              ? `${b.type === 'image' ? '!' : ''}[${escape(valueText(b.props.caption || asset?.filename || b.type))}](${encodeURI(url).replace(/[()]/g, (c) => '%' + c.charCodeAt(0).toString(16))})`
-              : text;
-            break;
-          }
-          case 'table': {
-            const content = b.content as { rows?: { cells?: unknown[] }[] };
-            const rows =
-              content?.rows?.map((row) => (row.cells ?? []).map((cell) => inline(cell).trim())) ??
-              [];
-            result = rows
-              .map(
-                (row, i) =>
-                  `| ${row.join(' | ')} |${i === 0 ? '\n| ' + row.map(() => '---').join(' | ') + ' |' : ''}`,
-              )
-              .join('\n');
-            break;
-          }
-        }
-        const indent = '  '.repeat(depth);
-        return indent + result + (b.children.length ? '\n' + blocks(b.children, depth + 1) : '');
-      })
-      .join('\n\n');
+  const blocks = (items: Block[]) =>
+    markdownBlocks(items, {
+      objects: byId,
+      pageUrl: (id) => `${id}.md`,
+      assetUrl: (id) => {
+        const asset = byId.get(id);
+        return asset?.assetPath ? `../${asset.assetPath}` : '';
+      },
+      unavailable: 'Unavailable reference',
+      unsupported: 'Unsupported content',
+    });
   for (const o of live) {
     if (o.type === 'asset') {
       const blob = await getBlob(o.id);

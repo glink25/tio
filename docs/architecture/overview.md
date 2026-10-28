@@ -31,3 +31,9 @@
 纯领域、工作空间和同步包不依赖 React、浏览器存储或具体端点；依赖边界由 `scripts/check-boundaries.mjs` 检查。提供方和适配器归宿主，不能反向进入编辑器。
 
 业务数据不含句柄、凭据、Blob URL 或 UI 实例。当前不读取或迁移历史格式；未知内容保留与历史兼容是不同要求。详见[数据契约](../protocols/data-format.md)、[编辑器接入](../../packages/web-editor/docs/integration.md)和[文件存储](../../packages/file-storage/docs/storage.md)。
+
+## 静态发布
+
+`@glink25/tio-pages` 独立读取当前工作空间并渲染 HTML，SSR 与路由、模板及输出分离，不加载编辑器。Node 文件入口复用共享文件层读取分片。个人模板、CSS、脚本与发布策略集中在工作空间 `.tio-page/`，本地与 Actions 共享配置入口；可选代码扩展在构建时完成代码高亮与 Mermaid SVG；阅读端仅 HTML 示例需要 iframe 初始化脚本，按页面注入。博客迁移仅位于示例工具中；运行时、仓库与标准文件格式仍是写入入口。使用与验证见 [Tio Pages](../development/pages.md)。
+
+内建对象统一使用必需的 v1 系统时间，由命令层维护；专用导入入口保留来源时间。时间只反映自身内容编辑，不随导航、视图展示或同步接收刷新，具体规则见[数据契约](../protocols/data-format.md#系统时间)。

@@ -12,6 +12,8 @@
 
 在 `tests/` 内可直接使用 `corepack pnpm test`、`test:watch`、`test:e2e`、`typecheck`。配置和夹具基于文件位置解析仓库路径，不依赖调用目录。运行单组逻辑测试可用 `corepack pnpm --filter @tio/tests test unit/sync`。
 
+静态发布的 HTML/Mermaid 预览功能另由 `corepack pnpm test:pages` 使用真实 Chromium 验证，配置、夹具和产物仍集中在 `tests/`。该命令不启动编辑器，不替代富文本编辑核心流程。
+
 ## 保留范围
 
 - domain：对象身份、合并、数据库基础查询和编辑校验。

@@ -1,6 +1,9 @@
 import { DomainError } from '@tio/core';
 import {
   createDomain,
+  stampContent,
+  validateTimestamps,
+  knownTypes,
   isDerivedField,
   validateFieldReference,
   type Domain,
@@ -216,9 +219,11 @@ export function inverse(
 /** Serializable editing intents; closures are implementation details of the executor only. */
 export type WorkspaceCommand = { timestamp?: string } & (
   | { type: 'checked'; expected: TioObject[]; changes: TioObject[] }
+  | { type: 'convertField'; expected: TioObject[]; changes: TioObject[] }
   | { type: 'undelete'; id: string }
   | { type: 'patch'; id: string; changes: Partial<TioObject> }
   | { type: 'create'; objects: TioObject[]; embed?: { pageId: string; block: Block } }
+  | { type: 'import'; objects: TioObject[] }
   | { type: 'append'; id: string; block: Block }
   | { type: 'blocks'; id: string; next: Block[]; previous: Block[] }
   | { type: 'cell'; id: string; fieldId: string; value: unknown }
@@ -233,7 +238,8 @@ function executeIntent(
   domain = defaults(),
 ): TioObject[] {
   switch (command.type) {
-    case 'checked': {
+    case 'checked':
+    case 'convertField': {
       for (const expected of command.expected)
         if (
           !same(
@@ -270,6 +276,7 @@ function executeIntent(
     }
     case 'patch':
       return patchObject(command.id, command.changes, domain)(objects);
+    case 'import':
     case 'create': {
       const next = createObjects(command.objects, domain)(objects);
       for (const item of command.objects) {
@@ -294,7 +301,7 @@ function executeIntent(
         )
           throw new Error('Parent unavailable');
       }
-      return command.embed
+      return 'embed' in command && command.embed
         ? appendBlock(command.embed.pageId, command.embed.block, domain)(next)
         : next;
     }
@@ -320,13 +327,34 @@ export function executeCommand(
   onMerge?: (result: MergeResult) => void,
   domain = defaults(),
 ): TioObject[] {
+  const timestamp = command.timestamp ?? new Date().toISOString();
+  command = { ...command, timestamp };
+  if (command.type === 'create')
+    command = {
+      ...command,
+      objects: command.objects.map((item) => stampContent(undefined, item, timestamp)),
+    };
+  if (command.type === 'checked' || command.type === 'convertField')
+    command = {
+      ...command,
+      changes: command.changes.map((item) =>
+        objects.some((old) => old.id === item.id) ? item : stampContent(undefined, item, timestamp),
+      ),
+    };
   const originals = new Map(objects.map((o) => [o.id, o]));
   const next = executeIntent(command, objects, onMerge, domain).map((item) => {
     const old = originals.get(item.id);
     if (item.type !== 'database' || item === old) return item;
     for (const field of item.fields ?? []) {
       const previous = old?.fields?.find((f) => f.id === field.id);
-      if (previous && previous.type !== field.type)
+      if (
+        previous &&
+        (previous.type !== field.type ||
+          (['mention', 'relation'].includes(field.type) &&
+            (previous.multiple !== false) !== (field.multiple !== false))) &&
+        command.type !== 'convertField' &&
+        command.type !== 'restore'
+      )
         throw new Error('Property types cannot be changed');
     }
     return {
@@ -341,41 +369,44 @@ export function executeCommand(
     };
   });
   const before = new Map(objects.map((o) => [o.id, o]));
-  return next.map((record) => {
-    const old = before.get(record.id);
-    if (record.type !== 'record' || record === old) return record;
-    const database = next.find(
-      (o) =>
-        o.id === record.databaseId &&
-        o.type === 'database' &&
-        o.workspaceId === record.workspaceId &&
-        !o.deleted,
-    );
-    if (!database && !record.deleted) throw new Error('Database unavailable');
-    for (const [key, value] of Object.entries(record.properties ?? {})) {
-      if (old && same(value, old.properties?.[key])) continue;
-      const field = database?.fields?.find((f) => f.id === key);
-      if (!field) {
-        if (command.type === 'restore') continue;
-        throw new Error('Field unavailable');
+  return next
+    .map((record) => {
+      const old = before.get(record.id);
+      if (record.type !== 'record' || record === old) return record;
+      const database = next.find(
+        (o) =>
+          o.id === record.databaseId &&
+          o.type === 'database' &&
+          o.workspaceId === record.workspaceId &&
+          !o.deleted,
+      );
+      if (!database && !record.deleted) throw new Error('Database unavailable');
+      for (const [key, value] of Object.entries(record.properties ?? {})) {
+        if (old && same(value, old.properties?.[key])) continue;
+        const field = database?.fields?.find((f) => f.id === key);
+        if (!field) {
+          if (command.type === 'restore') continue;
+          throw new Error('Field unavailable');
+        }
+        if (isDerivedField(field)) throw new Error(`Read-only field: ${key}`);
+        domain.fields.validate(field, value);
+        validateFieldReference(field, value, record, next);
       }
-      if (isDerivedField(field)) throw new Error(`Read-only field: ${key}`);
-      domain.fields.validate(field, value);
-      validateFieldReference(field, value, record, next);
-    }
-    if (
-      old &&
-      command.type !== 'restore' &&
-      (record.createdAt !== old.createdAt || record.updatedAt !== old.updatedAt)
-    )
-      throw new Error('System timestamps are read-only');
-    if (!command.timestamp) return record;
-    const changed =
-      !old || !same(record.properties, old.properties) || !same(record.blocks, old.blocks);
-    return {
-      ...record,
-      createdAt: old?.createdAt ?? record.createdAt ?? command.timestamp,
-      updatedAt: changed ? command.timestamp : (record.updatedAt ?? command.timestamp),
-    };
-  });
+      return record;
+    })
+    .map((item) => {
+      if (!knownTypes.has(item.type)) return item;
+      const old = before.get(item.id);
+      if (command.type === 'import' && !old) {
+        validateTimestamps(item);
+        return item;
+      }
+      if (
+        old &&
+        command.type !== 'restore' &&
+        (item.createdAt !== old.createdAt || item.updatedAt !== old.updatedAt)
+      )
+        throw new Error('System timestamps are read-only');
+      return stampContent(old, item, timestamp);
+    });
 }

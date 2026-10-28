@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+import { repoRoot } from '../paths';
+
 test('typed content and title survive a full browser reload', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: '仅此浏览器', exact: true }).click();
@@ -20,4 +22,55 @@ test('typed content and title survive a full browser reload', async ({ page }) =
   await page.reload();
   await expect(title).toHaveValue('编辑后重新打开');
   await expect(editor).toContainText('真实输入持久化');
+});
+
+test('host status contains persistence errors and recovers the latest input without a retry action', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: '仅此浏览器', exact: true }).click();
+  await page.getByRole('button', { name: '创建工作空间', exact: true }).click();
+  const create = page.getByRole('dialog', { name: '新建工作空间', exact: true });
+  await create.getByRole('textbox').fill('自动恢复测试');
+  await create.getByRole('button', { name: '新建', exact: true }).click();
+  const title = page.getByLabel('页面标题');
+  await expect(title).toHaveValue('开始');
+  await page.evaluate(async (root) => {
+    const { LocalStore } = await import(root + '/packages/local-store/src/index.ts');
+    const commit = LocalStore.prototype.commit;
+    const failure = { blocked: true };
+    (window as any).saveFailure = failure;
+    LocalStore.prototype.commit = function (...args: Parameters<typeof commit>) {
+      if (failure.blocked) return Promise.reject(new Error('Temporary storage failure'));
+      return commit.apply(this, args);
+    };
+  }, '/@fs' + repoRoot);
+  await title.fill('失败后仍可输入');
+  const status = page.locator('header').getByRole('button', { name: /保存失败/ });
+  await expect(status).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.locator('[data-sonner-toast]')).toHaveCount(0);
+  await status.hover();
+  await expect(page.getByRole('tooltip')).toContainText('Temporary storage failure');
+  await status.click();
+  const details = page.getByRole('dialog', { name: '保存与同步状态' });
+  await expect(details).toContainText('Temporary storage failure');
+  await expect(
+    details.getByRole('button', { name: /重试|立即同步|恢复文件|放弃本地草稿/ }),
+  ).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await title.fill('故障期间的最新输入');
+  await page.evaluate(() => {
+    (window as any).saveFailure.blocked = false;
+  });
+  await expect(page.locator('header').getByRole('button', { name: /^已保存本地/ })).toBeVisible();
+  await page
+    .locator('header')
+    .getByRole('button', { name: /^已保存本地/ })
+    .click();
+  await expect(page.getByRole('dialog', { name: '保存与同步状态' })).not.toContainText(
+    'Temporary storage failure',
+  );
+  await page.reload();
+  await expect(title).toHaveValue('故障期间的最新输入');
 });

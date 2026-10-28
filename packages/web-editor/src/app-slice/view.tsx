@@ -9,10 +9,10 @@ import { flatten } from './broker';
 import { Frame } from './frame';
 import { defaultPermission } from './types';
 
-const SliceSettings = lazy(() => import('./settings'));
-export type SliceLog = { message: string; source: 'live' | 'preview' };
+const AppSliceSettings = lazy(() => import('./settings'));
+export type AppSliceLog = { message: string; source: 'live' | 'preview' };
 
-export function WebSlice({
+export function AppSlice({
   model: m,
   page,
   block,
@@ -24,12 +24,12 @@ export function WebSlice({
   const { i18n } = useTranslation();
   const zh = i18n.language === 'zh';
   const key = JSON.stringify([
-    m.webSlice.namespace ?? 'local',
+    m.appSlice.namespace ?? 'local',
     page.workspaceId,
     page.id,
     block.id,
   ]);
-  const store = m.webSlice.permissionStore!;
+  const store = m.appSlice.permissionStore!;
   const [permission, setPermission] = useState(() => store.get(key) ?? { ...defaultPermission });
   useEffect(
     () => store.subscribe?.(key, () => setPermission(store.get(key) ?? { ...defaultPermission })),
@@ -39,22 +39,22 @@ export function WebSlice({
   const [generation, setGeneration] = useState(0);
   const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [logs, setLogs] = useState<SliceLog[]>([]);
+  const [logs, setLogs] = useState<AppSliceLog[]>([]);
   const [height, setHeight] = useState(Number(block.props.height));
-  const log = (message: string, source: SliceLog['source'] = 'live') =>
+  const log = (message: string, source: AppSliceLog['source'] = 'live') =>
     setLogs((items) => [...items.slice(-99), { message, source }]);
   if (!flatten(page.blocks ?? []).some((b) => b.id === block.id)) return null;
   return (
     <section
       className="my-4 w-full min-w-0 overflow-hidden rounded-lg border border-line bg-panel"
       contentEditable={false}
-      data-web-slice={block.id}
+      data-app-slice={block.id}
     >
       <div className="flex h-10 items-center justify-between border-b border-line px-3">
-        <span className="text-xs font-medium text-secondary">Web Slice</span>
+        <span className="text-xs font-medium text-secondary">App Slice</span>
         <IconButton
           ref={trigger}
-          label={zh ? 'Web Slice 设置' : 'Web Slice settings'}
+          label={zh ? 'App Slice 设置' : 'App Slice settings'}
           className="p-1.5"
           onClick={() => setOpen(true)}
         >
@@ -80,7 +80,7 @@ export function WebSlice({
       )}
       {open && (
         <Suspense fallback={null}>
-          <SliceSettings
+          <AppSliceSettings
             model={m}
             page={page}
             block={block}

@@ -1,4 +1,10 @@
-import { createDefaultRegistry, type ObjectRegistry, type Block, type TioObject } from '@tio/core';
+import {
+  knownTypes,
+  createDefaultRegistry,
+  type ObjectRegistry,
+  type Block,
+  type TioObject,
+} from '@tio/core';
 import { canonical } from '@tio/serialization';
 import { diff3Merge } from 'node-diff3';
 export interface MergeResult {
@@ -38,6 +44,15 @@ export function merge(
     return result;
   }
   function visit(b: any, l: any, r: any, path: string): any {
+    if (knownTypes.has(local.type) && path === '.createdAt')
+      return (
+        base?.createdAt ??
+        [local.createdAt!, remote.createdAt!].sort((a, b) => Date.parse(a) - Date.parse(b))[0]
+      );
+    if (knownTypes.has(local.type) && path === '.updatedAt')
+      return [base?.updatedAt, local.updatedAt, remote.updatedAt]
+        .filter((time): time is string => !!time)
+        .sort((a, b) => Date.parse(b) - Date.parse(a))[0];
     if (eq(l, r)) return l;
     if (eq(l, b)) return r;
     if (eq(r, b)) return l;
@@ -194,5 +209,11 @@ export function merge(
       recovered.push(local.deleted ? remote : local);
     }
   } else merged = visit(base, local, remote, '');
+  if (knownTypes.has(local.type))
+    merged = {
+      ...merged,
+      createdAt: visit(base?.createdAt, local.createdAt, remote.createdAt, '.createdAt'),
+      updatedAt: visit(base?.updatedAt, local.updatedAt, remote.updatedAt, '.updatedAt'),
+    };
   return { merged, warnings, recovered };
 }

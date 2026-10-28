@@ -149,7 +149,7 @@ test('reference forms keep choices as drafts until done, cancel and clear', asyn
   await search.press('Enter');
   await search.press('Escape');
   await mention.getByRole('button', { name: 'Done', exact: true }).click();
-  expect((await properties(page)).mention.kind).toBe('page');
+  expect((await properties(page)).mention[0].kind).toBe('page');
   const related = page.getByRole('group', { name: 'Related editor', exact: true });
   await related.getByRole('button', { name: 'Related', exact: true }).click();
   await page.getByRole('combobox', { name: 'Related', exact: true }).fill('Collect');
@@ -568,4 +568,89 @@ test('date drafts restore their complete form state and stay unsaved until done'
   expect((await properties(page)).date).toBeUndefined();
   await date.getByRole('button', { name: 'Done', exact: true }).click();
   expect((await properties(page)).date).toMatchObject({ start: '2026-10-27' });
+});
+
+test('multiple mentions select, remove, cancel and persist after reopening', async ({ page }) => {
+  await openRecord(page);
+  const group = page.getByRole('group', { name: 'Mention editor', exact: true });
+  await group.getByRole('button', { name: 'Mention', exact: true }).click();
+  const search = page.getByRole('combobox', { name: 'Mention', exact: true });
+  await search.fill('Quick');
+  await page.getByRole('option', { name: 'Quick notes', exact: true }).click();
+  await search.fill('Getting');
+  await page.getByRole('option', { name: 'Getting started', exact: true }).click();
+  await search.press('Escape');
+  expect((await properties(page)).mention).toBeUndefined();
+  await group.getByRole('button', { name: 'Done', exact: true }).click();
+  expect((await properties(page)).mention).toHaveLength(2);
+  await group.getByRole('button', { name: 'Remove Mention', exact: true }).first().click();
+  await group.getByRole('button', { name: 'Cancel', exact: true }).click();
+  expect((await properties(page)).mention).toHaveLength(2);
+  await group.getByRole('button', { name: 'Remove Mention', exact: true }).first().click();
+  await group.getByRole('button', { name: 'Done', exact: true }).click();
+  expect((await properties(page)).mention).toHaveLength(1);
+  await page.evaluate(() => {
+    const f = (window as any).databaseFixture;
+    return f.editor.open({ id: f.databaseId });
+  });
+  await openRecord(page);
+  await expect(group).toContainText('Getting started');
+  await expect(group).not.toContainText('Quick notes');
+});
+
+test('ID type stays fixed and mention cardinality is configurable', async ({ page }) => {
+  await page.getByRole('button', { name: 'View settings', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Properties', exact: true }).click();
+  await page.getByRole('button', { name: 'Name', exact: true }).click();
+  const type = page.getByLabel('Property type', { exact: true });
+  await expect(type).toBeDisabled();
+  await expect(type.locator('option:checked')).toHaveText('ID');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Mention', exact: true }).click();
+  const multiple = page.getByRole('checkbox', { name: 'Allow multiple items', exact: true });
+  await expect(multiple).toBeChecked();
+  await multiple.uncheck();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const f = (window as any).databaseFixture;
+        await f.editor.flush();
+        return (await f.repository.readSnapshot()).entries
+          .find((e: any) => e.object.id === f.databaseId)
+          .object.fields.find((field: any) => field.id === 'mention').multiple;
+      }),
+    )
+    .toBe(false);
+});
+
+test('ID column remains first even when the saved view orders it last', async ({ page }) => {
+  await page.evaluate(async () => {
+    const f = (window as any).databaseFixture;
+    const snapshot = await f.repository.readSnapshot();
+    const view = snapshot.entries.find((e: any) => e.object.type === 'databaseView').object;
+    const db = snapshot.entries.find((e: any) => e.object.id === f.databaseId).object;
+    await f.repository.commit({
+      id: 'reorder',
+      expectedVersion: snapshot.version,
+      assetIds: [],
+      changes: [
+        {
+          ...view,
+          fieldOrder: [
+            ...db.fields
+              .filter((field: any) => field.type !== 'title')
+              .map((field: any) => field.id),
+            'title',
+          ],
+        },
+      ],
+    });
+    await f.editor.open({ id: f.databaseId });
+  });
+  const canvas = page.locator('canvas').first();
+  await expect(canvas).toBeVisible();
+  const bounds = await canvas.boundingBox();
+  await page.mouse.dblclick(bounds!.x + 90, bounds!.y + 59);
+  await expect(page.getByRole('group', { name: 'Name editor', exact: true })).toBeVisible();
 });

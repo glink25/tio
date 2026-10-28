@@ -112,6 +112,39 @@ export function MenuItem({
     </MenuPrimitive.Item>
   );
 }
+export function MenuSub({
+  label,
+  children,
+  disabled,
+}: {
+  label: ReactNode;
+  children: ReactNode;
+  disabled?: boolean;
+}) {
+  const container = useContext(PortalContext);
+  return (
+    <MenuPrimitive.Sub>
+      <MenuPrimitive.SubTrigger
+        disabled={disabled}
+        className="flex cursor-default items-center gap-2 rounded px-2.5 py-2 outline-none data-[disabled]:opacity-40 data-[highlighted]:bg-surface-hover"
+      >
+        {label}
+        <span aria-hidden className="ml-auto">
+          ›
+        </span>
+      </MenuPrimitive.SubTrigger>
+      <MenuPrimitive.Portal container={container}>
+        <MenuPrimitive.SubContent
+          sideOffset={4}
+          collisionPadding={12}
+          className="tio-menu z-[80] min-w-44 rounded-lg border border-line bg-panel p-1.5 text-sm text-ink shadow-xl"
+        >
+          {children}
+        </MenuPrimitive.SubContent>
+      </MenuPrimitive.Portal>
+    </MenuPrimitive.Sub>
+  );
+}
 export function MenuSeparator() {
   return <MenuPrimitive.Separator className="my-1 h-px bg-line" />;
 }
@@ -126,6 +159,7 @@ export function Popover({
   restoreFocus,
   mobilePlacement,
   align = 'start',
+  tooltip,
 }: {
   align?: 'start' | 'center' | 'end';
   trigger: ReactNode;
@@ -136,7 +170,8 @@ export function Popover({
   label?: string;
   modal?: boolean;
   restoreFocus?: () => void;
-  mobilePlacement?: 'sheet' | 'center';
+  mobilePlacement?: 'sheet' | 'center' | 'anchor';
+  tooltip?: string;
 }) {
   const container = useContext(PortalContext);
   const mobile = useMobile();
@@ -146,7 +181,7 @@ export function Popover({
     setLocalOpen(next);
     onOpenChange?.(next);
   };
-  if (mobile)
+  if (mobile && mobilePlacement !== 'anchor')
     return (
       <>
         {cloneElement(trigger as ReactElement<{ onClick: () => void }>, {
@@ -161,7 +196,13 @@ export function Popover({
     );
   return (
     <PopoverPrimitive.Root modal={modal} open={active} onOpenChange={change}>
-      <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
+      {tooltip ? (
+        <Tooltip label={tooltip}>
+          <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
+        </Tooltip>
+      ) : (
+        <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
+      )}
       <PopoverPrimitive.Portal container={container}>
         <PopoverPrimitive.Content
           onCloseAutoFocus={
@@ -196,7 +237,7 @@ export function Tooltip({ children, label }: { children: ReactNode; label: strin
         <TooltipPrimitive.Portal container={container}>
           <TooltipPrimitive.Content
             sideOffset={5}
-            className="z-[100] rounded bg-ink px-2 py-1 text-xs text-panel"
+            className="z-[100] max-w-[min(24rem,calc(100vw-24px))] rounded bg-ink px-2 py-1 text-xs break-words whitespace-pre-line text-panel"
           >
             {label}
           </TooltipPrimitive.Content>

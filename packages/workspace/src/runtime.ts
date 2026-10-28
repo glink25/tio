@@ -2,6 +2,7 @@ import { prepareAsset } from '@tio/assets';
 import {
   createDomain,
   navigationObject,
+  mentionReferences,
   type ObjectPage,
   type RecordQuery,
   type SearchQuery,
@@ -23,6 +24,7 @@ import {
   type WorkspaceEvent,
   type WorkspaceRepository,
 } from '@tio/core';
+import { convertColumn } from '@tio/database/conversion';
 import { createStore } from 'zustand/vanilla';
 
 import { executeCommand, fieldOperations, type WorkspaceCommand } from './commands';
@@ -106,6 +108,7 @@ export class WorkspaceRuntime {
   private historyGroup?: HistoryEntry;
   private blobs = new Map<string, AssetData>();
   private running: Promise<void> | null = null;
+  private retrying?: Promise<void>;
   private unsubscribe?: () => void;
   private disposed = false;
   private readGeneration = 0;
@@ -367,6 +370,85 @@ export class WorkspaceRuntime {
     this.publish();
     return page;
   }
+  /** Read a complete database at one provider version, independently of the visible view. */
+  async databaseSnapshot(databaseId: string) {
+    await this.flush();
+    await this.ensure([databaseId]);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const records: TioObject[] = [];
+      let after: string | undefined, version: number | undefined;
+      let consistent = true;
+      do {
+        const page = await this.records({ databaseId, limit: 1000, after });
+        version ??= page.version;
+        if (page.version !== version) {
+          consistent = false;
+          break;
+        }
+        records.push(...page.entries.map((entry) => entry.object));
+        if (page.next && page.next === after) throw new HostError('invalid');
+        after = page.next;
+      } while (after);
+      await this.refresh();
+      if (!consistent || this.version !== version) continue;
+      const database = this.snapshot().find((o) => o.id === databaseId && !o.deleted);
+      if (!database || !this.can(database, 'read')) throw new HostError('unavailable');
+      if (records.some((o) => !this.can(o, 'read'))) throw new HostError('permission');
+      const objects = new Map(this.snapshot().map((o) => [o.id, o]));
+      for (const record of records) objects.set(record.id, record);
+      const mentions = new Set<string>();
+      for (const record of records)
+        for (const field of database.fields ?? []) {
+          const value = record.properties?.[field.id];
+          if (field.type === 'mention')
+            for (const ref of mentionReferences(value))
+              if (ref.workspaceId === database.workspaceId && !objects.has(ref.id))
+                mentions.add(ref.id);
+        }
+      const ids = [...mentions];
+      for (let offset = 0; offset < ids.length; offset += 1000) {
+        const metadata = await this.mentionMetadata(ids.slice(offset, offset + 1000));
+        if (metadata.version !== version) {
+          consistent = false;
+          break;
+        }
+        for (const entry of metadata.entries)
+          if (!metadata.denied?.includes(entry.object.id) && this.can(entry.object, 'read'))
+            objects.set(entry.object.id, entry.object);
+      }
+      if (!consistent || this.version !== version) continue;
+      return {
+        database,
+        records: structuredClone(records),
+        objects: structuredClone([...objects.values()]),
+        version,
+      };
+    }
+    throw new HostError('conflict');
+  }
+  async convertField(databaseId: string, target: Field) {
+    const { database, records, objects, version } = await this.databaseSnapshot(databaseId);
+    const source = database.fields?.find((f) => f.id === target.id);
+    if (!source) throw new HostError('unavailable');
+    const result = convertColumn(database, source, target, objects);
+    const guard = () => {
+      if (this.version !== version) throw new HostError('conflict');
+    };
+    await new Promise<void>((resolve, reject) => {
+      try {
+        guard();
+        this.dispatch(
+          { type: 'convertField', expected: [database, ...records], changes: result.changes },
+          true,
+          new Map(),
+          { guard, complete: resolve, reject },
+        );
+      } catch (error) {
+        reject(error);
+      }
+    });
+    return result.cleared;
+  }
   async loadDatabase(id: string) {
     await this.ensure([id]);
     if (this.repository.queryObjects) {
@@ -416,13 +498,14 @@ export class WorkspaceRuntime {
     const ids: string[] = [];
     if ('id' in intent) ids.push(intent.id);
     if (intent.type === 'move' && intent.parentId) ids.push(intent.parentId);
-    if (intent.type === 'create') {
-      if (intent.embed) ids.push(intent.embed.pageId);
+    if (intent.type === 'create' || intent.type === 'import') {
+      if ('embed' in intent && intent.embed) ids.push(intent.embed.pageId);
       for (const object of intent.objects)
         if (object.databaseId && !intent.objects.some((o) => o.id === object.databaseId))
           ids.push(object.databaseId);
     }
-    if (intent.type === 'checked') ids.push(...intent.expected.map((o) => o.id));
+    if (intent.type === 'checked' || intent.type === 'convertField')
+      ids.push(...intent.expected.map((o) => o.id));
     if (intent.type === 'restore') ids.push(...intent.after.map((o) => o.id));
     if (intent.type === 'move') {
       let parent = intent.parentId;
@@ -446,7 +529,9 @@ export class WorkspaceRuntime {
             (o) =>
               o.id === id &&
               this.pending.some(
-                (p) => p.intent.type === 'create' && p.intent.objects.some((o) => o.id === id),
+                (p) =>
+                  (p.intent.type === 'create' || p.intent.type === 'import') &&
+                  p.intent.objects.some((o) => o.id === id),
               ),
           ),
     );
@@ -486,6 +571,7 @@ export class WorkspaceRuntime {
   ) {
     if (this.disposed || (this.closing && !prepared)) throw new Error('Workspace is closed');
     if (!prepared && !this.store.getState().writable) throw new HostError('permission');
+    intent = { ...intent, timestamp: intent.timestamp ?? new Date().toISOString() };
     const dependencies = this.dependencies(intent);
     if (!prepared && (this.preparing || dependencies.some((id) => !this.baseline.has(id)))) {
       this.waiting.push({
@@ -501,14 +587,15 @@ export class WorkspaceRuntime {
       return;
     }
 
-    intent = { ...intent, timestamp: intent.timestamp ?? new Date().toISOString() };
     const before = this.store
       .getState()
       .objects.filter(
         (o) =>
           this.baseline.has(o.id) ||
           this.pending.some(
-            (p) => p.intent.type === 'create' && p.intent.objects.some((n) => n.id === o.id),
+            (p) =>
+              (p.intent.type === 'create' || p.intent.type === 'import') &&
+              p.intent.objects.some((n) => n.id === o.id),
           ),
       );
     if (historyOptions?.entry) {
@@ -639,7 +726,7 @@ export class WorkspaceRuntime {
             if (command.request?.sequence)
               await this.repository.acknowledgeCommits?.(this.clientId, command.request.sequence);
           } catch (error) {
-            if (command.intent.type === 'checked' && !command.request) {
+            if (['checked', 'convertField'].includes(command.intent.type) && !command.request) {
               this.pending.shift();
               if (command.historyEntry) this.removeHistoryStep(command.historyEntry);
               command.reject?.(error);
@@ -755,21 +842,34 @@ export class WorkspaceRuntime {
   async poll() {
     if (!this.pending.length && !this.running && !this.preparing) await this.refresh();
   }
-  async retry() {
-    this.store.setState({ error: null });
-    this.prepareWaiting();
-    for (const command of this.pending) {
-      if (!command.request) continue;
-      const receipt = await this.repository.getCommitResult(command.request.id);
-      if (receipt?.status === 'committed') {
-        command.confirmed = true;
-        this.accept(receipt.entries);
-      }
-    }
-    // Receipt lookup precedes snapshot publication, including recovery from lost ACKs.
-    await this.flush();
-    await this.refresh();
+  retry(): Promise<void> {
+    if (this.retrying) return this.retrying;
+    this.retrying = this.recover().finally(() => {
+      this.retrying = undefined;
+    });
+    return this.retrying;
   }
+  private async recover() {
+    try {
+      this.store.setState({ error: null });
+      this.prepareWaiting();
+      for (const command of this.pending) {
+        if (!command.request) continue;
+        const receipt = await this.repository.getCommitResult(command.request.id);
+        if (receipt?.status === 'committed') {
+          command.confirmed = true;
+          this.accept(receipt.entries);
+        }
+      }
+      // Receipt lookup precedes snapshot publication, including recovery from lost ACKs.
+      await this.flush();
+      await this.refresh();
+    } catch (error) {
+      this.fail(error);
+      throw error;
+    }
+  }
+
   /** Checked command acknowledged using the provider's declared persistence guarantee. */
   checked(expected: TioObject[], changes: TioObject[], guard: () => void): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -799,6 +899,9 @@ export class WorkspaceRuntime {
     assets: ReadonlyMap<string, AssetData> = new Map(),
   ) {
     this.dispatch({ type: 'create', objects: items, embed }, true, assets);
+  }
+  import(items: TioObject[], assets: ReadonlyMap<string, AssetData> = new Map()) {
+    this.dispatch({ type: 'import', objects: items }, true, assets);
   }
   append(id: string, block: Block) {
     this.dispatch({ type: 'append', id, block }, true);
@@ -979,6 +1082,8 @@ export type EditorSession = Pick<
   | 'loadTarget'
   | 'loadDatabase'
   | 'records'
+  | 'databaseSnapshot'
+  | 'convertField'
   | 'search'
   | 'exportObjects'
   | 'checked'

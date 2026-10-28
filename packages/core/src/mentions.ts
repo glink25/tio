@@ -19,6 +19,10 @@ export function isMentionReference(value: unknown): value is MentionReference {
 }
 export const mentionKey = (ref: MentionReference) =>
   JSON.stringify([ref.workspaceId, ref.kind, ref.id]);
+/** Read references from a scalar or array value; validation remains the field registry's job. */
+export function mentionReferences(value: unknown): MentionReference[] {
+  return (Array.isArray(value) ? value : [value]).filter(isMentionReference);
+}
 /** Traverse only content containers, never opaque properties or arbitrary extension payloads. */
 export function contentMentions(content: unknown): MentionReference[] {
   if (Array.isArray(content)) return content.flatMap(contentMentions);

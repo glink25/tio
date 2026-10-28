@@ -21,6 +21,7 @@ import {
   type ConnectionFactory,
 } from './connection-adapters';
 import { credentials, clearCredentials } from './github-auth';
+import { HostSaveRecovery } from './save-recovery';
 export class WorkspaceServices {
   constructor(private factory: ConnectionFactory = createConnectionBinding) {}
   private binding?: ConnectionBinding;
@@ -28,6 +29,18 @@ export class WorkspaceServices {
   private syncStarted = false;
   private unsubscribeAccess?: () => void;
   private authorization?: Promise<void>;
+  private recovery?: HostSaveRecovery;
+  statusError?: unknown;
+  reportStatusError(error: unknown) {
+    this.statusError = this.active?.runtime.state.getState().error === error ? undefined : error;
+    if (error instanceof ConnectionAccessError) this.setAccess(error.state);
+    this.status();
+  }
+  private saveFailed(error: unknown) {
+    if (error instanceof ConnectionAccessError) this.setAccess(error.state);
+    else if (error instanceof StorageError && error.code === 'permission' && this.binding)
+      this.setAccess(this.binding.adapter.classifyError(error));
+  }
   private accessStates = new Map<string, ConnectionAccessState>();
   private accessFor(workspaceId?: string) {
     const connection = this.accessStates.get('');
@@ -45,13 +58,18 @@ export class WorkspaceServices {
   get supportsSync() {
     return this.binding?.adapter.supportsSync ?? false;
   }
+  get hasReplicaSync() {
+    return !!this.runner;
+  }
   get canReauthorize() {
     return !!this.binding?.adapter.reauthorize;
   }
   private setAccess(state: ConnectionAccessState) {
     if (state.scope.connectionId !== this.connection?.id) return;
-    if (this.accessStates.get(state.scope.workspaceId ?? '')?.code === state.code) return;
+    const previous = this.accessStates.get(state.scope.workspaceId ?? '');
+    if (previous?.code === state.code && previous?.retryAt === state.retryAt) return;
     this.accessStates.set(state.scope.workspaceId ?? '', state);
+    if (previous?.code !== 'available' && state.code === 'available') this.statusError = undefined;
     if (
       this.active &&
       this.repositories.get(this.active.session.id)?.repository.storageCapabilities?.offline ===
@@ -112,13 +130,15 @@ export class WorkspaceServices {
     this.timer = setInterval(
       () => {
         if (this.polling || !this.active || document.visibilityState !== 'visible') return;
+        const active = this.active;
         this.polling = true;
-        void this.checkAccess(this.active.session.workspaceId)
+        void this.checkAccess(active.session.workspaceId)
           .then((allowed) => {
-            if (allowed) return this.active?.runtime.poll();
+            if (allowed && active === this.active) return active.runtime.poll();
           })
           .catch((error) => {
-            if (this.binding) this.setAccess(this.binding.adapter.classifyError(error));
+            if (active === this.active && this.binding)
+              this.setAccess(this.binding.adapter.classifyError(error));
           })
           .finally(() => {
             this.polling = false;
@@ -300,7 +320,11 @@ export class WorkspaceServices {
     }
     return entry;
   }
-  async create(objects: TioObject[], assets = new Map<string, AssetData>()) {
+  async create(
+    objects: TioObject[],
+    assets = new Map<string, AssetData>(),
+    preserveTimestamps = false,
+  ) {
     if (!this.connection) await this.connect('device');
     const workspace = objects.find((o) => o.type === 'workspace')!;
     await this.binding?.create?.(workspace.id);
@@ -326,7 +350,8 @@ export class WorkspaceServices {
       this.assertLive();
     }
     try {
-      runtime.create(objects, undefined, assets);
+      if (preserveTimestamps) runtime.import(objects, assets);
+      else runtime.create(objects, undefined, assets);
       await runtime.flush();
     } finally {
       runtime.dispose(true);
@@ -356,6 +381,11 @@ export class WorkspaceServices {
         throw error;
       }
       this.active = { session, runtime };
+      this.statusError = undefined;
+      this.recovery = new HostSaveRecovery(runtime, {
+        checkAccess: () => this.checkAccess(session.workspaceId),
+        onError: (error) => this.saveFailed(error),
+      });
       this.startPolling();
       return runtime;
     });
@@ -402,6 +432,7 @@ export class WorkspaceServices {
         const state = await binding.adapter.getAccessState(workspaceId);
         if (generation !== this.generation) return;
         this.setAccess(state);
+        this.statusError = undefined;
         await this.refreshRemote();
         if (generation !== this.generation) return;
         if (this.active?.runtime.state.getState().error) await this.active.runtime.retry();
@@ -432,16 +463,28 @@ export class WorkspaceServices {
     await this.runner?.restore(id);
   }
   private async closeActive() {
-    if (this.active) {
-      await this.active.runtime.close();
+    const active = this.active;
+    if (!active) return;
+    await this.recovery?.stop();
+    this.recovery = undefined;
+    try {
+      await active.runtime.close();
       this.active = undefined;
+    } catch (error) {
+      this.recovery = new HostSaveRecovery(active.runtime, {
+        checkAccess: () => this.checkAccess(active.session.workspaceId),
+        onError: (failure) => this.saveFailed(failure),
+      });
+      throw error;
     }
   }
+
   close() {
     return this.transition(() => this.closeActive());
   }
   private invalidateConnection() {
     this.generation++;
+    void this.recovery?.stop();
     clearInterval(this.timer);
     this.timer = undefined;
     this.unsubscribeAccess?.();
@@ -477,9 +520,13 @@ export class WorkspaceServices {
     this.status = () => {};
     this.binding?.dispose?.();
     clearCredentials();
-    this.active?.runtime.dispose(true);
+    const active = this.active;
+    const recovery = this.recovery;
+    this.recovery = undefined;
     this.active = undefined;
     this.abandoning = this.transition(async () => {
+      await recovery?.stop();
+      active?.runtime.dispose(true);
       this.active?.runtime.dispose(true);
       this.active = undefined;
       await Promise.all(

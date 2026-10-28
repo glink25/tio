@@ -1,6 +1,6 @@
 import {
   blockMentions,
-  isMentionReference,
+  mentionReferences,
   mentionKey,
   id,
   object,
@@ -13,13 +13,13 @@ import {
 } from '@tio/core';
 import type { EditorSession } from '@tio/workspace';
 
-import { SliceError, type WebSlicePermission } from './types';
+import { AppSliceError, type AppSlicePermission } from './types';
 
 export const flatten = (blocks: Block[]): Block[] =>
   blocks.flatMap((b) => [b, ...flatten(b.children)]);
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const fail = (code: string): never => {
-  throw new SliceError(code);
+  throw new AppSliceError(code);
 };
 const only = (input: Record<string, unknown>, keys: string[]) => {
   if (
@@ -35,13 +35,13 @@ export interface BrokerOptions {
   pageId: string;
   blockId: string;
   workspaceId: string;
-  permission: () => WebSlicePermission;
+  permission: () => AppSlicePermission;
   readOnly: () => boolean;
   context: () => Record<string, unknown>;
   resize: (height: number) => void;
 }
 /** No caller-supplied identity can expand this instance's page-derived authority. */
-export class SliceBroker {
+export class AppSliceBroker {
   private closed = false;
   private receipts = new Map<string, { input: string; result: Promise<unknown> }>();
   private tokens = new Map<string, { value: string; id: string }>();
@@ -86,7 +86,7 @@ export class SliceBroker {
       !page ||
       !this.options.runtime.can(page, 'read') ||
       !flatten(page.blocks ?? []).some(
-        (b) => b.id === this.options.blockId && b.type === 'webSlice',
+        (b) => b.id === this.options.blockId && b.type === 'appSlice',
       )
     )
       return fail('RESOURCE_REMOVED');
@@ -99,7 +99,7 @@ export class SliceBroker {
       const db = this.objects().find((o) => o.id === page.databaseId);
       for (const field of db ? (this.readable(db).fields ?? []) : []) {
         const value = this.readable(page).properties?.[field.id];
-        if (field.type === 'mention' && isMentionReference(value)) refs.push(value);
+        if (field.type === 'mention') refs.push(...mentionReferences(value));
       }
     }
     return refs.filter((ref) => ref.workspaceId === this.options.workspaceId);
@@ -259,8 +259,8 @@ export class SliceBroker {
         for (const field of db?.fields ?? []) {
           const value = next.properties?.[field.id],
             previous = old?.properties?.[field.id];
-          if (field.type === 'mention' && isMentionReference(value))
-            this.validateMentions([value], isMentionReference(previous) ? [previous] : []);
+          if (field.type === 'mention')
+            this.validateMentions(mentionReferences(value), mentionReferences(previous));
         }
         if (next.type === 'database' && old) {
           for (const field of next.fields ?? []) {
@@ -271,7 +271,7 @@ export class SliceBroker {
               page.databaseId === next.id
             ) {
               const value = page.properties?.[field.id];
-              if (isMentionReference(value)) this.validateMentions([value]);
+              this.validateMentions(mentionReferences(value));
             }
           }
         }
@@ -285,9 +285,9 @@ export class SliceBroker {
         recheck,
       );
     } catch (error) {
-      if (error instanceof SliceError) throw error;
+      if (error instanceof AppSliceError) throw error;
       const code = (error as { code?: string }).code;
-      throw new SliceError(
+      throw new AppSliceError(
         code === 'conflict'
           ? 'CONFLICT'
           : code === 'permission'
@@ -302,8 +302,8 @@ export class SliceBroker {
   private validateBlocks(before: Block[], after: Block[]) {
     const allowed = this.databaseIds();
     this.validateMentions(blockMentions(after), blockMentions(before));
-    const protectedBefore = flatten(before).filter((b) => b.type === 'webSlice');
-    const protectedAfter = flatten(after).filter((b) => b.type === 'webSlice');
+    const protectedBefore = flatten(before).filter((b) => b.type === 'appSlice');
+    const protectedAfter = flatten(after).filter((b) => b.type === 'appSlice');
     if (!same(protectedBefore, protectedAfter)) fail('PERMISSION_DENIED');
     for (const b of flatten(after)) {
       if (
@@ -316,7 +316,7 @@ export class SliceBroker {
   }
   invoke(method: string, input: unknown = {}, requestId = crypto.randomUUID()): Promise<unknown> {
     const encoded = JSON.stringify([method, input]);
-    if (encoded.length > 2_000_000) return Promise.reject(new SliceError('INVALID_INPUT'));
+    if (encoded.length > 2_000_000) return Promise.reject(new AppSliceError('INVALID_INPUT'));
     try {
       this.page();
       const p = input as Record<string, unknown>;
@@ -333,10 +333,10 @@ export class SliceBroker {
     if (previous)
       return previous.input === encoded
         ? previous.result
-        : Promise.reject(new SliceError('INVALID_INPUT'));
+        : Promise.reject(new AppSliceError('INVALID_INPUT'));
     if (this.receipts.size >= 10_000)
       return Promise.reject(
-        new SliceError('RATE_LIMITED', 'Restart this slice to begin a new request session'),
+        new AppSliceError('RATE_LIMITED', 'Restart this App Slice to begin a new request session'),
       );
     const result = this.tail.then(() => this.execute(method, input as Record<string, any>));
     this.tail = result.catch(() => undefined);
@@ -509,9 +509,9 @@ export class SliceBroker {
         if (['formula', 'rollup', 'createdTime', 'lastEditedTime'].includes(field.type))
           fail('INVALID_INPUT');
         validateValue(field, value);
-        if (field.type === 'mention' && isMentionReference(value)) {
+        if (field.type === 'mention') {
           const previous = old?.properties?.[key];
-          this.validateMentions([value], isMentionReference(previous) ? [previous] : []);
+          this.validateMentions(mentionReferences(value), mentionReferences(previous));
         }
       }
       const next = old

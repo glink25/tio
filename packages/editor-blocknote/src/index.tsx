@@ -16,6 +16,7 @@ import {
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/shadcn';
 
+import { paste, ClipboardMetadata, clipboardOriginals } from './clipboard';
 import { CodeBlock } from './code-block';
 import { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
@@ -55,22 +56,22 @@ const DatabaseBlock = createReactBlockSpec(
     },
   },
 )();
-const SliceContext = createContext<(block: Block) => React.ReactNode>(() => null);
-const WebSliceBlock = createReactBlockSpec(
+const AppSliceContext = createContext<(block: Block) => React.ReactNode>(() => null);
+const AppSliceBlock = createReactBlockSpec(
   {
-    type: 'webSlice',
+    type: 'appSlice',
     content: 'none',
     propSchema: {
-      title: { default: 'Web Slice' },
-      html: { default: '<h2>Web Slice</h2>' },
+      title: { default: 'App Slice' },
+      html: { default: '<h2>App Slice</h2>' },
       runtimeVersion: { default: 1 },
       height: { default: 320 },
       autoHeight: { default: true },
     },
   },
   {
-    render: function SliceRenderer({ block }) {
-      const render = useContext(SliceContext);
+    render: function AppSliceRenderer({ block }) {
+      const render = useContext(AppSliceContext);
       return (
         <div className="w-full min-w-0" contentEditable={false}>
           {render({ ...block, content: [], children: [] } as Block)}
@@ -114,7 +115,7 @@ export const defaultEditorSchema = BlockNoteSchema.create({
     ...defaultBlockSpecs,
     codeBlock: CodeBlock,
     databaseView: DatabaseBlock,
-    webSlice: WebSliceBlock,
+    appSlice: AppSliceBlock,
     unsupported: OpaqueBlock,
   },
 });
@@ -128,7 +129,7 @@ export interface EditorSchema {
 export const EditorSchemaContext = createContext<EditorSchema>({ schema: defaultEditorSchema });
 export interface EditorProps {
   placeholder?: string;
-  renderWebSlice?: (block: Block) => React.ReactNode;
+  renderAppSlice?: (block: Block) => React.ReactNode;
   onSubpage?: () => void;
   onDatabase?: () => void;
   blocks: Block[];
@@ -183,7 +184,7 @@ export function EditorContent({
   upload,
   resolve,
   renderDatabase,
-  renderWebSlice,
+  renderAppSlice,
 }: EditorProps) {
   const t = useT();
   const { schema, codecs, slashItems } = useContext(EditorSchemaContext);
@@ -220,11 +221,20 @@ export function EditorContent({
     schema,
     disableExtensions: history ? ['history'] : undefined,
     extensions: [
+      ClipboardMetadata({ originals: () => original.current }),
       SyntaxHighlightingExtension({
         createHighlighter: () =>
           import('./code-block/highlighter').then((m) => m.createHighlighter()),
       }),
     ],
+    pasteHandler: (context) => {
+      history?.breakGroup();
+      try {
+        return paste(context);
+      } finally {
+        history?.breakGroup();
+      }
+    },
     dictionary: {
       ...(i18n.language === 'zh' ? zh : en),
       placeholders: {
@@ -244,7 +254,11 @@ export function EditorContent({
       if (cancelled) return;
       const serialized = JSON.stringify(blocks);
       if (sent.current.delete(serialized)) return;
-      const current = fromEditor(editor.document, original.current, codecs);
+      const current = fromEditor(
+        editor.document,
+        clipboardOriginals(editor.prosemirrorState.doc, original.current),
+        codecs,
+      );
       original.current = blocks;
       if (
         JSON.stringify(comparableBlocks(current, schema)) !==
@@ -300,7 +314,7 @@ export function EditorContent({
               }
             }
           };
-          // Preserve unchanged React node views (notably running Slice channels)
+          // Preserve unchanged React node views (notably running App Slice channels)
           // while applying external edits and newly inserted database references.
           reconcile(current, blocks);
         } finally {
@@ -314,7 +328,7 @@ export function EditorContent({
   }, [blocks, editor, schema, codecs]);
   return (
     <EmbedContext.Provider value={renderDatabase}>
-      <SliceContext.Provider value={renderWebSlice ?? (() => null)}>
+      <AppSliceContext.Provider value={renderAppSlice ?? (() => null)}>
         <BlockNoteView
           shadCNComponents={shadCNComponents}
           editor={editor}
@@ -331,7 +345,11 @@ export function EditorContent({
           onChange={() => {
             if (applying.current) return;
             const previous = original.current;
-            const next = fromEditor(editor.document, previous, codecs);
+            const next = fromEditor(
+              editor.document,
+              clipboardOriginals(editor.prosemirrorState.doc, previous),
+              codecs,
+            );
             if (
               JSON.stringify(comparableBlocks(next, schema)) ===
               JSON.stringify(comparableBlocks(previous, schema))
@@ -380,16 +398,16 @@ export function EditorContent({
                         },
                       ]
                     : []),
-                  ...(renderWebSlice
+                  ...(renderAppSlice
                     ? [
                         {
-                          title: i18n.language === 'zh' ? '自定义网页' : 'Web Slice',
+                          title: 'App Slice',
                           group: t('workspace.name'),
-                          aliases: ['web', 'slice', 'html', '网页'],
+                          aliases: ['app', 'slice', 'html', '应用'],
                           icon: <Code size={18} />,
                           onItemClick: () => {
                             editor.insertBlocks(
-                              [{ type: 'webSlice' }],
+                              [{ type: 'appSlice' }],
                               editor.getTextCursorPosition().block,
                               'after',
                             );
@@ -480,7 +498,7 @@ export function EditorContent({
             </IconButton>
           </div>
         )}
-      </SliceContext.Provider>
+      </AppSliceContext.Provider>
     </EmbedContext.Provider>
   );
 }

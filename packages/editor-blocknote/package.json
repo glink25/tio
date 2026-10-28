@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.tsx"
+    ".": "./src/index.tsx",
+    "./import-markdown": "./src/import-markdown.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
@@ -16,6 +17,7 @@
     "@tio/core": "workspace:*",
     "@tio/i18n": "workspace:*",
     "@tio/ui": "workspace:*",
+    "@tiptap/core": "3.32.0",
     "@tiptap/pm": "3.32.0",
     "lucide-react": "1.61.0",
     "mermaid": "^12.2.0",

@@ -1,7 +1,8 @@
 /* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- The editor group handles Enter/Escape bubbling from its input controls. */
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- Rich searchable options render colored tags and record links. */
 import {
-  isMentionReference,
+  mentionReferences,
+  mentionKey,
   fieldColors,
   isDateValue,
   isDerivedField,
@@ -107,7 +108,13 @@ export function FieldValue(
   const { field, value, objects, resolve, onOpen } = props;
   const format = useDisplayValue();
   if (field.type === 'mention')
-    return isMentionReference(value) ? <MentionLabel reference={value} /> : null;
+    return (
+      <div className="flex flex-wrap gap-1">
+        {mentionReferences(value).map((ref) => (
+          <MentionLabel key={mentionKey(ref)} reference={ref} />
+        ))}
+      </div>
+    );
   if (field.type === 'files')
     return (
       <div className="w-full min-w-0 space-y-1">
@@ -559,6 +566,7 @@ export function FieldInput(props: FieldInputProps) {
   } else if (field.type === 'mention')
     control = (
       <MentionPicker
+        multiple={field.multiple !== false}
         label={field.name}
         inline={props.inlineReferencePicker}
         value={draft}

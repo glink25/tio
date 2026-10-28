@@ -1,9 +1,9 @@
-export { runnerDocument as createWebSliceRuntimeDocument } from './web-slice/runner';
+export { runnerDocument as createAppSliceRuntimeDocument } from './app-slice/runner';
 export type {
-  WebSliceOptions,
-  WebSlicePermission,
-  WebSlicePermissionStore,
-} from './web-slice/types';
+  AppSliceOptions,
+  AppSlicePermission,
+  AppSlicePermissionStore,
+} from './app-slice/types';
 import { HostError, type Domain, type AccessPolicy, type WorkspaceRepository } from '@tio/core';
 import { EditorSchemaContext, defaultEditorSchema, type EditorSchema } from '@tio/editor-blocknote';
 import { BridgeRepository, type HostContext, type Transport } from '@tio/host-protocol';
@@ -14,9 +14,9 @@ import { WorkspaceRuntime, type WorkspaceState } from '@tio/workspace';
 import { useMemo, useState, useEffect, useId, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 
+import type { AppSliceOptions } from './app-slice/types';
 import type { EditorSurfaceProps, EditorTarget } from './controller';
 import { EditorSurface as Surface } from './surface';
-import type { WebSliceOptions } from './web-slice/types';
 
 import './style.css';
 export type { EditorTarget, EditorSurfaceProps } from './controller';
@@ -89,7 +89,7 @@ function Ready({ children, onReady }: { children: ReactNode; onReady?: () => voi
 }
 export interface EditorOptions {
   mentions?: import('@tio/core').MentionService;
-  webSlice?: WebSliceOptions;
+  appSlice?: AppSliceOptions;
   domain?: Domain;
   views?: ViewExtensions;
   extensions?: EditorSchema;
@@ -137,8 +137,7 @@ export async function mountEditor(
       <Ready onReady={options.onReady}>
         <EditorSurface
           mentions={options.mentions}
-          webSlice={options.webSlice}
-          showSaveState
+          appSlice={options.appSlice}
           views={options.views}
           extensions={options.extensions}
           runtime={runtime}

@@ -7,10 +7,10 @@
 `mountEditor` 支持：
 
 - `domain`：领域定义。
-- `extensions.schema`：扩展 `defaultEditorSchema`，保留内置引用、Web Slice 和不透明块。
+- `extensions.schema`：扩展 `defaultEditorSchema`，保留内置引用、App Slice 和不透明块。
 - `extensions.codecs`：按块类型提供 `accepts/toEditor/fromEditor`；codec 负责其自定义行内及样式内容。
 - `extensions.slashItems(editor)`：实例级斜杠菜单扩展。
 - `views.fields[type]`：标签、输入组件和本地化展示。
 - `views.layouts[name]`：接收公共查询结果与编辑处理器的布局组件；未知布局明确显示不支持。
 
-当前包导出 TypeScript 源码供 monorepo 使用。独立编辑器浏览器构建不是已发布、带声明和版本兼容承诺的 npm SDK。接入见[编辑器文档](../../packages/web-editor/docs/integration.md)，具体能力见[Web Slice](../../packages/web-editor/docs/web-slice.md)及[代码块](../../packages/editor-blocknote/docs/code-blocks.md)。
+当前包导出 TypeScript 源码供 monorepo 使用。独立编辑器浏览器构建不是已发布、带声明和版本兼容承诺的 npm SDK。接入见[编辑器文档](../../packages/web-editor/docs/integration.md)，具体能力见[App Slice](../../packages/web-editor/docs/app-slice.md)及[代码块](../../packages/editor-blocknote/docs/code-blocks.md)。

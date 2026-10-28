@@ -1,0 +1,77 @@
+{
+  "name": "@glink25/tio-pages",
+  "version": "0.1.0",
+  "description": "Configurable static HTML publishing for Tio workspaces.",
+  "homepage": "https://github.com/glink25/tio/tree/main/packages/pages",
+  "bugs": {
+    "url": "https://github.com/glink25/tio/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/glink25/tio.git",
+    "directory": "packages/pages"
+  },
+  "bin": {
+    "tio-pages": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ssr": {
+      "types": "./dist/ssr.d.ts",
+      "import": "./dist/ssr.js"
+    },
+    "./page": {
+      "types": "./dist/page.d.ts",
+      "import": "./dist/page.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "import": "./dist/node.js"
+    },
+    "./code": {
+      "types": "./dist/code.d.ts",
+      "import": "./dist/code.js"
+    },
+    "./client": "./dist/client/code-client.js",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build:site": "node dist/cli.js build",
+    "build": "tsdown",
+    "prepack": "corepack pnpm build"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "fflate": "^0.8.2",
+    "github-slugger": "^2.0.0",
+    "mermaid": "^12.2.0",
+    "puppeteer": "^25.16.0",
+    "shiki": "^4.5.0"
+  },
+  "devDependencies": {
+    "@tio/core": "workspace:*",
+    "@tio/file-storage": "workspace:*",
+    "@tio/storage": "workspace:*",
+    "tsdown": "0.23.2",
+    "tsx": "^4.20.2"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  }
+}

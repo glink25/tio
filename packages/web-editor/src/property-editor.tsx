@@ -57,7 +57,7 @@ export function PropertyEditor({
   database: TioObject;
   field?: Field;
   objects: TioObject[];
-  onSave: (field: Field) => void;
+  onSave: (field: Field) => void | Promise<void>;
   close: () => void;
 }) {
   const t = useT();
@@ -74,6 +74,7 @@ export function PropertyEditor({
   );
   const history = useDraftHistory(draft, setDraft);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   const formulaRef = useRef<HTMLTextAreaElement>(null);
   const [previewId, setPreviewId] = useState('');
   const records = objects.filter(
@@ -131,9 +132,11 @@ export function PropertyEditor({
   return (
     <form
       className="space-y-4"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
         if (!draft.name.trim()) return;
+        if (saving) return;
+        setSaving(true);
         try {
           const next = { ...draft, name: draft.name.trim() };
           if (next.type === 'formula')
@@ -161,11 +164,13 @@ export function PropertyEditor({
           )
             throw new Error('Configure the rollup');
           validateFieldDefinition(next);
-          onSave(next);
+          await onSave(next);
           history.discard();
           close();
         } catch (e) {
           setError(String(e));
+        } finally {
+          setSaving(false);
         }
       }}
     >
@@ -183,21 +188,36 @@ export function PropertyEditor({
         {t('ui.type')}
         <select
           className="mt-1 w-full"
-          disabled={!!field}
-          aria-label={t('database.newFieldType')}
+          disabled={
+            saving ||
+            (!!field && (field.type === 'title' || !types.some((type) => type === field.type)))
+          }
+          aria-label={t(field ? 'database.fieldType' : 'database.newFieldType')}
           value={draft.type}
           onChange={(e) =>
             patch({
               type: e.target.value,
+              numberFormat: undefined,
+              currency: undefined,
+              targetDatabaseId: undefined,
+              multiple: undefined,
               options:
-                e.target.value === 'status'
-                  ? (['todo', 'doing', 'done'] as const).map((group, i) => ({
-                      id: id('option'),
-                      label: t(`database.${group}`),
-                      group,
-                      color: ['gray', 'blue', 'green'][i],
+                ['select', 'multiSelect', 'status'].includes(draft.type) &&
+                ['select', 'multiSelect', 'status'].includes(e.target.value)
+                  ? draft.options?.map((option) => ({
+                      ...option,
+                      ...(e.target.value === 'status'
+                        ? { group: option.group ?? ('todo' as const) }
+                        : {}),
                     }))
-                  : [],
+                  : e.target.value === 'status'
+                    ? (['todo', 'doing', 'done'] as const).map((group, i) => ({
+                        id: id('option'),
+                        label: t(`database.${group}`),
+                        group,
+                        color: ['gray', 'blue', 'green'][i],
+                      }))
+                    : [],
               rollup: undefined,
               formula: undefined,
             })
@@ -208,7 +228,7 @@ export function PropertyEditor({
               {definition.label}
             </option>
           ))}
-          {draft.type === 'title' && <option value="title">{t('ui.untitled')}</option>}
+          {draft.type === 'title' && <option value="title">{t('database.title')}</option>}
           {types.map((type) => (
             <option key={type} value={type}>
               {t(`database.${type}` as TranslationKey)}
@@ -334,15 +354,17 @@ export function PropertyEditor({
                 ))}
             </select>
           </label>
-          <label className="flex gap-2">
-            <input
-              type="checkbox"
-              checked={draft.multiple !== false}
-              onChange={(e) => patch({ multiple: e.target.checked })}
-            />
-            {t('database.multiple')}
-          </label>
         </>
+      )}
+      {['relation', 'mention'].includes(draft.type) && (
+        <label className="flex gap-2">
+          <input
+            type="checkbox"
+            checked={draft.multiple !== false}
+            onChange={(e) => patch({ multiple: e.target.checked })}
+          />
+          {t('database.multiple')}
+        </label>
       )}
       {draft.type === 'number' && (
         <div className="space-y-3">
@@ -538,7 +560,7 @@ export function PropertyEditor({
         <Button type="button" onClick={close}>
           {t('ui.cancel')}
         </Button>
-        <Button type="submit" variant="primary">
+        <Button type="submit" variant="primary" disabled={saving}>
           {t('ui.done')}
         </Button>
       </div>
