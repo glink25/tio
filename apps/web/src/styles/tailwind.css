@@ -372,17 +372,3 @@
     padding-right: max(24px, env(safe-area-inset-right, 0px));
   }
 }
-
-/* The host owns the page scroller; embedded editors never pin their host page. */
-@media (max-width: 767px) and (hover: none) and (pointer: coarse) {
-  .tio-workspace-content {
-    position: fixed;
-    top: var(--bn-vv-top, 0px);
-    left: var(--bn-vv-left, 0px);
-    width: var(--bn-vv-width, 100vw);
-    height: var(--bn-vv-height, 100dvh);
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    scroll-padding-block: 64px 80px;
-  }
-}

@@ -539,6 +539,8 @@
 }
 .tio-editor .tio-touch-toolbar .bn-toolbar {
   width: max-content;
+  max-width: none;
+  overflow: visible;
   flex-wrap: nowrap;
   gap: 0;
   padding: 0;
