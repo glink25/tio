@@ -3,6 +3,7 @@ import {
   type Domain,
   assertJson,
   HostError,
+  validMutationSource,
   type CommitRequest,
   type WorkspaceSnapshot,
   type WorkspaceEntry,
@@ -29,6 +30,8 @@ export function applyCommit(
     !Array.isArray(request.assetIds) ||
     !request.assetIds.every((id) => typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id))
   )
+    throw new HostError('invalid');
+  if (request.source !== undefined && !validMutationSource(request.source))
     throw new HostError('invalid');
   if (request.recovery) assertJson(request.recovery);
   const originals = new Map(snapshot.entries.map((e) => [e.object.id, e]));

@@ -1,4 +1,6 @@
 import { FolderConnectionAdapter } from '@tio/adapter-local-folder';
+import { AutomationRunner } from '@tio/automation';
+import type { AutomationProvider } from '@tio/core';
 import {
   connectionError,
   type Connection,
@@ -13,10 +15,12 @@ import { FileWorkspaceContent, FileRepository, type FileJournalState } from '@ti
 import { t } from '@tio/i18n';
 import { LocalStore, RecoveryJournal } from '@tio/local-store';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
+import type { WorkspaceRuntime } from '@tio/workspace';
 
 import { githubBinding } from './github-binding';
 export interface ConnectionBinding {
   dispose?(): void;
+  automation?(runtime: WorkspaceRuntime, workspaceId: string): AutomationProvider;
   identity: ConnectionIdentity;
   adapter: ConnectionAdapter;
   repository(workspaceId: string, instanceId: string): WorkspaceRepository & { close(): void };
@@ -67,6 +71,7 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
         subscribe: () => () => {},
         classifyError: (error) => connectionError(error, connection.id),
       },
+      automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
       repository: (_workspaceId, instanceId) => searchable(new LocalStore(instanceId)),
       discover: async () => [],
       content: () => {
@@ -85,6 +90,7 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
       },
     },
     adapter,
+    automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
     repository(workspaceId, instanceId) {
       if (!provider) throw new Error('Folder unavailable');
       const journal = new RecoveryJournal<FileJournalState>(instanceId);

@@ -22,6 +22,7 @@ import {
 import { ScanningQueries } from '@tio/database/repository';
 /** Reference host implementation. Only this host owns durable state in embedding tests. */
 export class MemoryRepository implements WorkspaceRepository {
+  automation?: import('@tio/core').AutomationProvider;
   readonly storageCapabilities: RepositoryCapabilities = {
     persistence: 'atomic',
     offline: true,

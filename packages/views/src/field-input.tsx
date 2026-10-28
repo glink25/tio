@@ -12,7 +12,7 @@ import {
 import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
 import { useT, type TranslationKey } from '@tio/i18n';
-import { MentionLabel, MentionPicker, Button, useDraftHistory } from '@tio/ui';
+import { MentionLabel, MentionPicker, Button, useDraftHistory, Popover } from '@tio/ui';
 import { useState, useEffect, useRef } from 'react';
 
 import { useDisplayValue } from './display-value';
@@ -378,6 +378,7 @@ export function FieldInput(props: FieldInputProps) {
       setDraft(value ?? null);
     previousValue.current = value;
   }, [value, draft]);
+  const [optionsOpen, setOptionsOpen] = useState(false);
   const [search, setSearch] = useState(''),
     [error, setError] = useState('');
   const [uploading, setUploading] = useState(false),
@@ -387,7 +388,16 @@ export function FieldInput(props: FieldInputProps) {
     setError('');
   });
   const change = (next: unknown) => {
-    draftHistory.change(next);
+    if (props.commitMode === 'form') {
+      const submitted =
+        field.type === 'number' &&
+        typeof next === 'string' &&
+        /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(next)
+          ? Number(next)
+          : next;
+      setDraft(submitted);
+      onChange(submitted);
+    } else draftHistory.change(next);
     setError('');
   };
   const commit = () => {
@@ -422,7 +432,8 @@ export function FieldInput(props: FieldInputProps) {
         setError(String(e));
       }
     }
-    draftHistory.update((previous) => [...(Array.isArray(previous) ? previous : []), ...refs]);
+    if (props.commitMode === 'form') change([...(Array.isArray(draft) ? draft : []), ...refs]);
+    else draftHistory.update((previous) => [...(Array.isArray(previous) ? previous : []), ...refs]);
     setFailed(failures);
     setUploading(false);
   };
@@ -436,8 +447,11 @@ export function FieldInput(props: FieldInputProps) {
         value={draft}
         label={field.name}
         onChange={(value) => {
-          setDraft(value);
-          setError('');
+          if (props.commitMode === 'form') change(value);
+          else {
+            setDraft(value);
+            setError('');
+          }
         }}
       />
     );
@@ -543,7 +557,8 @@ export function FieldInput(props: FieldInputProps) {
                 aria-label={o.label}
                 aria-selected={selected.includes(o.id)}
                 className="flex w-full items-center justify-between gap-2 rounded p-2 text-left hover:bg-surface-hover aria-selected:bg-surface"
-                onClick={() =>
+                onClick={() => {
+                  if (props.commitMode === 'form' && !multiple) setOptionsOpen(false);
                   change(
                     multiple
                       ? selected.includes(o.id)
@@ -552,8 +567,8 @@ export function FieldInput(props: FieldInputProps) {
                       : selected.includes(o.id)
                         ? null
                         : o.id,
-                  )
-                }
+                  );
+                }}
               >
                 <OptionTag label={o.label} color={o.color} />
                 <span aria-hidden>{selected.includes(o.id) ? '✓' : ''}</span>
@@ -563,6 +578,31 @@ export function FieldInput(props: FieldInputProps) {
         </div>
       </div>
     );
+    if (props.commitMode === 'form') {
+      control = (
+        <Popover
+          label={field.name}
+          open={optionsOpen}
+          onOpenChange={setOptionsOpen}
+          mobilePlacement="anchor"
+          trigger={
+            <Button
+              type="button"
+              aria-label={field.name}
+              className="min-h-8 w-full justify-start px-2 py-1.5"
+            >
+              {selected.length ? (
+                <FieldValue field={field} value={draft} objects={objects} />
+              ) : (
+                t('database.chooseReference')
+              )}
+            </Button>
+          }
+        >
+          {control}
+        </Popover>
+      );
+    }
   } else if (field.type === 'mention')
     control = (
       <MentionPicker
@@ -623,6 +663,7 @@ export function FieldInput(props: FieldInputProps) {
       aria-label={`${field.name} editor`}
       className="tio-field-input w-full min-w-0 space-y-2"
       onKeyDown={(e) => {
+        if (props.commitMode === 'form') return;
         if (e.key === 'Escape' && cancel) {
           e.preventDefault();
           e.stopPropagation();
@@ -647,7 +688,7 @@ export function FieldInput(props: FieldInputProps) {
           {t('database.invalidValue', { message: error })}
         </p>
       )}
-      {(dirty || onCancel) && (
+      {props.commitMode !== 'form' && (dirty || onCancel) && (
         <div className="flex justify-end gap-2 border-t border-line pt-2">
           {cancel && (
             <Button

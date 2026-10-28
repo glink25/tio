@@ -1,5 +1,9 @@
 import {
   HostError,
+  validAutomationState,
+  type AutomationProvider,
+  type AutomationRun,
+  type MutationSource,
   type WorkspaceEvent,
   type AssetData,
   type CommitRequest,
@@ -47,7 +51,7 @@ export interface Transport {
 export interface Message extends HostContext {
   protocol: number;
   id: string;
-  kind: 'request' | 'response' | 'changed';
+  kind: 'request' | 'response' | 'changed' | 'extensionChanged';
   method?: string;
   payload?: any;
   error?: { code: string; message: string };
@@ -67,6 +71,9 @@ export class BridgeRepository implements WorkspaceRepository {
   private ready = false;
   capabilities: Capability[] = [];
   storageCapabilities?: RepositoryCapabilities;
+  automation?: AutomationProvider;
+  private automationRuns: AutomationRun[] = [];
+  private automationListeners = new Set<() => void>();
   constructor(
     private transport: Transport,
     readonly context: HostContext,
@@ -80,6 +87,19 @@ export class BridgeRepository implements WorkspaceRepository {
         message.protocol !== PROTOCOL_VERSION
       )
         return;
+      if (message.kind === 'extensionChanged') {
+        const payload = message.payload;
+        if (
+          this.automation &&
+          payload?.name === 'tio.automation' &&
+          payload.version === 1 &&
+          validAutomationState(payload.state)
+        ) {
+          this.automationRuns = structuredClone(payload.state.runs);
+          this.automationListeners.forEach((listener) => listener());
+        }
+        return;
+      }
       if (message.kind === 'changed') {
         try {
           const event = parseEvent(message.payload);
@@ -113,6 +133,24 @@ export class BridgeRepository implements WorkspaceRepository {
     this.capabilities = response.capabilities;
     this.storageCapabilities = response.storageCapabilities;
     this.ready = true;
+    if (this.capabilities.some((c) => c.name === 'tio.automation' && c.version === 1)) {
+      const state = await this.invoke('tio.automation', 1, { operation: 'state' });
+      if (!validAutomationState(state)) throw new HostError('invalid');
+      this.automationRuns = structuredClone(state.runs);
+      this.automation = {
+        capabilities: structuredClone(state.capabilities),
+        getRuns: () => this.automationRuns,
+        subscribeRuns: (listener) => {
+          this.automationListeners.add(listener);
+          return () => {
+            this.automationListeners.delete(listener);
+          };
+        },
+        dispose: () => {
+          this.automationListeners.clear();
+        },
+      };
+    }
   }
   private request(method: string, payload?: unknown): Promise<any> {
     if (this.closed) return Promise.reject(new HostError('closed'));
@@ -279,6 +317,7 @@ export class BridgeRepository implements WorkspaceRepository {
     this.closed = true;
     this.unsubscribe();
     this.listeners.clear();
+    this.automation?.dispose();
     for (const request of this.pending.values()) {
       clearTimeout(request.timer);
       request.reject(new HostError('closed'));
@@ -291,7 +330,28 @@ export function serveHost(
   context: HostContext,
   repository: WorkspaceRepository,
   extensions: Extension[] = [],
+  trustedSource: MutationSource = { kind: 'editor' },
 ) {
+  if (repository.automation)
+    extensions = [
+      ...extensions,
+      {
+        capability: { name: 'tio.automation', version: 1 },
+        invoke: async (input) => {
+          if (
+            !input ||
+            typeof input !== 'object' ||
+            !('operation' in input) ||
+            input.operation !== 'state'
+          )
+            throw new HostError('unsupported');
+          return {
+            capabilities: repository.automation!.capabilities,
+            runs: repository.automation!.getRuns(),
+          };
+        },
+      },
+    ];
   let ready = false;
   let disposed = false;
   const reply = (request: Message, payload?: unknown, error?: Message['error']) => {
@@ -359,7 +419,11 @@ export function serveHost(
             case 'commit':
               if (p.changes.some((object: any) => object.workspaceId !== context.workspaceId))
                 throw new HostError('permission', 'Workspace mismatch');
-              result = await repository.commit({ ...p, origin: 'editor:' + context.sessionId });
+              result = await repository.commit({
+                ...p,
+                source: trustedSource,
+                origin: 'editor:' + context.sessionId,
+              });
               break;
             case 'acknowledgeCommits':
               if (typeof p?.clientId !== 'string' || !Number.isSafeInteger(p.sequence))
@@ -433,7 +497,25 @@ export function serveHost(
         id: crypto.randomUUID(),
       });
   });
+  const stopAutomation = repository.automation?.subscribeRuns(() => {
+    if (ready && !disposed)
+      transport.send({
+        ...context,
+        protocol: PROTOCOL_VERSION,
+        id: crypto.randomUUID(),
+        kind: 'extensionChanged',
+        payload: {
+          name: 'tio.automation',
+          version: 1,
+          state: {
+            capabilities: repository.automation!.capabilities,
+            runs: repository.automation!.getRuns(),
+          },
+        },
+      });
+  });
   return () => {
+    stopAutomation?.();
     disposed = true;
     unsubscribe();
     stopChanges();

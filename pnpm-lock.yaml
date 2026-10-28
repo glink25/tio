@@ -210,6 +210,9 @@ importers:
       '@tio/assets':
         specifier: workspace:*
         version: link:../../packages/assets
+      '@tio/automation':
+        specifier: workspace:*
+        version: link:../../packages/automation
       '@tio/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -322,6 +325,18 @@ importers:
       '@tio/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/automation:
+    dependencies:
+      '@tio/core':
+        specifier: workspace:*
+        version: link:../core
+      '@tio/database':
+        specifier: workspace:*
+        version: link:../database
+      '@tio/workspace':
+        specifier: workspace:*
+        version: link:../workspace
 
   packages/core: {}
 
@@ -727,6 +742,9 @@ importers:
       '@playwright/test':
         specifier: latest
         version: 1.64.1
+      '@tio/automation':
+        specifier: workspace:*
+        version: link:../packages/automation
       '@tio/core':
         specifier: workspace:*
         version: link:../packages/core

@@ -217,7 +217,10 @@ export function inverse(
 }
 
 /** Serializable editing intents; closures are implementation details of the executor only. */
-export type WorkspaceCommand = { timestamp?: string } & (
+export type WorkspaceCommand = {
+  timestamp?: string;
+  source?: import('@tio/core').MutationSource;
+} & (
   | { type: 'checked'; expected: TioObject[]; changes: TioObject[] }
   | { type: 'convertField'; expected: TioObject[]; changes: TioObject[] }
   | { type: 'undelete'; id: string }

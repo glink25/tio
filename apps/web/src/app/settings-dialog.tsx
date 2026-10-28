@@ -1,6 +1,7 @@
 import { t } from '@tio/i18n';
-import { Button, Modal, ThemeSwitcher, LanguageSwitcher, cn } from '@tio/ui';
-import { useState } from 'react';
+import { Button, Modal, ThemeSwitcher, LanguageSwitcher, cn, useOverlayBack } from '@tio/ui';
+import { lazy, Suspense, useState, useRef, useEffect } from 'react';
+const AutomationDialog = lazy(() => import('../features/automation/panel'));
 
 import { Identity } from '../components/identity';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
@@ -8,11 +9,52 @@ import { usePresentation, setPresentation } from '../services/browser-presentati
 const sections = ['general', 'storage', 'transfer'] as const;
 export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
   const [section, setSection] = useState<(typeof sections)[number] | null>(null);
+  const [automationOpen, setAutomationOpen] = useState(false);
+  const automationEntry = useRef<HTMLButtonElement>(null);
+  const openedAutomation = useRef(false);
+  const automationClose = useRef<() => void>(() => setAutomationOpen(false));
+  useOverlayBack(() => {
+    if (automationOpen) automationClose.current();
+    else m.setSettingsOpen(false);
+  });
+  useEffect(() => {
+    if (!automationOpen && openedAutomation.current)
+      requestAnimationFrame(() => automationEntry.current?.focus());
+  }, [automationOpen]);
   const presentation = usePresentation();
   const selected = section ?? 'general';
   const label = (key: typeof selected) => t(`ui.${key}`);
+  if (automationOpen && m.runtime && m.session)
+    return (
+      <Suspense
+        fallback={
+          <Modal
+            layout="workspace"
+            trackHistory={false}
+            title={t('automation.center')}
+            close={() => setAutomationOpen(false)}
+          >
+            <p className="p-8">{t('automation.loading')}</p>
+          </Modal>
+        }
+      >
+        <AutomationDialog
+          runtime={m.runtime}
+          workspaceId={m.session.workspaceId}
+          close={() => setAutomationOpen(false)}
+          registerClose={(close) => {
+            automationClose.current = close;
+          }}
+        />
+      </Suspense>
+    );
   return (
-    <Modal wide title={t('ui.settings')} close={() => m.setSettingsOpen(false)}>
+    <Modal
+      wide
+      trackHistory={false}
+      title={t('ui.settings')}
+      close={() => m.setSettingsOpen(false)}
+    >
       <div className="flex min-h-[55dvh] flex-col gap-6 md:flex-row">
         <nav className={cn('shrink-0 space-y-1 md:w-48', section && 'hidden md:block')}>
           {sections.map((key) => (
@@ -24,6 +66,18 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
               {label(key)}
             </Button>
           ))}
+          <Button
+            ref={automationEntry}
+            className="w-full justify-start"
+            disabled={!m.runtime || !m.session}
+            onClick={() => {
+              openedAutomation.current = true;
+              automationClose.current = () => setAutomationOpen(false);
+              setAutomationOpen(true);
+            }}
+          >
+            {t('ui.automation')}
+          </Button>
           <Button
             className="w-full justify-start"
             onClick={() => {

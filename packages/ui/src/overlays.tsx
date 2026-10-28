@@ -205,6 +205,11 @@ export function Popover({
       )}
       <PopoverPrimitive.Portal container={container}>
         <PopoverPrimitive.Content
+          onEscapeKeyDown={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            change(false);
+          }}
           onCloseAutoFocus={
             restoreFocus
               ? (event) => {

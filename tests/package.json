@@ -12,6 +12,7 @@
   "devDependencies": {
     "@glink25/tio-pages": "workspace:*",
     "@playwright/test": "latest",
+    "@tio/automation": "workspace:*",
     "@tio/core": "workspace:*",
     "@tio/database": "workspace:*",
     "@tio/editor-blocknote": "workspace:*",

@@ -1,3 +1,4 @@
+import type { AutomationProvider, MutationSource } from './automation';
 import type { TioObject } from './index';
 export interface WorkspaceEvent {
   version: number;
@@ -26,6 +27,7 @@ export interface CommitRequest {
   clientId?: string;
   sequence?: number;
   origin?: string;
+  source?: MutationSource;
   recovery?: unknown[];
   expectedVersion: number;
   changes: TioObject[];
@@ -67,6 +69,7 @@ export interface ObjectPage extends WorkspaceSnapshot {
   next?: string;
 }
 export interface WorkspaceRepository extends AssetStore {
+  automation?: AutomationProvider;
   queryObjects?(query: ObjectQuery): Promise<ObjectPage>;
   /** Explicit full traversal, reserved for export and providers which scan locally. */
   readSnapshot(): Promise<WorkspaceSnapshot>;

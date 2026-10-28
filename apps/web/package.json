@@ -13,6 +13,7 @@
     "@tio/adapter-github": "workspace:*",
     "@tio/adapter-local-folder": "workspace:*",
     "@tio/assets": "workspace:*",
+    "@tio/automation": "workspace:*",
     "@tio/core": "workspace:*",
     "@tio/database": "workspace:*",
     "@tio/editor-blocknote": "workspace:*",

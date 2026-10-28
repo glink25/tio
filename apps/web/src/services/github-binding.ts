@@ -1,4 +1,5 @@
 import { GitHubAdapter } from '@tio/adapter-github';
+import { AutomationRunner } from '@tio/automation';
 import type { Connection, TioObject, SearchQuery, PageQuery } from '@tio/core';
 import { WorkerSearch } from '@tio/database/search-browser';
 import { FileWorkspaceContent } from '@tio/file-storage';
@@ -117,6 +118,7 @@ export function githubBinding(connection: Connection): ConnectionBinding {
       details: [],
     },
     adapter,
+    automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
     repository: (workspaceId, instanceId) => {
       const store = new Replica(instanceId, workspaceId);
       replicas.set(workspaceId, store);

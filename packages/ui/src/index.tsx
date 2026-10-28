@@ -13,6 +13,7 @@ import {
   forwardRef,
   useEffect,
   useState,
+  useRef,
   type ButtonHTMLAttributes,
   type ReactNode,
 } from 'react';
@@ -65,7 +66,15 @@ export function Modal({
   wide = false,
   sheet = false,
   mobilePlacement = 'sheet',
+  layout = 'default',
+  trackHistory = true,
+  header,
+  footer,
 }: {
+  layout?: 'default' | 'workspace';
+  trackHistory?: boolean;
+  header?: ReactNode;
+  footer?: ReactNode;
   wide?: boolean;
   sheet?: boolean;
   mobilePlacement?: 'sheet' | 'center';
@@ -75,7 +84,7 @@ export function Modal({
   children: ReactNode;
 }) {
   const t = useT();
-  useOverlayBack(close);
+  useOverlayBack(close, trackHistory);
   const position = useMobileDialogPosition(mobilePlacement === 'center');
   return (
     <Dialog.Root
@@ -87,20 +96,46 @@ export function Modal({
       <Dialog.Portal container={useContext(PortalContext)}>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
         <Dialog.Content
+          onEscapeKeyDown={(event) => {
+            // Floating controls are portalled; their Escape must not dismiss the containing dialog.
+            const floating = [
+              ...document.querySelectorAll(
+                '.tio-popover[data-state="open"], .tio-select[data-state="open"], .tio-menu[data-state="open"]',
+              ),
+            ];
+            if (floating.some((element) => !element.closest('[aria-hidden="true"]')))
+              event.preventDefault();
+          }}
           style={position}
           aria-describedby={undefined}
           className={cn(
             'tio-dialog fixed z-50 overflow-y-auto border border-line bg-panel p-5 text-ink shadow-xl outline-none',
-            sheet
-              ? 'inset-y-0 left-0 w-[min(320px,90vw)]'
-              : wide
-                ? 'inset-0 md:inset-auto md:top-[6dvh] md:left-1/2 md:max-h-[88dvh] md:w-[min(1100px,92vw)] md:-translate-x-1/2 md:rounded-xl'
-                : 'bottom-0 left-0 max-h-[90dvh] w-full rounded-t-xl md:top-[12dvh] md:bottom-auto md:left-1/2 md:max-h-[76dvh] md:w-[min(550px,calc(100%-24px))] md:-translate-x-1/2 md:rounded-xl',
+            layout === 'workspace'
+              ? 'inset-0 flex h-dvh flex-col overflow-hidden p-0 md:inset-auto md:top-[3dvh] md:left-1/2 md:h-[94dvh] md:w-[min(1600px,96vw)] md:-translate-x-1/2 md:rounded-xl'
+              : sheet
+                ? 'inset-y-0 left-0 w-[min(320px,90vw)]'
+                : wide
+                  ? 'inset-0 md:inset-auto md:top-[6dvh] md:left-1/2 md:max-h-[88dvh] md:w-[min(1100px,92vw)] md:-translate-x-1/2 md:rounded-xl'
+                  : 'bottom-0 left-0 max-h-[90dvh] w-full rounded-t-xl md:top-[12dvh] md:bottom-auto md:left-1/2 md:max-h-[76dvh] md:w-[min(550px,calc(100%-24px))] md:-translate-x-1/2 md:rounded-xl',
             mobilePlacement === 'center' && 'max-md:rounded-xl',
           )}
         >
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+          <div
+            className={cn(
+              'flex items-center justify-between gap-4',
+              layout === 'workspace'
+                ? 'shrink-0 items-start border-b border-line px-4 py-3 md:items-center md:px-6'
+                : 'mb-5',
+            )}
+          >
+            {header ? (
+              <>
+                <Dialog.Title className="sr-only">{title}</Dialog.Title>
+                {header}
+              </>
+            ) : (
+              <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+            )}
             <Dialog.Close asChild>
               <IconButton label={t('common.close')} className="p-1">
                 <X size={20} />
@@ -112,7 +147,14 @@ export function Modal({
               {description}
             </Dialog.Description>
           )}
-          {children}
+          {layout === 'workspace' ? (
+            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          ) : (
+            children
+          )}
+          {footer && (
+            <div className="shrink-0 border-t border-line bg-panel px-4 py-3 md:px-6">{footer}</div>
+          )}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -280,11 +322,14 @@ function dismissOverlayHistory() {
   const index = overlays.findIndex((entry) => entry.key === history.state?.tioOverlay);
   for (const entry of overlays.slice(index + 1).reverse()) entry.close();
 }
-export function useOverlayBack(close: () => void) {
+export function useOverlayBack(close: () => void, enabled = true) {
+  const closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
+    if (!enabled) return;
     const key = crypto.randomUUID();
     if (!overlays.length) window.addEventListener('popstate', dismissOverlayHistory);
-    overlays.push({ key, close });
+    overlays.push({ key, close: () => closeRef.current() });
     history.pushState({ ...history.state, tioOverlay: key }, '');
     return () => {
       const index = overlays.findIndex((entry) => entry.key === key);
@@ -292,9 +337,7 @@ export function useOverlayBack(close: () => void) {
       if (!overlays.length) window.removeEventListener('popstate', dismissOverlayHistory);
       if (history.state?.tioOverlay === key) history.back();
     };
-    // Overlay lifetime is independent of callback identity.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [enabled]);
 }
 
 export { ReferencePicker, type ReferenceOption } from './reference-picker';

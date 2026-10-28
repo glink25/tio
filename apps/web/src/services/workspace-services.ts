@@ -380,6 +380,8 @@ export class WorkspaceServices {
         runtime.dispose();
         throw error;
       }
+      runtime.automation =
+        entry.repository.automation ?? this.binding?.automation?.(runtime, session.workspaceId);
       this.active = { session, runtime };
       this.statusError = undefined;
       this.recovery = new HostSaveRecovery(runtime, {

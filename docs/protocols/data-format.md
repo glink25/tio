@@ -9,6 +9,7 @@
 | database     | name、parentId、order、fields、可选 icon/cover               |
 | record       | databaseId、按字段 ID 保存的 properties、blocks              |
 | databaseView | databaseId、layout、visibleFieldIds、filters、sorts、groupBy |
+| automation   | name、enabled、trigger、可选 condition、顺序 actions         |
 | asset        | filename、mime、byteSize、assetPath                          |
 
 页面和数据库的 `icon` 可以是 Emoji 字符串、`{type: 'builtin', name}` 内置图标，或 `{type: 'image', url}` 图片；空字符串表示移除。`cover` 为 `{type: 'preset', id}` 预设，或 `{type: 'image', url, positionY, credit?}` 图片，`null` 表示移除。预设与内置图标使用固定目录 ID；`positionY` 为 0–1 的垂直裁切位置，居中为 0.5。可选署名为 `{name, url}`，供精选 Unsplash 图片保留作者信息。
@@ -64,3 +65,7 @@ JSON ZIP 是可恢复备份。当前 Web 导入新建空间 ID，重写对象的
 ### 页面 App Mode
 
 `page.appMode?: boolean` 为文档展示配置，缺省关闭，schemaVersion 保持 1。配置随 JSON 备份和空间同步传播，通过统一命令修改并支持撤销；不推进内容修改时间。开启后展示正文按深度优先顺序的第一个 `appSlice`，包括嵌套块，不沿引用查找。无 App Slice 时保留配置并显示空状态，允许有编辑权限者关闭。
+
+## 自动化规则
+
+`automation` 是独立的 v1 内建对象，支持统一命令、系统时间、软删除、同步与 JSON 备份。规则引用限定当前空间，字段与动作使用稳定 ID；运行记录与链路预算属于 provider 运行状态，不写入业务 JSON。配置与执行语义见[自动化](../architecture/automation.md)。

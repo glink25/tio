@@ -6,6 +6,8 @@ import {
 } from './media';
 export * from './media';
 export * from './app-mode';
+export * from './automation';
+import { validateAutomation } from './automation';
 export * from './diagnostics';
 import { validateFieldDefinition } from './fields';
 import { assertJson } from './json';
@@ -124,6 +126,7 @@ export const knownTypes = new Set([
   'record',
   'databaseView',
   'asset',
+  'automation',
 ]);
 export function object(
   type: string,
@@ -170,6 +173,7 @@ export function validate(input: unknown): TioObject {
 }
 export function validateBuiltin(object: TioObject): TioObject {
   validateTimestamps(object);
+  if (object.type === 'automation') validateAutomation(object);
   const input = object as unknown as Record<string, unknown> & { type: string };
   if (input.deleted !== undefined && typeof input.deleted !== 'boolean')
     throw new Error('非法删除状态');

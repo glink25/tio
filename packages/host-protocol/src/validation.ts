@@ -15,7 +15,7 @@ export function envelope(value: unknown): boolean {
     typeof value.id === 'string' &&
     typeof value.sessionId === 'string' &&
     typeof value.workspaceId === 'string' &&
-    ['request', 'response', 'changed'].includes(value.kind)
+    ['request', 'response', 'changed', 'extensionChanged'].includes(value.kind)
   );
 }
 export function snapshot(value: unknown): WorkspaceSnapshot {

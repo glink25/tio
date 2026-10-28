@@ -1,3 +1,4 @@
+export { createMentionService } from './mentions';
 export { runnerDocument as createAppSliceRuntimeDocument } from './app-slice/runner';
 export type {
   AppSliceOptions,

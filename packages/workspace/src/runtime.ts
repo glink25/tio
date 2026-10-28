@@ -11,12 +11,16 @@ import {
   fullAccess,
   assertAccess,
   resourceOf,
+  readableObject,
   type AccessPolicy,
   type AccessOperation,
   type Lifecycle,
   HostError,
   type AssetData,
   type CommitRequest,
+  type CommittedMutation,
+  type MutationSource,
+  type AutomationProvider,
   type Block,
   type Field,
   type TioObject,
@@ -65,6 +69,7 @@ interface PendingCommand {
   assets: ReadonlyMap<string, AssetData>;
   request?: CommitRequest;
   confirmed?: boolean;
+  before?: TioObject[];
   historyEntry?: HistoryStep;
   guard?: () => void;
   complete?: () => void;
@@ -89,6 +94,72 @@ export class WorkspaceRuntime {
   private store = createStore<WorkspaceState>(() => ({ ...emptyWorkspaceState }));
   readonly state: Pick<typeof this.store, 'getState' | 'getInitialState' | 'subscribe'> =
     this.store;
+  automation?: AutomationProvider;
+  private commitListeners = new Set<(event: CommittedMutation) => void>();
+  subscribeCommits(listener: (event: CommittedMutation) => void) {
+    this.commitListeners.add(listener);
+    return () => {
+      this.commitListeners.delete(listener);
+    };
+  }
+  async queryObjects(scope: { type: string } | { databaseId: string }) {
+    if (!this.repository.queryObjects) throw new HostError('unsupported');
+    const objects: TioObject[] = [];
+    let after: string | undefined;
+    do {
+      const page = await this.repository.queryObjects({ scope, after, limit: 100 });
+      for (const entry of page.entries) {
+        if (!this.access.allows(resourceOf(entry.object), 'read'))
+          throw new HostError('permission');
+        objects.push(readableObject(this.access, entry.object)!);
+      }
+      if (page.next && page.next === after) throw new HostError('invalid');
+      after = page.next;
+    } while (after);
+    return objects;
+  }
+  hasPendingChanges(ids: string[]) {
+    if ([...this.history, ...this.redos].some((entry) => entry.draft)) return true;
+    return [...this.pending, ...this.waiting].some(({ intent }) => {
+      if (intent.source?.kind === 'automation') return false;
+      const affected =
+        'id' in intent
+          ? [intent.id]
+          : (intent.type === 'create' || intent.type === 'import'
+              ? intent.objects
+              : intent.type === 'checked' || intent.type === 'convertField'
+                ? intent.changes
+                : intent.type === 'restore'
+                  ? intent.after
+                  : []
+            ).map((object) => object.id);
+      return affected.some((id) => ids.includes(id));
+    });
+  }
+  automationWrite(
+    expected: TioObject[],
+    changes: TioObject[],
+    source: Extract<MutationSource, { kind: 'automation' }>,
+  ) {
+    const guard = () => {
+      if (this.disposed || this.closing) throw new HostError('closed');
+      if (!this.store.getState().writable) throw new HostError('permission');
+      if (this.hasPendingChanges([...expected, ...changes].map((o) => o.id)))
+        throw new HostError('conflict');
+    };
+    return new Promise<void>((resolve, reject) => {
+      try {
+        guard();
+        this.dispatch({ type: 'checked', expected, changes, source }, false, new Map(), {
+          guard,
+          complete: resolve,
+          reject,
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
   private navigation = new Map<string, TioObject>();
   private reads = new Map<string, Promise<void>>();
   private preparing: Promise<void> | null = null;
@@ -721,18 +792,55 @@ export class WorkspaceRuntime {
             this.accept(entries);
             this.pending.shift();
             command.complete?.();
+            if (command.request && command.request.changes.length) {
+              const event: CommittedMutation = {
+                commitId: command.request.id,
+                source: command.request.source!,
+                timestamp: command.intent.timestamp!,
+                changes: command.request.changes.flatMap((after) => {
+                  const committed = readableObject(
+                    this.access,
+                    entries.find((entry) => entry.object.id === after.id)?.object ?? after,
+                  );
+                  if (!committed) return [];
+                  const before = command.before?.find((o) => o.id === after.id);
+                  return [
+                    {
+                      before: before ? readableObject(this.access, before) : undefined,
+                      after: committed,
+                    },
+                  ];
+                }),
+              };
+              for (const listener of this.commitListeners) {
+                // Observers cannot turn a successful durable commit into an editing failure.
+                try {
+                  listener(structuredClone(event));
+                } catch {
+                  /* isolated observer */
+                }
+              }
+            }
             for (const id of command.assets.keys()) this.blobs.delete(id);
             this.publish();
             if (command.request?.sequence)
               await this.repository.acknowledgeCommits?.(this.clientId, command.request.sequence);
           } catch (error) {
-            if (['checked', 'convertField'].includes(command.intent.type) && !command.request) {
+            const rejectedAutomation =
+              command.intent.source?.kind === 'automation' &&
+              error instanceof HostError &&
+              ['permission', 'invalid', 'unsupported', 'closed'].includes(error.code);
+            if (
+              (['checked', 'convertField'].includes(command.intent.type) && !command.request) ||
+              rejectedAutomation
+            ) {
               this.pending.shift();
               if (command.historyEntry) this.removeHistoryStep(command.historyEntry);
               command.reject?.(error);
               this.publish();
               continue;
             }
+            if (command.intent.source?.kind === 'automation') command.reject?.(error);
             this.fail(error);
           }
         }
@@ -805,6 +913,9 @@ export class WorkspaceRuntime {
           clientId: this.clientId,
           sequence: ++this.sequence,
           origin: this.clientId,
+          source: command.intent.source ?? {
+            kind: command.intent.type === 'import' ? 'import' : 'editor',
+          },
           expectedVersion: snapshot.version,
           recovery,
           changes: next.filter(
@@ -813,6 +924,11 @@ export class WorkspaceRuntime {
           ),
           assetIds: [...command.assets.keys()],
         };
+        command.before = structuredClone(
+          confirmed.filter((object) =>
+            command.request!.changes.some((change) => change.id === object.id),
+          ),
+        );
       }
       const result = await this.repository.commit(command.request);
       if (result.status === 'committed') {
@@ -871,15 +987,25 @@ export class WorkspaceRuntime {
   }
 
   /** Checked command acknowledged using the provider's declared persistence guarantee. */
-  checked(expected: TioObject[], changes: TioObject[], guard: () => void): Promise<void> {
+  checked(
+    expected: TioObject[],
+    changes: TioObject[],
+    guard: () => void,
+    options: { source?: MutationSource; remember?: boolean } = {},
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         guard();
-        this.dispatch({ type: 'checked', expected, changes }, true, new Map(), {
-          guard,
-          complete: resolve,
-          reject,
-        });
+        this.dispatch(
+          { type: 'checked', expected, changes, source: options.source },
+          options.remember ?? true,
+          new Map(),
+          {
+            guard,
+            complete: resolve,
+            reject,
+          },
+        );
       } catch (error) {
         reject(error);
       }
@@ -1027,6 +1153,7 @@ export class WorkspaceRuntime {
       this.dispatch(
         {
           type: 'restore',
+          source: { kind: source === this.history ? 'undo' : 'redo' },
           before: [],
           after: entry.steps.flatMap((step) => step.after),
         },
@@ -1062,6 +1189,15 @@ export class WorkspaceRuntime {
     if (!force && (this.pending.length || this.preparingCount))
       throw new HostError('pending', 'Flush pending changes before disposing');
     this.disposed = true;
+    this.automation?.dispose();
+    for (const command of this.pending) {
+      if (command.intent.source?.kind === 'automation') command.reject?.(new HostError('closed'));
+    }
+    for (const command of this.waiting) {
+      if (command.intent.source?.kind === 'automation')
+        command.receipt?.reject?.(new HostError('closed'));
+    }
+    this.commitListeners.clear();
     this.history = [];
     this.redos = [];
     this.breakHistoryGroup();
