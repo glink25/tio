@@ -67,6 +67,12 @@
   width: 100%;
   height: 100%;
 }
+.brand-mark .mark-background {
+  fill: none;
+}
+.brand-mark .mark-symbol {
+  fill: currentColor;
+}
 .login-page {
   display: grid;
   grid-template-columns: minmax(0, 1.13fr) minmax(420px, 0.87fr);
@@ -101,7 +107,6 @@
   width: 106px;
   height: 106px;
   margin-bottom: clamp(36px, 5.4vh, 62px);
-  animation: brand-settle 9s ease-in-out infinite;
 }
 .brand-mark--hero .mark-dot {
   animation: brand-dot-rise 9s ease-in-out infinite;
@@ -185,7 +190,6 @@
   outline: 3px solid #888;
   outline-offset: 3px;
 }
-.login-brand--paused .brand-mark--hero,
 .login-brand--paused .mark-dot,
 .login-brand--paused .login-caret {
   animation-play-state: paused;
@@ -198,16 +202,6 @@
   53%,
   100% {
     opacity: 0;
-  }
-}
-@keyframes brand-settle {
-  0%,
-  40%,
-  100% {
-    transform: translateY(0);
-  }
-  60% {
-    transform: translateY(-3px);
   }
 }
 @keyframes brand-dot-rise {
@@ -292,7 +286,6 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .brand-mark--hero,
   .brand-mark--hero .mark-dot,
   .login-caret {
     animation: none;

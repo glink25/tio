@@ -23,7 +23,7 @@ Oxfmt 负责格式、导入与 Tailwind 排序；Oxlint 负责正确性与类型
 
 面向用户的品牌名称统一写作 `Tio`；包名、URL、文件格式、存储键与 SDK 标识保持既有命名。
 
-品牌唯一源为 `apps/web/src/brand/logo.svg`，静态 Logo 与 Hero 共用该 SVG；动画只作用于整体与 `.mark-dot`。修改后执行 `corepack pnpm brand:icons`，提交生成的 `apps/web/public/` 图标。派生 SVG、favicon、Touch Icon 和 PWA PNG 不手工编辑；maskable 图标使用深色底和安全留白。
+品牌唯一源为 `apps/web/src/brand/logo.svg`，静态 Logo、Hero 与首屏共用该 SVG，保留源文件的主体路径、圆点比例与位置；动画只作用于 `.mark-dot`。界面隐藏 `.mark-background`，由 `.mark-symbol` 继承当前文字颜色，适配深浅主题。修改后执行 `corepack pnpm brand:icons`，提交生成的 `apps/web/public/` 图标。派生 SVG、favicon、Touch Icon 和 PWA PNG 不手工编辑；普通应用图标沿用白底黑标与圆角，Touch Icon 使用白色实底方形画布交由系统裁切；maskable 沿用深色外底、带安全留白的白色圆角底板与黑色标志。
 
 Web 连接入口注册于 `apps/web/src/services/connection-entry/`。各集成声明稳定 ID、翻译键、图标、层级、可用状态、提示与执行动作；同一集成的入口按按钮组渲染，次要入口可声明仅图标展示，宿主统一渲染和防止重复触发。目录选择须直接在点击调用链中执行；底层存储 provider 不依赖 React，也不承担登录按钮展示。
 

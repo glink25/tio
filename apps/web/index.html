@@ -23,12 +23,19 @@
         place-content: center;
         justify-items: center;
         background: #fff;
+        color: #111;
         transition: opacity 160ms ease-out;
       }
       #boot svg {
         display: block;
         width: 72px;
         height: 72px;
+      }
+      #boot .mark-background {
+        fill: none;
+      }
+      #boot .mark-symbol {
+        fill: currentColor;
       }
       #boot .mark-dot {
         transform-box: fill-box;
@@ -38,6 +45,7 @@
       #boot a {
         display: block;
         border-radius: 14px;
+        color: inherit;
       }
       #boot a:focus-visible {
         outline: 2px solid #808080;
@@ -57,31 +65,18 @@
           opacity: 1;
         }
         50% {
-          transform: translateY(-10px);
-          opacity: 0.45;
+          transform: translateY(-8px);
         }
       }
       @media (prefers-color-scheme: dark) {
         #boot:not([data-theme='light']) {
           background: #191919;
-        }
-        #boot:not([data-theme='light']) svg rect {
-          fill: #191919;
-        }
-        #boot:not([data-theme='light']) svg path,
-        #boot:not([data-theme='light']) svg circle {
-          fill: #eee;
+          color: #eee;
         }
       }
       #boot[data-theme='dark'] {
         background: #191919;
-      }
-      #boot[data-theme='dark'] svg rect {
-        fill: #191919;
-      }
-      #boot[data-theme='dark'] svg path,
-      #boot[data-theme='dark'] svg circle {
-        fill: #eee;
+        color: #eee;
       }
       @media (prefers-reduced-motion: reduce) {
         #boot {

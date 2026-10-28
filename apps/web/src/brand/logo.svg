@@ -1,5 +1,7 @@
 <svg viewBox="0 0 240 240" xmlns="http://www.w3.org/2000/svg">
-  <rect width="240" height="240" rx="42" fill="#fff"/>
-  <path d="M51 51H106V115C106 131 114 139 132 139H171V192H109C77 192 51 166 51 134V51Z" fill="#111"/>
-  <circle class="mark-dot" cx="151" cy="81" r="32" fill="#111"/>
+  <rect class="mark-background" width="240" height="240" rx="42" fill="#fff"/>
+  <g class="mark-symbol" fill="#111">
+    <path d="M70.5 51H118.5V115C118.5 131 126.5 139 144.5 139H183.5V192H121.5C89.5 192 63.5 166 63.5 134V125H38.5V98C57.5 93 67.5 76 70.5 51Z"/>
+    <circle class="mark-dot" cx="163.5" cy="81" r="32"/>
+  </g>
 </svg>
