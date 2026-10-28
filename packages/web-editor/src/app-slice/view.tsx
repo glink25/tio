@@ -1,5 +1,6 @@
 import { type Block, type TioObject } from '@tio/core';
 import { useTranslation } from '@tio/i18n';
+import { OverlayPresence } from '@tio/ui';
 import { IconButton, cn } from '@tio/ui';
 import { Settings } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
@@ -86,31 +87,33 @@ export function AppSlice({
           {zh ? '已停止' : 'Stopped'}
         </div>
       )}
-      {open && (
-        <Suspense fallback={null}>
-          <AppSliceSettings
-            model={m}
-            page={page}
-            block={block}
-            permission={permission}
-            setPermission={setPermission}
-            permissionKey={key}
-            running={running}
-            setRunning={setRunning}
-            restart={() => {
-              setRunning(true);
-              setGeneration((v) => v + 1);
-            }}
-            logs={logs}
-            log={(message) => log(message, 'preview')}
-            clearLogs={() => setLogs([])}
-            close={() => {
-              setOpen(false);
-              requestAnimationFrame(() => trigger.current?.focus());
-            }}
-          />
-        </Suspense>
-      )}
+      <OverlayPresence>
+        {open && (
+          <Suspense fallback={null}>
+            <AppSliceSettings
+              model={m}
+              page={page}
+              block={block}
+              permission={permission}
+              setPermission={setPermission}
+              permissionKey={key}
+              running={running}
+              setRunning={setRunning}
+              restart={() => {
+                setRunning(true);
+                setGeneration((v) => v + 1);
+              }}
+              logs={logs}
+              log={(message) => log(message, 'preview')}
+              clearLogs={() => setLogs([])}
+              close={() => {
+                setOpen(false);
+                requestAnimationFrame(() => trigger.current?.focus());
+              }}
+            />
+          </Suspense>
+        )}
+      </OverlayPresence>
     </section>
   );
 }

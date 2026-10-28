@@ -1,5 +1,6 @@
 import type { Block, TioObject } from '@tio/core';
 import { useTranslation } from '@tio/i18n';
+import { OverlayPresence } from '@tio/ui';
 import { LoadingSkeleton } from '@tio/ui';
 import { Button, Drawer, Modal } from '@tio/ui';
 import { lazy, Suspense, useEffect, useState } from 'react';
@@ -415,40 +416,42 @@ export default function AppSliceSettings({
           </div>
         </div>
       </Drawer>
-      {confirm && (
-        <Modal
-          title={
-            confirm === 'discard'
-              ? tr('丢弃未应用的修改？', 'Discard unapplied changes?')
-              : tr('允许外部访问？', 'Allow external access?')
-          }
-          close={() => setConfirm(null)}
-        >
-          <p className="mb-5 text-sm text-secondary">
-            {confirm === 'discard'
-              ? tr('关闭后，未应用的代码修改将丢失。', 'Unapplied code changes will be lost.')
-              : tr(
-                  '网页可能向外部服务发送页面及表格数据。',
-                  'This code may send page and database data to external services.',
-                )}
-          </p>
-          <div className="flex justify-end gap-2">
-            <Button onClick={() => setConfirm(null)}>
-              {confirm === 'discard' ? tr('继续编辑', 'Continue editing') : tr('取消', 'Cancel')}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (confirm === 'discard') close();
-                else grant({ ...permission, allowExternalResources: true });
-                setConfirm(null);
-              }}
-            >
-              {confirm === 'discard' ? tr('丢弃修改', 'Discard changes') : tr('允许', 'Allow')}
-            </Button>
-          </div>
-        </Modal>
-      )}
+      <OverlayPresence>
+        {confirm && (
+          <Modal
+            title={
+              confirm === 'discard'
+                ? tr('丢弃未应用的修改？', 'Discard unapplied changes?')
+                : tr('允许外部访问？', 'Allow external access?')
+            }
+            close={() => setConfirm(null)}
+          >
+            <p className="mb-5 text-sm text-secondary">
+              {confirm === 'discard'
+                ? tr('关闭后，未应用的代码修改将丢失。', 'Unapplied code changes will be lost.')
+                : tr(
+                    '网页可能向外部服务发送页面及表格数据。',
+                    'This code may send page and database data to external services.',
+                  )}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button onClick={() => setConfirm(null)}>
+                {confirm === 'discard' ? tr('继续编辑', 'Continue editing') : tr('取消', 'Cancel')}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (confirm === 'discard') close();
+                  else grant({ ...permission, allowExternalResources: true });
+                  setConfirm(null);
+                }}
+              >
+                {confirm === 'discard' ? tr('丢弃修改', 'Discard changes') : tr('允许', 'Allow')}
+              </Button>
+            </div>
+          </Modal>
+        )}
+      </OverlayPresence>
     </>
   );
 }

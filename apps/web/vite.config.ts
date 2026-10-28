@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
@@ -7,6 +9,15 @@ import { editorCss } from '../../scripts/editor-css.mjs';
 export default defineConfig({
   css: { postcss: { plugins: [editorCss()] } },
   plugins: [
+    {
+      name: 'tio-boot-logo',
+      transformIndexHtml(html) {
+        return html.replace(
+          '<!--tio-boot-logo-->',
+          readFileSync(new URL('./src/brand/logo.svg', import.meta.url), 'utf8'),
+        );
+      },
+    },
     react(),
     tailwindcss(),
     VitePWA({

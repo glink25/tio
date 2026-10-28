@@ -1,5 +1,6 @@
 import { titleOf, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
+import { OverlayPresence } from '@tio/ui';
 import { OptionsPanel } from '@tio/ui';
 import {
   Button,
@@ -270,10 +271,12 @@ export function Sidebar({
   );
   return (
     <>
-      {!mobile && !m.sidebarCollapsed && (
+      {!mobile && (
         <aside
-          className="fixed inset-y-0 left-0 z-20 hidden border-r border-line bg-surface md:block"
-          style={{ width: m.sidebarWidth }}
+          data-collapsed={m.sidebarCollapsed}
+          {...{ inert: m.sidebarCollapsed ? '' : undefined }}
+          className="tio-sidebar fixed inset-y-0 left-0 z-20 hidden border-r border-line bg-surface md:block"
+          style={{ width: m.sidebarWidth, translate: m.sidebarCollapsed ? '-100% 0' : '0 0' }}
         >
           {content}
           <button
@@ -286,6 +289,9 @@ export function Sidebar({
               if (e.key === 'ArrowRight') m.resizeSidebar(m.sidebarWidth + 10);
             }}
             onPointerDown={(e) => {
+              document
+                .querySelector('[data-sidebar-animating]')
+                ?.removeAttribute('data-sidebar-animating');
               e.currentTarget.setPointerCapture(e.pointerId);
             }}
             onPointerMove={(e) => {
@@ -295,11 +301,13 @@ export function Sidebar({
           />
         </aside>
       )}
-      {m.sidebar && (
-        <Modal sheet title={t('workspace.sidebar')} close={() => m.setSidebar(false)}>
-          <div className="h-[calc(100dvh-100px)]">{content}</div>
-        </Modal>
-      )}
+      <OverlayPresence>
+        {m.sidebar && (
+          <Modal sheet title={t('workspace.sidebar')} close={() => m.setSidebar(false)}>
+            <div className="h-[calc(100dvh-100px)]">{content}</div>
+          </Modal>
+        )}
+      </OverlayPresence>
     </>
   );
 }

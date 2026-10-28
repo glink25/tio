@@ -1,5 +1,6 @@
 import type { TioObject, Field } from '@tio/core';
 import { useT } from '@tio/i18n';
+import { OverlayPresence } from '@tio/ui';
 import { Button, IconButton, Modal } from '@tio/ui';
 import { Plus, Trash2, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
@@ -40,37 +41,45 @@ export function FieldManager({
         <Plus size={15} />
         {t('database.addField')}
       </Button>
-      {editing && (
-        <Modal mobilePlacement="center" title={t('ui.editProperty')} close={() => setEditing(null)}>
-          <PropertyEditor
-            database={database}
-            field={fields.find((f) => f.id === editing)}
-            objects={objects}
-            onSave={(field) =>
-              onChange(
-                fields.some((f) => f.id === field.id)
-                  ? fields.map((f) => (f.id === field.id ? field : f))
-                  : [...fields, field],
-              )
-            }
+      <OverlayPresence>
+        {editing && (
+          <Modal
+            mobilePlacement="center"
+            title={t('ui.editProperty')}
             close={() => setEditing(null)}
-          />
-        </Modal>
-      )}
-      {deleting && (
-        <Modal title={t('ui.confirm')} close={() => setDeleting(null)}>
-          <p className="mb-4 text-sm">{t('ui.removedField')}</p>
-          <Button
-            variant="primary"
-            onClick={() => {
-              void onChange(fields.filter((f) => f.id !== deleting.id));
-              setDeleting(null);
-            }}
           >
-            {t('ui.confirm')}
-          </Button>
-        </Modal>
-      )}
+            <PropertyEditor
+              database={database}
+              field={fields.find((f) => f.id === editing)}
+              objects={objects}
+              onSave={(field) =>
+                onChange(
+                  fields.some((f) => f.id === field.id)
+                    ? fields.map((f) => (f.id === field.id ? field : f))
+                    : [...fields, field],
+                )
+              }
+              close={() => setEditing(null)}
+            />
+          </Modal>
+        )}
+      </OverlayPresence>
+      <OverlayPresence>
+        {deleting && (
+          <Modal title={t('ui.confirm')} close={() => setDeleting(null)}>
+            <p className="mb-4 text-sm">{t('ui.removedField')}</p>
+            <Button
+              variant="primary"
+              onClick={() => {
+                void onChange(fields.filter((f) => f.id !== deleting.id));
+                setDeleting(null);
+              }}
+            >
+              {t('ui.confirm')}
+            </Button>
+          </Modal>
+        )}
+      </OverlayPresence>
     </>
   );
 }

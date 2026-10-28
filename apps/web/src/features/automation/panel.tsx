@@ -7,10 +7,11 @@ import {
   type AutomationRun,
 } from '@tio/core';
 import { useT, errorMessage } from '@tio/i18n';
+import { OverlayPresence } from '@tio/ui';
 import { LoadingSkeleton } from '@tio/ui';
 import { Button, IconButton, Modal, MentionContext, cn } from '@tio/ui';
 import { RecordQueryContext } from '@tio/views';
-import { createMentionService } from '@tio/web-editor';
+import { createMentionService } from '@tio/web-editor/mentions';
 import type { WorkspaceRuntime } from '@tio/workspace';
 import { ArrowLeft, ArrowRight, Plus, Workflow, Info } from 'lucide-react';
 import { useEffect, useState, useMemo, useRef } from 'react';
@@ -513,91 +514,99 @@ export default function AutomationDialog({
             </>
           )}
         </Modal>
-        {leave && (
-          <Modal
-            title={t('automation.unsavedTitle')}
-            mobilePlacement="center"
-            close={() => setLeave(undefined)}
-          >
-            <p className="text-sm text-muted">{t('automation.unsavedMessage')}</p>
-            <div className="mt-5 flex flex-wrap justify-end gap-2">
-              <Button onClick={() => setLeave(undefined)}>{t('automation.continueEditing')}</Button>
-              <Button
-                className="border border-line"
-                onClick={() => {
-                  const action = leave;
-                  setLeave(undefined);
-                  action();
-                }}
-              >
-                {t('automation.discardChanges')}
-              </Button>
-              {!Object.keys(issues).length && (
+        <OverlayPresence>
+          {leave && (
+            <Modal
+              title={t('automation.unsavedTitle')}
+              mobilePlacement="center"
+              close={() => setLeave(undefined)}
+            >
+              <p className="text-sm text-muted">{t('automation.unsavedMessage')}</p>
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <Button onClick={() => setLeave(undefined)}>
+                  {t('automation.continueEditing')}
+                </Button>
+                <Button
+                  className="border border-line"
+                  onClick={() => {
+                    const action = leave;
+                    setLeave(undefined);
+                    action();
+                  }}
+                >
+                  {t('automation.discardChanges')}
+                </Button>
+                {!Object.keys(issues).length && (
+                  <Button
+                    variant="primary"
+                    disabled={busy || !canWriteDraft}
+                    onClick={() => void save(draft?.original?.enabled ?? false, leave)}
+                  >
+                    {t('automation.saveLeave')}
+                  </Button>
+                )}
+              </div>
+            </Modal>
+          )}
+        </OverlayPresence>
+        <OverlayPresence>
+          {change && (
+            <Modal
+              title={t('automation.changeTitle')}
+              mobilePlacement="center"
+              close={() => setChange(undefined)}
+            >
+              <p className="text-sm text-muted">{t('automation.changeMessage')}</p>
+              <div className="mt-5 flex justify-end gap-2">
+                <Button onClick={() => setChange(undefined)}>{t('ui.cancel')}</Button>
                 <Button
                   variant="primary"
-                  disabled={busy || !canWriteDraft}
-                  onClick={() => void save(draft?.original?.enabled ?? false, leave)}
+                  onClick={() => {
+                    change();
+                    setChange(undefined);
+                  }}
                 >
-                  {t('automation.saveLeave')}
+                  {t('automation.confirmChange')}
                 </Button>
-              )}
-            </div>
-          </Modal>
-        )}
-        {change && (
-          <Modal
-            title={t('automation.changeTitle')}
-            mobilePlacement="center"
-            close={() => setChange(undefined)}
-          >
-            <p className="text-sm text-muted">{t('automation.changeMessage')}</p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button onClick={() => setChange(undefined)}>{t('ui.cancel')}</Button>
-              <Button
-                variant="primary"
-                onClick={() => {
-                  change();
-                  setChange(undefined);
-                }}
-              >
-                {t('automation.confirmChange')}
-              </Button>
-            </div>
-          </Modal>
-        )}
-        {deleteRule && (
-          <Modal
-            title={t('automation.deleteFlow')}
-            mobilePlacement="center"
-            close={() => {
-              if (!busy) setDeleteRule(undefined);
-            }}
-          >
-            <p className="text-sm text-muted">
-              {t('automation.deleteFlowMessage', { name: deleteRule.name })}
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button disabled={busy} onClick={() => setDeleteRule(undefined)}>
-                {t('ui.cancel')}
-              </Button>
-              <Button
-                variant="primary"
-                disabled={busy}
-                onClick={() => {
-                  const rule = deleteRule;
-                  setBusy(true);
-                  setError('');
-                  void persist({ ...rule, deleted: true }, rule)
-                    .then(() => setDeleteRule(undefined))
-                    .catch((error) => setError(errorMessage(error)))
-                    .finally(() => setBusy(false));
-                }}
-              >
-                {t('automation.delete')}
-              </Button>
-            </div>
-          </Modal>
-        )}
+              </div>
+            </Modal>
+          )}
+        </OverlayPresence>
+        <OverlayPresence>
+          {deleteRule && (
+            <Modal
+              title={t('automation.deleteFlow')}
+              mobilePlacement="center"
+              close={() => {
+                if (!busy) setDeleteRule(undefined);
+              }}
+            >
+              <p className="text-sm text-muted">
+                {t('automation.deleteFlowMessage', { name: deleteRule.name })}
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <Button disabled={busy} onClick={() => setDeleteRule(undefined)}>
+                  {t('ui.cancel')}
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={busy}
+                  onClick={() => {
+                    const rule = deleteRule;
+                    setBusy(true);
+                    setError('');
+                    void persist({ ...rule, deleted: true }, rule)
+                      .then(() => setDeleteRule(undefined))
+                      .catch((error) => setError(errorMessage(error)))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  {t('automation.delete')}
+                </Button>
+              </div>
+            </Modal>
+          )}
+        </OverlayPresence>
       </RecordQueryContext.Provider>
     </MentionContext.Provider>
   );

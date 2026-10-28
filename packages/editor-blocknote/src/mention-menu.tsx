@@ -11,6 +11,8 @@ import { MentionContext, ReferenceIcon, OptionsPanel, usePagedOptions } from '@t
 import { closeHistory } from '@tiptap/pm/history';
 import { useCallback, useContext, useState } from 'react';
 
+import { useEditorMotion } from './motion';
+
 type QueryItem = DefaultReactSuggestionItem & { query: string };
 function Menu(props: SuggestionMenuProps<QueryItem>) {
   const service = useContext(MentionContext);
@@ -77,6 +79,7 @@ function Menu(props: SuggestionMenuProps<QueryItem>) {
   );
 }
 export function MentionMenu() {
+  const floatingMotion = useEditorMotion();
   const service = useContext(MentionContext);
   const getItems = useCallback(
     async (query: string): Promise<QueryItem[]> => [{ title: '', query, onItemClick: () => {} }],
@@ -84,6 +87,7 @@ export function MentionMenu() {
   );
   return service ? (
     <SuggestionMenuController
+      floatingUIOptions={floatingMotion}
       triggerCharacter="@"
       getItems={getItems}
       suggestionMenuComponent={Menu}

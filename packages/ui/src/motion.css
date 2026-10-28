@@ -1,0 +1,168 @@
+/* Shared motion vocabulary. Positioning transforms belong to the primitives;
+   individual translate/scale properties animate only the visual surface. */
+:root,
+.tio-editor {
+  --tio-motion-enter: 140ms;
+  --tio-motion-exit: 100ms;
+  --tio-motion-panel-enter: 200ms;
+  --tio-motion-panel-exit: 160ms;
+  --tio-motion-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  --tio-motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+}
+.tio-popover,
+.tio-menu,
+.tio-tooltip,
+.tio-editor [data-slot='dropdown-menu-content'],
+.tio-editor [data-slot='dropdown-menu-sub-content'],
+.tio-editor [data-slot='popover-content'],
+.tio-editor [data-slot='select-content'],
+.tio-editor [data-slot='tooltip-content'] {
+  --tio-motion-x: 0px;
+  --tio-motion-y: -4px;
+  transform-origin: var(
+    --radix-popover-content-transform-origin,
+    var(--radix-dropdown-menu-content-transform-origin, var(--transform-origin, center))
+  );
+  animation: tio-floating-in var(--tio-motion-enter) var(--tio-motion-ease-enter) both !important;
+}
+:is(.tio-popover, .tio-menu, .tio-tooltip)[data-side='top'],
+.tio-editor [data-slot][data-side='top'] {
+  --tio-motion-y: 4px;
+}
+:is(.tio-popover, .tio-menu, .tio-tooltip)[data-side='right'],
+.tio-editor [data-slot][data-side='right'],
+.tio-editor [data-slot][data-side='inline-end'] {
+  --tio-motion-x: -4px;
+  --tio-motion-y: 0px;
+}
+:is(.tio-popover, .tio-menu, .tio-tooltip)[data-side='left'],
+.tio-editor [data-slot][data-side='left'],
+.tio-editor [data-slot][data-side='inline-start'] {
+  --tio-motion-x: 4px;
+  --tio-motion-y: 0px;
+}
+:is(.tio-popover, .tio-menu, .tio-tooltip)[data-state='closed'],
+.tio-editor [data-slot='dropdown-menu-content'][data-closed],
+.tio-editor [data-slot='dropdown-menu-sub-content'][data-closed],
+.tio-editor [data-slot='popover-content'][data-closed],
+.tio-editor [data-slot='select-content'][data-closed],
+.tio-editor [data-slot='tooltip-content'][data-closed] {
+  pointer-events: none;
+  animation: tio-floating-out var(--tio-motion-exit) var(--tio-motion-ease-exit) both !important;
+}
+.tio-overlay {
+  animation: tio-fade-in var(--tio-motion-panel-enter) ease-out both;
+}
+.tio-overlay[data-state='closed'] {
+  pointer-events: none;
+  animation: tio-fade-out var(--tio-motion-panel-exit) ease-in both;
+}
+.tio-dialog,
+.tio-drawer {
+  --tio-motion-x: 0px;
+  --tio-motion-y: 8px;
+  --tio-panel-rest: none;
+  --tio-panel-position: translate(0, 0);
+  animation: tio-panel-in var(--tio-motion-panel-enter) var(--tio-motion-ease-enter) both !important;
+}
+.tio-drawer {
+  --tio-motion-x: 100%;
+  --tio-motion-y: 0px;
+}
+.tio-dialog[data-motion='left'] {
+  --tio-motion-x: -100%;
+  --tio-motion-y: 0px;
+}
+:is(.tio-dialog, .tio-drawer)[data-state='closed'] {
+  pointer-events: none;
+  animation: tio-panel-out var(--tio-motion-panel-exit) var(--tio-motion-ease-exit) both !important;
+}
+@media (max-width: 767px) {
+  .tio-dialog[data-motion='sheet'] {
+    --tio-motion-y: 24px;
+  }
+}
+@keyframes tio-floating-in {
+  from {
+    opacity: 0;
+    translate: var(--tio-motion-x) var(--tio-motion-y);
+    scale: 0.98;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+}
+@keyframes tio-floating-out {
+  from {
+    opacity: 1;
+    translate: 0 0;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    translate: var(--tio-motion-x) var(--tio-motion-y);
+    scale: 0.98;
+  }
+}
+@keyframes tio-panel-in {
+  from {
+    opacity: 0;
+    transform: var(--tio-panel-position, translate(0, 0))
+      translate(var(--tio-motion-x), var(--tio-motion-y));
+  }
+  to {
+    opacity: 1;
+    transform: var(--tio-panel-rest, none);
+  }
+}
+@keyframes tio-panel-out {
+  from {
+    opacity: 1;
+    transform: var(--tio-panel-rest, none);
+  }
+  to {
+    opacity: 0;
+    transform: var(--tio-panel-position, translate(0, 0))
+      translate(var(--tio-motion-x), var(--tio-motion-y));
+  }
+}
+@keyframes tio-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes tio-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  .tio-editor {
+    --tio-motion-enter: 0ms;
+    --tio-motion-exit: 0ms;
+    --tio-motion-panel-enter: 0ms;
+    --tio-motion-panel-exit: 0ms;
+  }
+  .tio-popover,
+  .tio-menu,
+  .tio-tooltip,
+  .tio-dialog,
+  .tio-drawer,
+  .tio-overlay,
+  .tio-editor [data-slot='dropdown-menu-content'],
+  .tio-editor [data-slot='dropdown-menu-sub-content'],
+  .tio-editor [data-slot='popover-content'],
+  .tio-editor [data-slot='select-content'],
+  .tio-editor [data-slot='tooltip-content'] {
+    animation: none !important;
+  }
+}

@@ -1,4 +1,5 @@
 import { useTranslation } from '@tio/i18n';
+import { OverlayPresence } from '@tio/ui';
 import { Notifications, toast, ThemeContext, LoadingSkeleton, SidebarSkeleton } from '@tio/ui';
 import { useEffect, lazy, Suspense } from 'react';
 
@@ -49,8 +50,10 @@ export function App() {
     <ThemeContext.Provider value={presentation.theme}>
       <Notifications />
       <ConnectionDialogs model={model} />
-      <WorkspaceActionDialog model={model} />
-      {model.githubOpen && <GitHubDialog model={model} />}
+      <OverlayPresence>
+        {model.workspaceAction && <WorkspaceActionDialog model={model} />}
+      </OverlayPresence>
+      <OverlayPresence>{model.githubOpen && <GitHubDialog model={model} />}</OverlayPresence>
       <input
         ref={model.importRef}
         className="hidden"

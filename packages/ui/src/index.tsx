@@ -15,11 +15,15 @@ import {
   useState,
   useRef,
   type ButtonHTMLAttributes,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 export { MentionContext, MentionLabel, MentionPicker } from './mentions';
 export const PortalContext = createContext<HTMLElement | undefined>(undefined);
 import { twMerge } from 'tailwind-merge';
+
+import { useOverlayOpen } from './motion';
+export { OverlayPresence, useOverlayOpen, useReducedMotion, motion } from './motion';
 
 import { useMobileDialogPosition } from './mobile-dialog';
 import { ChoiceSelect } from './select';
@@ -83,17 +87,18 @@ export function Modal({
   children: ReactNode;
 }) {
   const t = useT();
-  useOverlayBack(close, trackHistory);
+  const open = useOverlayOpen();
+  useOverlayBack(close, trackHistory && open);
   const position = useMobileDialogPosition(mobilePlacement === 'center');
   return (
     <Dialog.Root
-      open
+      open={open}
       onOpenChange={(open) => {
         if (!open) close();
       }}
     >
       <Dialog.Portal container={useContext(PortalContext)}>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
+        <Dialog.Overlay className="tio-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
         <Dialog.Content
           onEscapeKeyDown={(event) => {
             // Floating controls are portalled; their Escape must not dismiss the containing dialog.
@@ -105,7 +110,15 @@ export function Modal({
             if (floating.some((element) => !element.closest('[aria-hidden="true"]')))
               event.preventDefault();
           }}
-          style={position}
+          {...{ inert: !open ? '' : undefined }}
+          data-motion={sheet ? 'left' : layout === 'workspace' || wide ? 'center' : mobilePlacement}
+          style={
+            {
+              ...position,
+              '--tio-panel-position': position?.transform ?? 'translate(0, 0)',
+              '--tio-panel-rest': position?.transform ?? 'none',
+            } as CSSProperties
+          }
           aria-describedby={undefined}
           className={cn(
             'tio-dialog fixed z-50 overflow-y-auto border border-line bg-panel p-5 text-ink shadow-xl outline-none',
@@ -174,20 +187,22 @@ export function Drawer({
 }) {
   const t = useT();
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
-  useOverlayBack(close);
+  const open = useOverlayOpen();
+  useOverlayBack(close, open);
   return (
     <Dialog.Root
-      open
+      open={open}
       onOpenChange={(open) => {
         if (!open) close();
       }}
     >
       <Dialog.Portal container={useContext(PortalContext)}>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
+        <Dialog.Overlay className="tio-overlay fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
         <Dialog.Content
+          {...{ inert: !open ? '' : undefined }}
           ref={setPortalContainer}
           aria-describedby={undefined}
-          className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl overflow-y-auto bg-panel shadow-xl"
+          className="tio-drawer fixed inset-y-0 right-0 z-50 w-full max-w-2xl overflow-y-auto bg-panel shadow-xl"
         >
           <header className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-panel px-6 py-3">
             <Dialog.Title className="text-sm text-secondary">{title}</Dialog.Title>
@@ -317,6 +332,8 @@ function dismissOverlayHistory() {
   for (const entry of overlays.slice(index + 1).reverse()) entry.close();
 }
 export function useOverlayBack(close: () => void, enabled = true) {
+  const open = useOverlayOpen();
+  enabled = enabled && open;
   const closeRef = useRef(close);
   closeRef.current = close;
   useEffect(() => {

@@ -22,11 +22,28 @@ import { t, i18n } from '@tio/i18n';
 import { IconButton, ObjectIcon, cn } from '@tio/ui';
 import { navigationOrder } from '@tio/workspace';
 import { ChevronRight, GripVertical, Plus } from 'lucide-react';
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type { WorkspaceController } from './use-workspace';
 
 type Placement = { id: string; position: 'before' | 'inside' | 'after' };
+
+type TreeEntry = { object: TioObject; depth: number };
+
+/** Only previously visible rows survive an exit; never mount collapsed subtrees. */
+function retainExitingRows(previous: TreeEntry[], visible: TreeEntry[]): TreeEntry[] {
+  const ids = new Set(visible.map((row) => row.object.id));
+  const result = [...visible];
+  previous.forEach((row, index) => {
+    if (ids.has(row.object.id)) return;
+    const following = previous.slice(index + 1).find((entry) => ids.has(entry.object.id));
+    const before = following
+      ? result.findIndex((entry) => entry.object.id === following.object.id)
+      : -1;
+    result.splice(before < 0 ? result.length : before, 0, row);
+  });
+  return result;
+}
 
 export function PageTree({
   model: m,
@@ -44,22 +61,33 @@ export function PageTree({
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-  const rows: { object: TioObject; depth: number }[] = [];
-  const walk = (parent: string | null, depth: number) => {
-    for (const object of m.nav
-      .filter((o) => (o.parentId ?? null) === parent)
-      .sort(navigationOrder)) {
-      rows.push({ object, depth });
-      // A newly created preview must remain visible even under a collapsed parent.
-      if (
-        (!collapsed.has(object.id) ||
-          m.nav.some((o) => o.id === m.previewId && o.parentId === object.id)) &&
-        object.id !== activeId
-      )
-        walk(object.id, depth + 1);
-    }
-  };
-  walk(null, 0);
+  const rows = useMemo(() => {
+    const visible: TreeEntry[] = [];
+    const walk = (parent: string | null, depth: number) => {
+      for (const object of m.nav
+        .filter((o) => (o.parentId ?? null) === parent)
+        .sort(navigationOrder)) {
+        visible.push({ object, depth });
+        // A newly created preview remains visible under its collapsed parent.
+        if (
+          (!collapsed.has(object.id) ||
+            m.nav.some((o) => o.id === m.previewId && o.parentId === object.id)) &&
+          object.id !== activeId
+        )
+          walk(object.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    return visible;
+  }, [m.nav, m.previewId, collapsed, activeId]);
+  const [retained, setRetained] = useState<TreeEntry[]>([]);
+  useEffect(() => {
+    setRetained((previous) => retainExitingRows(previous, rows));
+    const timeout = setTimeout(() => setRetained(rows), 180);
+    return () => clearTimeout(timeout);
+  }, [rows]);
+  const visibleIds = new Set(rows.map((row) => row.object.id));
+  const renderedRows = retainExitingRows(retained, rows);
   const updatePlacement = (event: DragOverEvent | DragEndEvent) => {
     const { active, over, activatorEvent, delta } = event;
     if (!over || active.id === over.id) {
@@ -123,6 +151,7 @@ export function PageTree({
   const active = m.nav.find((o) => o.id === activeId);
   return (
     <div
+      data-tree-dragging={!!activeId}
       onKeyDownCapture={(event) => {
         if (!activeId || !['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
         event.preventDefault();
@@ -159,11 +188,12 @@ export function PageTree({
           items={rows.map((r) => r.object.id)}
           strategy={verticalListSortingStrategy}
         >
-          {rows.map(({ object, depth }) => (
+          {renderedRows.map(({ object, depth }) => (
             <TreeRow
               key={object.id}
               object={object}
               depth={depth}
+              hidden={!visibleIds.has(object.id)}
               model={m}
               collapsed={collapsed.has(object.id)}
               toggle={() =>
@@ -211,6 +241,7 @@ function TreeRow({
   depth,
   model: m,
   collapsed,
+  hidden,
   toggle,
   placement,
   renderActions,
@@ -219,6 +250,7 @@ function TreeRow({
   depth: number;
   model: WorkspaceController;
   collapsed: boolean;
+  hidden: boolean;
   toggle: () => void;
   placement?: Placement['position'];
   renderActions: (o: TioObject) => ReactNode;
@@ -231,60 +263,73 @@ function TreeRow({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: o.id, disabled: !m.runtime?.can(o, 'update') });
+  } = useSortable({ id: o.id, disabled: hidden || !m.runtime?.can(o, 'update') });
   return (
     <div
       ref={setNodeRef}
+      className="tio-tree-row grid"
+      {...{ inert: hidden ? '' : undefined }}
+      aria-hidden={hidden || undefined}
+      data-hidden={hidden}
       data-navigation-id={o.id}
       data-drop-position={placement}
       style={{
-        paddingLeft: 8 + depth * 14,
+        gridTemplateRows: hidden ? '0fr' : '1fr',
         transform: CSS.Transform.toString(transform),
-        transition,
+        transition: [transition, 'grid-template-rows 180ms ease-out, opacity 140ms ease-out']
+          .filter(Boolean)
+          .join(', '),
+        opacity: hidden ? 0 : 1,
       }}
-      className={cn(
-        'group relative flex min-h-9 items-center rounded-md hover:bg-surface-hover',
-        m.current?.id === o.id && 'bg-surface-hover',
-        isDragging && 'opacity-30',
-        placement === 'inside' && 'ring-1 ring-ink',
-        placement === 'before' &&
-          'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-ink',
-        placement === 'after' &&
-          'after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-ink',
-      )}
     >
-      <button
-        type="button"
-        ref={setActivatorNodeRef}
-        {...attributes}
-        {...listeners}
-        aria-label={`${t('ui.move')} ${titleOf(o)}`}
-        className="touch-none rounded p-0.5 text-muted opacity-100 focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
-      >
-        <GripVertical size={12} />
-      </button>
-      <IconButton
-        label={t('page.expand')}
-        aria-expanded={!collapsed}
-        className={cn('p-0.5', !m.nav.some((c) => c.parentId === o.id) && 'invisible')}
-        onClick={toggle}
-      >
-        <ChevronRight size={13} className={collapsed ? '' : 'rotate-90'} />
-      </IconButton>
-      <button
-        className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left text-sm text-secondary"
-        onClick={() => m.navigate(o)}
-      >
-        <ObjectIcon type={o.type} icon={o.icon} size={16} resolve={m.resolveMedia} />
-        <span className="truncate">{titleOf(o)}</span>
-      </button>
-      <div className="flex shrink-0 opacity-100 group-focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100">
-        {o.type === 'page' && (
-          <IconButton label={t('page.child')} className="p-1" onClick={() => m.addPage(o.id)}>
-            <Plus size={14} />
+      <div className="min-h-0 overflow-hidden">
+        <div
+          style={{ paddingLeft: 8 + depth * 14 }}
+          className={cn(
+            'group relative flex min-h-9 items-center rounded-md hover:bg-surface-hover',
+            m.current?.id === o.id && 'bg-surface-hover',
+            isDragging && 'opacity-30',
+            placement === 'inside' && 'ring-1 ring-ink',
+            placement === 'before' &&
+              'before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-ink',
+            placement === 'after' &&
+              'after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:bg-ink',
+          )}
+        >
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            aria-label={`${t('ui.move')} ${titleOf(o)}`}
+            className="tio-tree-grip touch-none rounded p-0.5 text-muted opacity-100 focus:opacity-100 md:opacity-0 md:group-hover:opacity-100"
+          >
+            <GripVertical size={12} />
+          </button>
+          <IconButton
+            label={t('page.expand')}
+            aria-expanded={!collapsed}
+            className={cn('p-0.5', !m.nav.some((c) => c.parentId === o.id) && 'invisible')}
+            onClick={toggle}
+          >
+            <ChevronRight size={13} className={cn('tio-tree-chevron', !collapsed && 'rotate-90')} />
           </IconButton>
-        )}
-        {renderActions(o)}
+          <button
+            className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left text-sm text-secondary"
+            onClick={() => m.navigate(o)}
+          >
+            <ObjectIcon type={o.type} icon={o.icon} size={16} resolve={m.resolveMedia} />
+            <span className="truncate">{titleOf(o)}</span>
+          </button>
+          <div className="tio-tree-actions flex shrink-0 opacity-100 group-focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100">
+            {o.type === 'page' && (
+              <IconButton label={t('page.child')} className="p-1" onClick={() => m.addPage(o.id)}>
+                <Plus size={14} />
+              </IconButton>
+            )}
+            {renderActions(o)}
+          </div>
+        </div>
       </div>
     </div>
   );

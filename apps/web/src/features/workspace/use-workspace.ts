@@ -6,7 +6,7 @@ import { t, i18n, errorMessage } from '@tio/i18n';
 import { exportZip, exportMarkdownZip, importZip } from '@tio/serialization';
 import type { SyncSnapshot } from '@tio/sync';
 import { toast } from '@tio/ui';
-import { createMentionService } from '@tio/web-editor';
+import { createMentionService } from '@tio/web-editor/mentions';
 import { navigationTree } from '@tio/workspace';
 import {
   starterWorkspace,

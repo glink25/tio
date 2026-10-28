@@ -1,10 +1,11 @@
 import { titleOf, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
+import { OverlayPresence } from '@tio/ui';
 import { SelectInput } from '@tio/ui';
 import { Button, IconButton, MenuItem, Modal, LoadingSkeleton, cn, useMobile } from '@tio/ui';
 import { EditorSurface, type AppSlicePermissionStore } from '@tio/web-editor';
 import { ChevronRight, PanelLeft, Star, Move, Maximize2 } from 'lucide-react';
-import { Fragment, type ReactNode } from 'react';
+import { Fragment, useLayoutEffect, useRef, type ReactNode } from 'react';
 
 import { SyncStatus } from '../components/sync-status';
 import { Sidebar, WorkspaceSwitcher } from '../features/workspace/sidebar';
@@ -48,6 +49,14 @@ const appSlicePermissions: AppSlicePermissionStore = {
 };
 const appSlice = { permissionStore: appSlicePermissions, namespace: 'browser-profile' };
 export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
+  const layoutRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const element = layoutRef.current;
+    if (!element) return;
+    element.dataset.sidebarAnimating = '';
+    const timeout = setTimeout(() => delete element.dataset.sidebarAnimating, 200);
+    return () => clearTimeout(timeout);
+  }, [m.sidebarCollapsed]);
   const presentation = usePresentation();
   const mobile = useMobile();
   const current = m.current;
@@ -126,7 +135,9 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
   return (
     <div className="min-h-dvh">
       <div
-        className="min-w-0 md:ml-[var(--sidebar-width)]"
+        ref={layoutRef}
+        className="tio-workspace-content min-w-0 md:ml-[var(--sidebar-width)]"
+        data-sidebar-collapsed={m.sidebarCollapsed}
         style={
           {
             '--sidebar-width': `${m.sidebarCollapsed ? 0 : m.sidebarWidth}px`,
@@ -192,54 +203,58 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
           </>
         )}
       </div>
-      {preview && m.runtime && (
-        <Modal wide title={t('ui.preview')} close={() => m.setPreviewId(null)}>
-          <div className="page-preview min-h-[85dvh] md:min-h-[78dvh]">
-            <div className="flex min-h-14 items-center gap-2 border-b border-line px-4 pr-14 text-sm">
-              <IconButton
-                label={t('ui.expand')}
-                onClick={() => m.navigate(preview)}
-                className="p-1.5"
-              >
-                <Maximize2 size={17} />
-              </IconButton>
-              <span className="shrink-0 text-muted">{t('ui.addTo')}</span>
-              <SelectInput
-                aria-label={t('ui.location')}
-                className="max-w-64 min-w-0 !border-0 !bg-transparent"
-                value={preview.parentId ?? ''}
-                onValueChange={(value) => m.movePage(preview.id, value || null)}
-              >
-                <option value="">{m.workspace?.name}</option>
-                {m.nav
-                  .filter((o) => o.type === 'page' && o.id !== preview.id)
-                  .map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {titleOf(o)}
-                    </option>
-                  ))}
-              </SelectInput>
+      <OverlayPresence>
+        {preview && m.runtime && (
+          <Modal wide title={t('ui.preview')} close={() => m.setPreviewId(null)}>
+            <div className="page-preview min-h-[85dvh] md:min-h-[78dvh]">
+              <div className="flex min-h-14 items-center gap-2 border-b border-line px-4 pr-14 text-sm">
+                <IconButton
+                  label={t('ui.expand')}
+                  onClick={() => m.navigate(preview)}
+                  className="p-1.5"
+                >
+                  <Maximize2 size={17} />
+                </IconButton>
+                <span className="shrink-0 text-muted">{t('ui.addTo')}</span>
+                <SelectInput
+                  aria-label={t('ui.location')}
+                  className="max-w-64 min-w-0 !border-0 !bg-transparent"
+                  value={preview.parentId ?? ''}
+                  onValueChange={(value) => m.movePage(preview.id, value || null)}
+                >
+                  <option value="">{m.workspace?.name}</option>
+                  {m.nav
+                    .filter((o) => o.type === 'page' && o.id !== preview.id)
+                    .map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {titleOf(o)}
+                      </option>
+                    ))}
+                </SelectInput>
+              </div>
+              <EditorSurface
+                mentions={m.mentions}
+                appSlice={appSlice}
+                presentation={presentation}
+                runtime={m.runtime}
+                workspaceId={m.session!.workspaceId}
+                target={{ id: preview.id, mode: 'preview' }}
+                autoFocusTitle
+                renderHeader={(actions, layout) =>
+                  layout.appMode ? null : (
+                    <div className="flex justify-end px-4 pt-2">{actions}</div>
+                  )
+                }
+                onOpen={({ id }) => m.setPreviewId(id)}
+                onNavigate={({ id }) => {
+                  const o = m.objects.find((o) => o.id === id);
+                  if (o) m.navigate(o);
+                }}
+              />
             </div>
-            <EditorSurface
-              mentions={m.mentions}
-              appSlice={appSlice}
-              presentation={presentation}
-              runtime={m.runtime}
-              workspaceId={m.session!.workspaceId}
-              target={{ id: preview.id, mode: 'preview' }}
-              autoFocusTitle
-              renderHeader={(actions, layout) =>
-                layout.appMode ? null : <div className="flex justify-end px-4 pt-2">{actions}</div>
-              }
-              onOpen={({ id }) => m.setPreviewId(id)}
-              onNavigate={({ id }) => {
-                const o = m.objects.find((o) => o.id === id);
-                if (o) m.navigate(o);
-              }}
-            />
-          </div>
-        </Modal>
-      )}
+          </Modal>
+        )}
+      </OverlayPresence>
     </div>
   );
 }

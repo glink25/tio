@@ -11,10 +11,94 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <title>Tio</title>
+    <style>
+      body {
+        margin: 0;
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 200;
+        display: grid;
+        place-content: center;
+        justify-items: center;
+        background: #fff;
+        transition: opacity 160ms ease-out;
+      }
+      #boot svg {
+        display: block;
+        width: 72px;
+        height: 72px;
+      }
+      #boot .mark-dot {
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: boot-dot 1.6s ease-in-out infinite;
+      }
+      #boot a {
+        display: block;
+        border-radius: 14px;
+      }
+      #boot a:focus-visible {
+        outline: 2px solid #808080;
+        outline-offset: 6px;
+      }
+      #boot[data-failed] .mark-dot {
+        animation: none;
+      }
+      #boot[data-ready] {
+        opacity: 0;
+        pointer-events: none;
+      }
+      @keyframes boot-dot {
+        0%,
+        100% {
+          transform: translateY(0);
+          opacity: 1;
+        }
+        50% {
+          transform: translateY(-10px);
+          opacity: 0.45;
+        }
+      }
+      @media (prefers-color-scheme: dark) {
+        #boot:not([data-theme='light']) {
+          background: #191919;
+        }
+        #boot:not([data-theme='light']) svg rect {
+          fill: #191919;
+        }
+        #boot:not([data-theme='light']) svg path,
+        #boot:not([data-theme='light']) svg circle {
+          fill: #eee;
+        }
+      }
+      #boot[data-theme='dark'] {
+        background: #191919;
+      }
+      #boot[data-theme='dark'] svg rect {
+        fill: #191919;
+      }
+      #boot[data-theme='dark'] svg path,
+      #boot[data-theme='dark'] svg circle {
+        fill: #eee;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot {
+          transition: none;
+        }
+        #boot .mark-dot {
+          animation: none;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot" role="status" aria-label="Tio" aria-busy="true">
+      <a href="" aria-label="Reload Tio"><!--tio-boot-logo--></a>
+    </div>
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/bootstrap.ts"></script>
     <div id="portal"></div>
   </body>
 </html>

@@ -1,4 +1,5 @@
 @import '../../ui/src/tokens.css';
+@import '../../ui/src/motion.css';
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css';
 @source './';
@@ -457,4 +458,15 @@
   border-radius: 0;
   box-shadow: none;
   background: transparent;
+}
+
+.tio-editor .tio-title-actions,
+.tio-editor .tio-cover-actions {
+  transition: opacity 120ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tio-editor .tio-title-actions,
+  .tio-editor .tio-cover-actions {
+    transition: none;
+  }
 }

@@ -30,3 +30,9 @@ Web 连接入口注册于 `apps/web/src/services/connection-entry/`。各集成�
 空状态插画源位于 `packages/ui/src/illustrations/`，由 `EmptyStateIllustration` 统一提供尺寸、主题颜色和读屏文案。页面采用空白纸张，工作空间采用打开的空收纳盒，回收站采用掀盖的空桶，以可见内腔表达无内容；使用原创 SVG，不增加插画库依赖。设计参考 [Ant Design Empty](https://ant.design/components/empty/) 的空容器表达，以及 [Atlassian Illustrations](https://atlassian.design/foundations/illustrations) 的中性、单一概念原则。
 
 独立静态发布包的构建与 npm 发行见 [Tio Pages](../../packages/pages/README.md)。完整检查先构建该包，再检查消费者类型；公开接口或打包方式的专项发布验收按需在 `tests/tmp/` 中执行；需要发布时验证真实 tarball，并记录实际结果，不能仅以 monorepo 内导入成功替代发布验收。
+
+## 界面过渡与首屏
+
+动效参数和样式统一维护于 `@tio/ui` 的 motion 模块，宿主与独立编辑器共用；富文本浮层通过 BlockNote 的过渡接口接入。条件渲染的弹窗在条件外使用 `OverlayPresence`，关闭时保留最后一次有效渲染供退出动画使用，同时停止交互；切换空间或卸载宿主直接清理。定位与视觉位移分开，避免覆盖 Tailwind、Radix 或 Floating UI 的定位属性；系统减少动态效果时立即完成过渡。
+
+Web 首屏在 HTML 内显示 SVG Logo 和内联 CSS 动画，Logo 由 Vite 从品牌唯一源注入，不依赖应用 JavaScript、图片请求或翻译资源。React 提交页面后移除加载层；启动失败时停止动画，Logo 链接可重新加载。宿主需要的轻量提及服务从 `@tio/web-editor/mentions` 导入，避免主入口提前加载编辑器。

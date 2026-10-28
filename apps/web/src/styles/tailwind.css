@@ -1,5 +1,6 @@
 @import '../../../../packages/ui/src/tokens.css';
 @import 'tailwindcss';
+@import '../../../../packages/ui/src/motion.css';
 @source '../../../../packages/ui/src';
 @source '../../../../packages/views/src';
 @source '../../../../packages/editor-blocknote/src';
@@ -314,4 +315,36 @@
 .login-brand header [role='combobox'] {
   border-color: #ffffff40;
   background: transparent;
+}
+
+.tio-sidebar {
+  transition: translate 200ms var(--tio-motion-ease-enter);
+}
+.tio-sidebar[data-collapsed='true'] {
+  pointer-events: none;
+}
+.tio-workspace-content[data-sidebar-animating] {
+  transition: margin-left 200ms var(--tio-motion-ease-enter);
+}
+.tio-tree-chevron {
+  transition:
+    rotate 140ms ease-out,
+    transform 140ms ease-out;
+}
+.tio-tree-actions,
+.tio-tree-grip {
+  transition: opacity 120ms ease-out;
+}
+[data-tree-dragging='true'] .tio-tree-row {
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tio-sidebar,
+  .tio-workspace-content,
+  .tio-tree-row,
+  .tio-tree-chevron,
+  .tio-tree-actions,
+  .tio-tree-grip {
+    transition: none !important;
+  }
 }

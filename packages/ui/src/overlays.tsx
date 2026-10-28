@@ -14,6 +14,7 @@ import {
 import { Toaster, toast as sonnerToast, type ExternalToast } from 'sonner';
 
 import { PortalContext, Modal, cn } from './index';
+import { OverlayPresence, useOverlayOpen } from './motion';
 import { ThemeContext } from './theme';
 
 export const NotificationContext = createContext('host');
@@ -74,9 +75,17 @@ export function Menu({
   children: ReactNode;
   label?: string;
 }) {
+  const overlayOpen = useOverlayOpen();
+  const [localOpen, setLocalOpen] = useState(false);
   const container = useContext(PortalContext);
   return (
-    <MenuPrimitive.Root open={open} onOpenChange={onOpenChange}>
+    <MenuPrimitive.Root
+      open={overlayOpen && (open ?? localOpen)}
+      onOpenChange={(next) => {
+        setLocalOpen(next);
+        onOpenChange?.(next);
+      }}
+    >
       <MenuPrimitive.Trigger asChild>{trigger}</MenuPrimitive.Trigger>
       <MenuPrimitive.Portal container={container}>
         <MenuPrimitive.Content
@@ -177,10 +186,11 @@ export function Popover({
   mobilePlacement?: 'sheet' | 'center' | 'anchor';
   tooltip?: string;
 }) {
+  const overlayOpen = useOverlayOpen();
   const container = useContext(PortalContext);
   const mobile = useMobile();
   const [localOpen, setLocalOpen] = useState(false);
-  const active = open ?? localOpen;
+  const active = overlayOpen && (open ?? localOpen);
   const change = (next: boolean) => {
     setLocalOpen(next);
     onOpenChange?.(next);
@@ -191,11 +201,17 @@ export function Popover({
         {cloneElement(trigger as ReactElement<{ onClick: () => void }>, {
           onClick: () => change(!active),
         })}
-        {active && (
-          <Modal mobilePlacement={mobilePlacement} title={label ?? ''} close={() => change(false)}>
-            {children}
-          </Modal>
-        )}
+        <OverlayPresence>
+          {active && (
+            <Modal
+              mobilePlacement={mobilePlacement}
+              title={label ?? ''}
+              close={() => change(false)}
+            >
+              {children}
+            </Modal>
+          )}
+        </OverlayPresence>
       </>
     );
   return (
@@ -238,15 +254,17 @@ export function Popover({
   );
 }
 export function Tooltip({ children, label }: { children: ReactNode; label: string }) {
+  const [open, setOpen] = useState(false);
+  const overlayOpen = useOverlayOpen();
   const container = useContext(PortalContext);
   return (
     <TooltipPrimitive.Provider delayDuration={350}>
-      <TooltipPrimitive.Root>
+      <TooltipPrimitive.Root open={overlayOpen && open} onOpenChange={setOpen}>
         <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
         <TooltipPrimitive.Portal container={container}>
           <TooltipPrimitive.Content
             sideOffset={5}
-            className="z-[100] max-w-[min(24rem,calc(100vw-24px))] rounded bg-ink px-2 py-1 text-xs break-words whitespace-pre-line text-panel"
+            className="tio-tooltip z-[100] max-w-[min(24rem,calc(100vw-24px))] rounded bg-ink px-2 py-1 text-xs break-words whitespace-pre-line text-panel"
           >
             {label}
           </TooltipPrimitive.Content>

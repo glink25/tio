@@ -1,6 +1,7 @@
 import { editable, knownTypes, firstAppSlice, isAppMode } from '@tio/core';
 import { Editor } from '@tio/editor-blocknote';
 import { useTranslation, useT } from '@tio/i18n';
+import { OverlayPresence } from '@tio/ui';
 import {
   Modal,
   MentionContext,
@@ -178,29 +179,31 @@ export function EditorSurface(props: EditorSurfaceProps) {
                 {actions}
               </header>
             )}
-            {showInfo && current && (
-              <Modal title={t('ui.documentInfo')} close={() => setShowInfo(false)}>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
-                  {(['createdAt', 'updatedAt'] as const).map((field) => (
-                    <div key={field} className="contents">
-                      <dt className="text-muted">
-                        {t(field === 'createdAt' ? 'ui.createdAt' : 'ui.updatedAt')}
-                      </dt>
-                      <dd className="m-0">
-                        <time dateTime={current[field]}>
-                          {current[field]
-                            ? new Intl.DateTimeFormat(i18n.language, {
-                                dateStyle: 'medium',
-                                timeStyle: 'long',
-                              }).format(new Date(current[field]!))
-                            : '—'}
-                        </time>
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </Modal>
-            )}
+            <OverlayPresence>
+              {showInfo && current && (
+                <Modal title={t('ui.documentInfo')} close={() => setShowInfo(false)}>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-3 text-sm">
+                    {(['createdAt', 'updatedAt'] as const).map((field) => (
+                      <div key={field} className="contents">
+                        <dt className="text-muted">
+                          {t(field === 'createdAt' ? 'ui.createdAt' : 'ui.updatedAt')}
+                        </dt>
+                        <dd className="m-0">
+                          <time dateTime={current[field]}>
+                            {current[field]
+                              ? new Intl.DateTimeFormat(i18n.language, {
+                                  dateStyle: 'medium',
+                                  timeStyle: 'long',
+                                }).format(new Date(current[field]!))
+                              : '—'}
+                          </time>
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </Modal>
+              )}
+            </OverlayPresence>
             {transfer.picker}
             {m.error && (
               <div role="alert" className="mx-4 rounded border border-red-300 p-3 text-sm">

@@ -17,6 +17,8 @@ import { ShadCNDefaultComponents } from '@blocknote/shadcn';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { forwardRef, type ReactElement, type MouseEventHandler } from 'react';
 
+import { useEditorMotion } from './motion';
+
 // These upstream leaf renderers use React 19's ref-as-prop convention.
 // Call them inside forwardRef so React 18 passes the ref through to Base UI.
 function bridge<P extends object>(render: (props: P) => ReactElement) {
@@ -167,10 +169,11 @@ export function EditorSideMenu() {
 // A non-empty link selection belongs to the formatting toolbar. The default
 // hover/caret link toolbar otherwise occupies the same anchor and covers it.
 export function EditorLinkToolbar() {
+  const floatingMotion = useEditorMotion();
   const editor = useBlockNoteEditor();
   const collapsed = useEditorState({
     editor,
     selector: ({ editor }) => editor.prosemirrorState.selection.empty,
   });
-  return collapsed ? <LinkToolbarController /> : null;
+  return collapsed ? <LinkToolbarController floatingUIOptions={floatingMotion} /> : null;
 }

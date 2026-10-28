@@ -11,6 +11,7 @@ import {
   createReactBlockSpec,
   useCreateBlockNote,
   SuggestionMenuController,
+  FormattingToolbarController,
   SideMenuController,
   getDefaultReactSlashMenuItems,
 } from '@blocknote/react';
@@ -21,6 +22,7 @@ import { CodeBlock } from './code-block';
 import { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
 import { MentionMenu, SlashMenu } from './mention-menu';
+import { useEditorMotion } from './motion';
 export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
 import { useT, useTranslation } from '@tio/i18n';
@@ -200,6 +202,7 @@ export function EditorContent({
   renderDatabase,
   renderAppSlice,
 }: EditorProps) {
+  const floatingMotion = useEditorMotion();
   const t = useT();
   const { schema, codecs, slashItems } = useContext(EditorSchemaContext);
   const { i18n } = useTranslation();
@@ -354,6 +357,7 @@ export function EditorContent({
           slashMenu={false}
           sideMenu={false}
           linkToolbar={false}
+          formattingToolbar={false}
           editable={!readOnly}
           theme={theme}
           onChange={() => {
@@ -378,14 +382,17 @@ export function EditorContent({
           }}
         >
           {!readOnly && <MentionMenu />}
+          <FormattingToolbarController floatingUIOptions={floatingMotion} />
           <EditorLinkToolbar />
           <SideMenuController
             sideMenu={EditorSideMenu}
-            floatingUIOptions={
-              mobile ? { useFloatingOptions: { placement: 'top-start' } } : undefined
-            }
+            floatingUIOptions={{
+              ...floatingMotion,
+              ...(mobile ? { useFloatingOptions: { placement: 'top-start' as const } } : {}),
+            }}
           />
           <SuggestionMenuController
+            floatingUIOptions={floatingMotion}
             triggerCharacter="/"
             suggestionMenuComponent={SlashMenu}
             getItems={async (query) =>
