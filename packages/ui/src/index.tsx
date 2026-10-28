@@ -170,7 +170,9 @@ export function Modal({
             {children}
           </div>
           {footer && (
-            <div className="shrink-0 border-t border-line bg-panel px-4 py-3 md:px-6">{footer}</div>
+            <div className="tio-dialog-footer shrink-0 border-t border-line bg-panel px-4 py-3 md:px-6">
+              {footer}
+            </div>
           )}
         </Dialog.Content>
       </Dialog.Portal>

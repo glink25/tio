@@ -197,19 +197,28 @@ a[href] {
     --tio-viewport-left: 0px;
     --tio-viewport-width: 100vw;
     --tio-viewport-height: 100dvh;
+    --tio-layout-height: 100dvh;
+    --tio-viewport-obscured: 0px;
+    --tio-content-obscured: max(
+      0px,
+      calc(var(--tio-viewport-obscured) - env(safe-area-inset-bottom, 0px))
+    );
     top: var(--tio-viewport-top);
     bottom: auto;
     left: var(--tio-viewport-left);
     width: var(--tio-viewport-width);
-    max-height: var(--tio-viewport-height);
+    max-height: calc(var(--tio-layout-height) - var(--tio-viewport-top));
     padding: 0;
   }
   .tio-dialog[data-placement='sheet']:not([data-wide='true']) {
-    top: calc(var(--tio-viewport-top) + var(--tio-viewport-height));
+    top: var(--tio-layout-height);
     translate: 0 -100%;
-    max-height: calc(var(--tio-viewport-height) - 12px - env(safe-area-inset-top, 0px));
+    max-height: calc(
+      var(--tio-layout-height) - var(--tio-viewport-top) - 12px - env(safe-area-inset-top, 0px)
+    );
   }
   .tio-dialog[data-placement='center'] {
+    --tio-content-obscured: 0px;
     top: calc(
       var(--tio-viewport-top) +
         (
@@ -240,12 +249,14 @@ a[href] {
   .tio-dialog[data-placement='full'],
   .tio-dialog[data-wide='true']:not([data-placement='center']),
   .tio-drawer {
-    height: var(--tio-viewport-height);
+    top: var(--tio-viewport-top);
+    height: calc(var(--tio-layout-height) - var(--tio-viewport-top));
     border-radius: 0;
   }
   .tio-dialog[data-placement='sidebar'] {
+    top: var(--tio-viewport-top);
     width: min(320px, calc(var(--tio-viewport-width) - 32px));
-    height: var(--tio-viewport-height);
+    height: calc(var(--tio-layout-height) - var(--tio-viewport-top));
     padding-left: env(safe-area-inset-left, 0px);
   }
   .tio-dialog[data-placement='sidebar'],
@@ -261,6 +272,25 @@ a[href] {
   .tio-dialog:not([data-placement='sidebar']):not([data-placement='center']),
   .tio-drawer {
     padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
+  }
+  /* Extend the panel behind the keyboard; only its content needs scroll clearance. */
+  .tio-dialog-body,
+  .tio-drawer-body {
+    scroll-padding-bottom: calc(12px + var(--tio-content-obscured));
+  }
+  .tio-dialog-body::after,
+  .tio-drawer-body::after {
+    content: '';
+    display: block;
+    height: var(--tio-content-obscured);
+    flex-shrink: 0;
+    pointer-events: none;
+  }
+  .tio-dialog:has(> .tio-dialog-footer):not([data-placement='center']) {
+    --tio-content-obscured: 0px;
+  }
+  .tio-dialog:not([data-placement='center']) > .tio-dialog-footer {
+    margin-bottom: max(0px, calc(var(--tio-viewport-obscured) - env(safe-area-inset-bottom, 0px)));
   }
   :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='range']):not(
       [type='file']

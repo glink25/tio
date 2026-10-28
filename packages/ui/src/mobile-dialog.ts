@@ -7,13 +7,18 @@ export function useMobileDialogPosition(): CSSProperties | undefined {
     const media = matchMedia('(max-width: 767px)');
     const viewport = window.visualViewport;
     const update = () => {
+      const layoutHeight = document.documentElement.clientHeight;
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
       setStyle(
         media.matches
           ? ({
-              '--tio-viewport-top': `${viewport?.offsetTop ?? 0}px`,
+              '--tio-layout-height': `${layoutHeight}px`,
+              '--tio-viewport-top': `${viewportTop}px`,
               '--tio-viewport-left': `${viewport?.offsetLeft ?? 0}px`,
               '--tio-viewport-width': `${viewport?.width ?? window.innerWidth}px`,
-              '--tio-viewport-height': `${viewport?.height ?? window.innerHeight}px`,
+              '--tio-viewport-height': `${viewportHeight}px`,
+              '--tio-viewport-obscured': `${Math.max(0, layoutHeight - viewportTop - viewportHeight)}px`,
             } as CSSProperties)
           : undefined,
       );
