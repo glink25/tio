@@ -324,6 +324,10 @@ test('downloads a searchable, paginated Chinese PDF and loads fonts only on dema
   expect(text).toContain('中文可以选择复制');
   expect(text).toContain('English text stays searchable');
   expect(text).toContain('数据 29');
-  expect(requested.some((url) => /\.otf(?:\?|$)/.test(url))).toBe(true);
+  for (const weight of ['Regular', 'Bold']) {
+    expect(requested).toContain(
+      `https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/Sans/SubsetOTF/SC/NotoSansSC-${weight}.otf`,
+    );
+  }
   await loading.destroy();
 });

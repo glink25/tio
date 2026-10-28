@@ -2,8 +2,6 @@ import { valueText, type Block } from '@tio/core';
 import pdfMake from 'pdfmake/build/pdfmake';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
 
-import boldUrl from './fonts/NotoSansCJKsc-Bold.otf?url';
-import regularUrl from './fonts/NotoSansCJKsc-Regular.otf?url';
 import { pdfBlocks, type ExportImage } from './pdf-content';
 import {
   contextFor,
@@ -13,6 +11,12 @@ import {
   requiredAsset,
   type PageExportInput,
 } from './shared';
+
+const FONT = {
+  regular:
+    'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/Sans/SubsetOTF/SC/NotoSansSC-Regular.otf',
+  bold: 'https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@Sans2.004/Sans/SubsetOTF/SC/NotoSansSC-Bold.otf',
+} as const;
 
 async function imageData(blob: Blob): Promise<ExportImage> {
   const url = URL.createObjectURL(blob);
@@ -64,13 +68,14 @@ export async function exportPDF(input: PageExportInput) {
     }
   };
   await walk(input.page.blocks ?? []);
-  const font = {
-    normal: new URL(regularUrl, location.href).href,
-    bold: new URL(boldUrl, location.href).href,
-    italics: new URL(regularUrl, location.href).href,
-    bolditalics: new URL(boldUrl, location.href).href,
-  };
-  pdfMake.addFonts({ Tio: font });
+  pdfMake.addFonts({
+    Tio: {
+      normal: FONT.regular,
+      bold: FONT.bold,
+      italics: FONT.regular,
+      bolditalics: FONT.bold,
+    },
+  });
   const title = input.page.title || input.labels.untitled;
   const definition: TDocumentDefinitions = {
     pageSize: 'A4',
