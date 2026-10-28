@@ -24,7 +24,7 @@
     "@tio/sync": "workspace:*",
     "@tio/web-editor": "workspace:*",
     "@tio/workspace": "workspace:*",
-    "@types/node": "^24.0.0",
+    "@types/node": "^26.6.5",
     "fake-indexeddb": "^6.2.4",
     "postcss": "^8.5.31",
     "typescript": "6.0.3",
