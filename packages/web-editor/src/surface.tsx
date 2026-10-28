@@ -7,7 +7,6 @@ import {
   EditHistoryContext,
   Button,
   IconButton,
-  ObjectIcon,
   EmptyNotice,
   cn,
   Menu,
@@ -34,6 +33,9 @@ import { AppSlice } from './app-slice/view';
 import { useEditorController, type EditorSurfaceProps } from './controller';
 import { DatabaseEmbed } from './database-embed';
 import { EditorDialogs } from './dialogs';
+import { DocumentCover } from './document-cover';
+import { DocumentIcon, DocumentMediaActions } from './document-icon';
+import { DocumentTitle } from './document-title';
 import { useHistoryShortcuts } from './history';
 import { LoadNotice } from './load-notice';
 import { RecordContent } from './record-detail';
@@ -52,7 +54,7 @@ export function EditorSurface(props: EditorSurfaceProps) {
     [m.runtime],
   );
   const transfer = useTransferMenu(m, props);
-  const titleRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (props.autoFocusTitle) {
       titleRef.current?.focus();
@@ -189,93 +191,132 @@ export function EditorSurface(props: EditorSurfaceProps) {
             {!current && props.target.id ? (
               <LoadNotice runtime={m.runtime} id={props.target.id} />
             ) : current ? (
-              <main
-                className={cn(
-                  'mx-auto min-w-0 px-5 pt-10 pb-24 md:px-12 md:pt-16',
-                  fullWidth ? 'max-w-none' : 'max-w-[856px]',
+              <>
+                {(current.type === 'page' || current.type === 'database') && (
+                  <DocumentCover
+                    key={`${props.workspaceId}:${current.id}`}
+                    object={current}
+                    editable={m.can(current)}
+                    patch={(changes) => m.patch(current, changes)}
+                    upload={m.upload}
+                    resolve={m.resolve}
+                  />
                 )}
-              >
-                {current.type !== 'record' && (
-                  <>
-                    {current.icon && (
-                      <div className="mb-4 text-muted">
-                        <ObjectIcon type={current.type} icon={current.icon} size={38} />
+                <main
+                  className={cn(
+                    'mx-auto min-w-0 px-5 pt-10 pb-24 md:px-12 md:pt-16',
+                    fullWidth ? 'max-w-none' : 'max-w-[856px]',
+                    current.cover && current.icon && 'pt-0 md:pt-0',
+                  )}
+                >
+                  {current.type !== 'record' && (
+                    <div>
+                      {(current.type === 'page' || current.type === 'database') && (
+                        <DocumentIcon
+                          key={`${props.workspaceId}:${current.id}`}
+                          object={current}
+                          editable={m.can(current)}
+                          patch={(changes) => m.patch(current, changes)}
+                          upload={m.upload}
+                          resolve={m.resolve}
+                        />
+                      )}
+                      <div className="tio-title-area relative">
+                        {(current.type === 'page' || current.type === 'database') && (
+                          <DocumentMediaActions
+                            key={`${props.workspaceId}:${current.id}`}
+                            object={current}
+                            editable={m.can(current)}
+                            patch={(changes) => m.patch(current, changes)}
+                            upload={m.upload}
+                            resolve={m.resolve}
+                          />
+                        )}
+                        <DocumentTitle
+                          ref={titleRef}
+                          key={`title-${current.id}`}
+                          className="tio-page-title block w-full resize-none overflow-hidden !rounded-none !border-0 !bg-transparent !p-0 !text-3xl !leading-tight !font-semibold tracking-tight [overflow-wrap:anywhere] outline-none md:!text-[40px]"
+                          aria-label={t('document.title')}
+                          placeholder={t('common.untitled')}
+                          value={current.title ?? current.name ?? ''}
+                          readOnly={!m.can(current) || !editable(current)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                              event.preventDefault();
+                              event.currentTarget
+                                .closest('main')
+                                ?.querySelector<HTMLElement>('[contenteditable=true]')
+                                ?.focus();
+                            }
+                          }}
+                          onChange={(e) =>
+                            m.patch(
+                              current,
+                              current.type === 'database'
+                                ? { name: e.target.value.replace(/[\r\n]/g, '') }
+                                : { title: e.target.value.replace(/[\r\n]/g, '') },
+                            )
+                          }
+                        />
+                        <div className="h-7" />
                       </div>
-                    )}
-                    <input
-                      ref={titleRef}
-                      key={`title-${current.id}`}
-                      className="tio-page-title w-full !rounded-none !border-0 !bg-transparent !p-0 !text-3xl !leading-tight !font-semibold tracking-tight outline-none md:!text-[40px]"
-                      aria-label={t('document.title')}
-                      placeholder={t('common.untitled')}
-                      value={current.title ?? current.name ?? ''}
-                      readOnly={!m.can(current) || !editable(current)}
-                      onChange={(e) =>
-                        m.patch(
-                          current,
-                          current.type === 'database'
-                            ? { name: e.target.value }
-                            : { title: e.target.value },
-                        )
-                      }
-                    />
-                    <div className="h-7" />
-                  </>
-                )}
-                {!editable(current) ? (
-                  <EmptyNotice>{t('document.unsupported')}</EmptyNotice>
-                ) : current.type === 'record' ? (
-                  <RecordContent model={m} />
-                ) : current.type === 'page' ? (
-                  <>
-                    <Editor
-                      key={current.id}
-                      onSubpage={() => m.addPage(current.id)}
-                      onDatabase={() => m.setEmbedPicker(true)}
-                      blocks={current.blocks ?? []}
-                      readOnly={!m.can(current)}
-                      onChange={(b, p, group) => m.changeBlocks(current, b, p, group)}
-                      upload={m.upload}
-                      resolve={m.resolve}
-                      renderAppSlice={(block) => (
-                        <AppSlice model={m} page={current} block={block} />
-                      )}
-                      renderDatabase={(databaseId, viewId) => (
-                        <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />
-                      )}
-                    />
-                    {empty && m.can(current) && (
-                      <div className="mt-12 text-sm text-muted">
-                        <p className="mb-3">{t('ui.start')}</p>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => {
-                              const el = titleRef.current
-                                ?.closest('main')
-                                ?.querySelector<HTMLElement>('[contenteditable=true]');
-                              el?.focus();
-                            }}
-                          >
-                            <FileText size={15} />
-                            {t('ui.text')}
-                          </Button>
-                          <Button variant="outline" onClick={() => m.addPage(current.id)}>
-                            <Plus size={15} />
-                            {t('page.child')}
-                          </Button>
-                          <Button variant="outline" onClick={() => m.setEmbedPicker(true)}>
-                            <Database size={15} />
-                            {t('ui.databases')}
-                          </Button>
+                    </div>
+                  )}
+                  {!editable(current) ? (
+                    <EmptyNotice>{t('document.unsupported')}</EmptyNotice>
+                  ) : current.type === 'record' ? (
+                    <RecordContent model={m} />
+                  ) : current.type === 'page' ? (
+                    <>
+                      <Editor
+                        key={current.id}
+                        onSubpage={() => m.addPage(current.id)}
+                        onDatabase={() => m.setEmbedPicker(true)}
+                        blocks={current.blocks ?? []}
+                        readOnly={!m.can(current)}
+                        onChange={(b, p, group) => m.changeBlocks(current, b, p, group)}
+                        upload={m.upload}
+                        resolve={m.resolve}
+                        renderAppSlice={(block) => (
+                          <AppSlice model={m} page={current} block={block} />
+                        )}
+                        renderDatabase={(databaseId, viewId) => (
+                          <DatabaseEmbed model={m} databaseId={databaseId} viewId={viewId} />
+                        )}
+                      />
+                      {empty && m.can(current) && (
+                        <div className="mt-12 text-sm text-muted">
+                          <p className="mb-3">{t('ui.start')}</p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                const el = titleRef.current
+                                  ?.closest('main')
+                                  ?.querySelector<HTMLElement>('[contenteditable=true]');
+                                el?.focus();
+                              }}
+                            >
+                              <FileText size={15} />
+                              {t('ui.text')}
+                            </Button>
+                            <Button variant="outline" onClick={() => m.addPage(current.id)}>
+                              <Plus size={15} />
+                              {t('page.child')}
+                            </Button>
+                            <Button variant="outline" onClick={() => m.setEmbedPicker(true)}>
+                              <Database size={15} />
+                              {t('ui.databases')}
+                            </Button>
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <DatabaseEmbed key={current.id} model={m} databaseId={current.id} fullPage />
-                )}
-              </main>
+                      )}
+                    </>
+                  ) : (
+                    <DatabaseEmbed key={current.id} model={m} databaseId={current.id} fullPage />
+                  )}
+                </main>
+              </>
             ) : (
               <div className="p-12 text-center">
                 <h2 className="mb-4 text-xl">{t('ui.noSelection')}</h2>

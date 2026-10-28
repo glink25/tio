@@ -1,6 +1,6 @@
 # Tio Pages 与博客复刻
 
-静态发布能力见 [@glink25/tio-pages](../../packages/pages/README.md)，迁移、本地预览、模板和 GitHub Actions 使用见 [博客示例](../../examples/blog/README.md)。
+静态发布能力见 [@glink25/tio-pages](../../packages/pages/README.md)，个人博客位于同级 `tio-blog` workspace，其配置与使用说明随该 workspace 保存。
 
 渲染和文件输出分开：`ssr` 只投影当前块为 HTML；`page` 接收显式路由计划，处理页面引用和附件；Node 宿主复用 `FileWorkspaceContent` 读取标准对象及分片。博客模板通过 PageMap 的页面提及、Tags 关系与发布字段决定输出，不依赖编辑器生命周期。Urodele 转换限定在示例迁移器中，核心不引入历史 Tio 格式兼容。
 
@@ -50,7 +50,7 @@
 
 npm 上传与本地验收分开记录：本次只执行打包、安装与 publish dry-run。当前 npm 身份检查为未认证，尚未上传 registry，也未执行云端部署。npm 包由维护者单独发布，首次发布仍需有效 npm 身份。
 
-博客构建部署工作流只属于目标 workspace 仓库。本体中的 `examples/blog/github-pages.yml` 是待复制的模板，迁移后位于目标 workspace 的 `.github/workflows/pages.yml`；本体 `.github/workflows/` 仅保留质量检查 CI，不注册博客部署或 npm 自动发布。
+博客构建部署工作流只属于目标 workspace 仓库。部署工作流位于目标 workspace 的 `.github/workflows/pages.yml`；本体 `.github/workflows/` 仅保留质量检查 CI，不注册博客部署或 npm 自动发布。
 
 ## Workspace 渲染静态化验收（2026-10-28）
 
@@ -93,3 +93,9 @@ node tests/scripts/audit-pages-output.mjs ../tio-blog/.tio-page/dist tests/.cach
 ## 可选文章 Slug（2026-10-28）
 
 PageMap 的 `path` 文本列改为可选的 `slug`。站点配置通过 `slugify(title)` 指定默认算法（原博客 `github-slugger.slug(title, true)`），通过 `routes.post(slug)` 指定路径（默认 `/post/`）。显式 slug 优先；空值与空白值按标题生成。生成空 slug 时构建报错，重复 URL 由静态构建统一拒绝。当前 42 条映射保留原 URL 的 slug，文章页面及其系统时间不变，ZIP 已刷新。
+
+## 正式 npm 包与独立博客
+
+移除本体 `examples/blog` 及其迁移、构建、预览快捷命令。个人站点由同级 `tio-blog` 维护；本体仅在 `tests/fixtures/pages/blog` 保留排序、SSR 和发布产物测试所需的固定夹具。目标 workspace 直接通过 npm 的 `@glink25/tio-pages@0.1.0` 构建。
+
+正式发布：`@glink25/tio-pages@0.1.0` 已通过 npm 账号双重认证上传 registry；目标博客的构建命令和 GitHub Actions 均固定使用该版本，本地预览使用 workspace 内独立 Node 脚本。

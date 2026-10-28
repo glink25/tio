@@ -3,7 +3,7 @@ import { object, type TioObject } from '@tio/core';
 import { executeCommand } from '@tio/workspace';
 import { describe, expect, it } from 'vitest';
 
-import { blogPlan, type BlogOptions } from '../../../examples/blog/.tio-page/template';
+import { blogPlan, type BlogOptions } from '../../fixtures/pages/blog/template';
 
 const config: BlogOptions = {
   workspaceId: 'blog',
@@ -172,6 +172,21 @@ describe('original blog ordering', () => {
     page.title = '!!!';
     expect(() => blogPlan(objects, config, { headHtml: () => '' })).toThrow(
       'Empty publication slug',
+    );
+  });
+  it('ignores incomplete mapping rows without a post reference', () => {
+    const objects = fixture();
+    const before = blogPlan(objects, config, { headHtml: () => '' }).routes.map((r) => r.path);
+    objects.push(
+      object('record', 'blog', {
+        id: 'empty-map',
+        databaseId: 'maps',
+        properties: { title: 'Untitled' },
+        blocks: [],
+      }),
+    );
+    expect(blogPlan(objects, config, { headHtml: () => '' }).routes.map((r) => r.path)).toEqual(
+      before,
     );
   });
   it('requires the page update date instead of sorting by mapping-record timestamps', () => {

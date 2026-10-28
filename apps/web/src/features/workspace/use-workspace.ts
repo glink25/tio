@@ -1,4 +1,5 @@
 import { chooseFolder } from '@tio/adapter-local-folder';
+import { AssetResolver } from '@tio/assets/browser';
 import { id, visibility, editable, ConnectionAccessError, type TioObject } from '@tio/core';
 import type { WorkspaceSession, Connection } from '@tio/core';
 import { t, i18n, errorMessage } from '@tio/i18n';
@@ -12,7 +13,7 @@ import {
   WorkspaceRuntime,
   emptyWorkspaceState,
 } from '@tio/workspace';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 
@@ -31,6 +32,12 @@ export function useWorkspace() {
   const [services] = useState(() => new WorkspaceServices());
   const [runtime, setRuntime] = useState<WorkspaceRuntime | null>(null);
   const runtimeRef = useRef<WorkspaceRuntime | null>(null);
+  const mediaResolver = useMemo(() => (runtime ? new AssetResolver(runtime) : null), [runtime]);
+  useEffect(() => () => mediaResolver?.dispose(), [mediaResolver]);
+  const resolveMedia = useCallback(
+    async (ref: string) => mediaResolver?.resolve(ref) ?? '',
+    [mediaResolver],
+  );
   const state = useStore(runtime?.state ?? emptyStore);
   const objects = state.objects;
   const saveStatus = state.status;
@@ -550,6 +557,7 @@ export function useWorkspace() {
     connection,
     supportsSync: services.supportsSync,
     runtime,
+    resolveMedia,
     renaming,
     setRenaming,
     renameWorkspace,

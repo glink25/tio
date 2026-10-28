@@ -218,7 +218,7 @@ export function Popover({
           sideOffset={6}
           collisionPadding={12}
           className={cn(
-            'tio-popover z-[80] w-80 max-w-[calc(100vw-24px)] rounded-xl border border-line bg-panel p-3 text-sm text-ink shadow-xl outline-none',
+            'tio-popover z-[80] max-h-[var(--radix-popover-content-available-height)] w-80 max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border border-line bg-panel p-3 text-sm text-ink shadow-xl outline-none',
             className,
           )}
         >

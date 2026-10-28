@@ -6,17 +6,14 @@ import { buildSiteDirectory, folderContent } from '@glink25/tio-pages/node';
 import { chromium } from '@playwright/test';
 import { object, type Block } from '@tio/core';
 
-import { repoRoot, testsRoot } from '../paths';
+import { testsRoot } from '../paths';
 
 process.env.PUPPETEER_EXECUTABLE_PATH ??= chromium.executablePath();
 const root = join(testsRoot, '.cache/pages-browser');
 await rm(root, { recursive: true, force: true });
 await mkdir(join(root, '.tio-page'), { recursive: true });
 await copyFile(join(testsRoot, 'fixtures/pages/config.ts'), join(root, '.tio-page/config.ts'));
-await copyFile(
-  join(repoRoot, 'examples/blog/.tio-page/style.css'),
-  join(root, '.tio-page/style.css'),
-);
+await copyFile(join(testsRoot, 'fixtures/pages/blog/style.css'), join(root, '.tio-page/style.css'));
 const code = (id: string, language: string, displayMode: string, source: string): Block => ({
   id,
   type: 'codeBlock',

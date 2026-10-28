@@ -1,3 +1,10 @@
+import {
+  validDocumentIcon,
+  validDocumentCover,
+  type DocumentIcon,
+  type DocumentCover,
+} from './media';
+export * from './media';
 export * from './diagnostics';
 import { validateFieldDefinition } from './fields';
 import { assertJson } from './json';
@@ -84,7 +91,8 @@ export interface TioObject {
   deleted?: boolean;
   title?: string;
   name?: string;
-  icon?: string;
+  icon?: DocumentIcon;
+  cover?: DocumentCover | null;
   parentId?: string | null;
   order?: number;
   blocks?: Block[];
@@ -243,8 +251,10 @@ export function validateBuiltin(object: TioObject): TioObject {
     )
       throw new Error('非法查询条件');
   }
-  for (const key of ['title', 'name', 'icon'])
+  for (const key of ['title', 'name'])
     if (input[key] !== undefined && typeof input[key] !== 'string') throw new Error('非法名称');
+  if (input.icon !== undefined && !validDocumentIcon(input.icon)) throw new Error('非法图标');
+  if (input.cover !== undefined && !validDocumentCover(input.cover)) throw new Error('非法封面');
   if (
     input.type === 'asset' &&
     (typeof input.assetPath !== 'string' ||

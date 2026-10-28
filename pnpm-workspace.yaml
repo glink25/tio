@@ -1,7 +1,6 @@
 packages:
   - apps/*
   - packages/*
-  - examples/*
   - tests
 minimumReleaseAgeExclude:
   - i18next@26.5.5

@@ -160,7 +160,7 @@ console.log(
   `Verified ${packed.name}@${packed.version}: installed tarball, CLI, public types, Shiki and local HTML/Mermaid assets.`,
 );
 console.log(log.trim());
-await cp(join(repo, 'examples/blog/.tio-page'), join(workspace, '.tio-page/blog-template'), {
+await cp(join(repo, 'tests/fixtures/pages/blog'), join(workspace, '.tio-page/blog-template'), {
   recursive: true,
 });
 // The actual blog template must also use public package exports only.

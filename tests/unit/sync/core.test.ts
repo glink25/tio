@@ -135,22 +135,27 @@ describe('persistence and synchronization', () => {
     await engine(b, p).sync();
     expect(await (await b.blob('asset_1'))?.text()).toBe('abc');
   });
-  it('blocks business publication if attachment cannot upload', async () => {
-    const s = store(),
-      p = new MemoryProvider(),
-      asset = object('asset', 'base_1', {
-        id: 'asset_1',
-        assetPath: 'assets/asset_1.png',
-        mime: 'image/png',
-        byteSize: 3,
-      });
-    const linkedPage = page();
-    linkedPage.blocks![0].props.url = 'asset:asset_1';
-    await s.batch([asset, linkedPage], new Map([['asset_1', new Blob(['abc'])]]));
-    p.beforeWrite = async (path) => {
-      if (path.endsWith('.png')) throw new Error('disk full');
-    };
-    await engine(s, p).sync();
-    expect(p.files.has(pathFor(page()))).toBe(false);
-  });
+  it.each(['blocks', 'icon', 'cover'] as const)(
+    'blocks publication if a %s attachment cannot upload',
+    async (kind) => {
+      const s = store(),
+        p = new MemoryProvider(),
+        asset = object('asset', 'base_1', {
+          id: 'asset_1',
+          assetPath: 'assets/asset_1.png',
+          mime: 'image/png',
+          byteSize: 3,
+        });
+      const linkedPage = page();
+      if (kind === 'blocks') linkedPage.blocks![0].props.url = 'asset:asset_1';
+      else if (kind === 'icon') linkedPage.icon = { type: 'image', url: 'asset:asset_1' };
+      else linkedPage.cover = { type: 'image', url: 'asset:asset_1', positionY: 0.5 };
+      await s.batch([asset, linkedPage], new Map([['asset_1', new Blob(['abc'])]]));
+      p.beforeWrite = async (path) => {
+        if (path.endsWith('.png')) throw new Error('disk full');
+      };
+      await engine(s, p).sync();
+      expect(p.files.has(pathFor(page()))).toBe(false);
+    },
+  );
 });

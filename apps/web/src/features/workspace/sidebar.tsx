@@ -328,7 +328,7 @@ function PageTree({
               className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left text-sm text-secondary"
               onClick={() => m.navigate(o)}
             >
-              <ObjectIcon type={o.type} icon={o.icon} size={16} />
+              <ObjectIcon type={o.type} icon={o.icon} size={16} resolve={m.resolveMedia} />
               <span className="truncate">{titleOf(o)}</span>
             </button>
             <div className="flex shrink-0 opacity-100 group-focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100">

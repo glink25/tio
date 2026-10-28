@@ -1,8 +1,12 @@
+import type { DocumentIcon } from '@tio/core';
+
+import { builtinIcons, useMediaUrl, type MediaResolver } from './media';
+export { builtinIcons, coverPresets, useMediaUrl, type MediaResolver } from './media';
 export { EditHistoryContext, useDraftHistory, type EditHistory } from './edit-history';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useT } from '@tio/i18n';
 import { clsx, type ClassValue } from 'clsx';
-import { X, Languages, FileText, Database, Leaf, NotebookPen } from 'lucide-react';
+import { X, Languages, FileText, Database } from 'lucide-react';
 import {
   createContext,
   useContext,
@@ -198,14 +202,47 @@ export function ObjectIcon({
   type,
   icon,
   size = 18,
+  resolve,
 }: {
   type: string;
-  icon?: string;
+  icon?: DocumentIcon;
+  resolve?: MediaResolver;
   size?: number;
 }) {
-  const Component =
-    type === 'database' ? Database : icon === '🌿' ? Leaf : icon === '✍️' ? NotebookPen : FileText;
-  return <Component size={size} strokeWidth={1.7} aria-hidden />;
+  const url = useMediaUrl(
+    typeof icon === 'object' && icon.type === 'image' ? icon.url : undefined,
+    resolve,
+  );
+  const [failed, setFailed] = useState('');
+  const style = { width: size, height: size, flexShrink: 0 };
+  if (typeof icon === 'object') {
+    if (icon.type === 'builtin') {
+      const Icon = builtinIcons[icon.name];
+      return <Icon size={size} style={style} strokeWidth={1.7} aria-hidden />;
+    }
+    if (url && failed !== url)
+      return (
+        <img
+          src={url}
+          alt=""
+          style={style}
+          className="rounded-sm object-cover"
+          onError={() => setFailed(url)}
+        />
+      );
+  }
+  if (typeof icon === 'string' && icon)
+    return (
+      <span
+        className="inline-flex items-center justify-center leading-none"
+        style={{ ...style, fontSize: size }}
+        aria-hidden
+      >
+        {icon}
+      </span>
+    );
+  const Component = type === 'database' ? Database : FileText;
+  return <Component size={size} style={style} strokeWidth={1.7} aria-hidden />;
 }
 export function EmptyNotice({ children }: { children: ReactNode }) {
   return (

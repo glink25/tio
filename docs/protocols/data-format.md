@@ -5,11 +5,15 @@
 | 类型         | 主要字段                                                     |
 | ------------ | ------------------------------------------------------------ |
 | workspace    | name                                                         |
-| page         | title、parentId、order、blocks、可选 icon                    |
-| database     | name、parentId、order、fields、可选 icon                     |
+| page         | title、parentId、order、blocks、可选 icon/cover              |
+| database     | name、parentId、order、fields、可选 icon/cover               |
 | record       | databaseId、按字段 ID 保存的 properties、blocks              |
 | databaseView | databaseId、layout、visibleFieldIds、filters、sorts、groupBy |
 | asset        | filename、mime、byteSize、assetPath                          |
+
+页面和数据库的 `icon` 可以是 Emoji 字符串、`{type: 'builtin', name}` 内置图标，或 `{type: 'image', url}` 图片；空字符串表示移除。`cover` 为 `{type: 'preset', id}` 预设，或 `{type: 'image', url, positionY, credit?}` 图片，`null` 表示移除。预设与内置图标使用固定目录 ID；`positionY` 为 0–1 的垂直裁切位置，居中为 0.5。可选署名为 `{name, url}`，供精选 Unsplash 图片保留作者信息。
+
+图片 `url` 使用 `asset:<assetId>` 或 HTTP(S) 链接，不保存 Blob URL。图标与封面修改及定位保存经过统一命令并推进自身修改时间；定位拖动和取消仅影响临时 UI。上传图片沿用附件存储、备份及同步链路。Markdown/PDF 的阅读投影与静态站点模板不自动包含文档装饰。
 
 导航由 `parentId/order` 派生，不保存第二份权威子节点清单。删除父节点隐藏其导航子树。数据库嵌入通过 databaseId/viewId 引用；删除嵌入不删除数据库。
 

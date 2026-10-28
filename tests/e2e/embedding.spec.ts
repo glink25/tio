@@ -251,3 +251,64 @@ test('numbered lists with an explicit start remain editable and persist as lists
   expect(saved[0].props.start).toBe(3);
   expect(JSON.stringify(saved[0].content)).toContain('First list item edited');
 });
+
+test('an image upload finishing after navigation never updates either document icon', async ({
+  page,
+}) => {
+  const bytes = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 2;
+    canvas.height = 2;
+    canvas.getContext('2d')!.fillRect(0, 0, 2, 2);
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  await page.evaluate(() => {
+    // Keep the original method; the wrapper below supplies its File receiver with call().
+    // oxlint-disable-next-line typescript/unbound-method
+    const read = File.prototype.arrayBuffer;
+    File.prototype.arrayBuffer = async function () {
+      const bytes = await read.call(this);
+      await new Promise<void>((resolve) => {
+        (window as any).releaseMediaRead = resolve;
+      });
+      return bytes;
+    };
+  });
+  await page.locator('#one').getByRole('button', { name: 'Change icon', exact: true }).click();
+  await page.getByRole('tab', { name: 'Upload', exact: true }).click();
+  await page.getByLabel('Upload image', { exact: true }).setInputFiles({
+    name: 'delayed.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(bytes, 'base64'),
+  });
+  await page.waitForFunction(() => !!(window as any).releaseMediaRead);
+  await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    await f.one.open({ id: f.recordId });
+  });
+  await expect(page.locator('#one').getByRole('tab', { name: 'Upload', exact: true })).toHaveCount(
+    0,
+  );
+  await page.evaluate(() => (window as any).releaseMediaRead());
+  await expect
+    .poll(async () =>
+      page.evaluate(async () => {
+        const entries = (await (window as any).fixture.repository.readSnapshot()).entries;
+        return entries.some((entry: any) => entry.object.filename === 'delayed.png');
+      }),
+    )
+    .toBe(true);
+  const icons = await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    await f.one.flush();
+    const entries = (await f.repository.readSnapshot()).entries;
+    return {
+      home: entries.find((entry: any) => entry.object.id === f.target.id).object.icon,
+      record: entries.find((entry: any) => entry.object.id === f.recordId).object.icon,
+    };
+  });
+  expect(icons).toEqual({ home: '🌿', record: undefined });
+  await expect(page.locator('#one').getByRole('tab', { name: 'Upload', exact: true })).toHaveCount(
+    0,
+  );
+});

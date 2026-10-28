@@ -84,11 +84,11 @@ HTML/Mermaid 的 `code`、`preview`、`split` 优先采用块的 `props.displayM
 - Mermaid 在构建时通过 Puppeteer 和官方 Mermaid 库生成深浅主题 SVG，以 `<picture>` 选择主题。不输出 Mermaid 脚本、语法解析器、字体包或其他运行时。没有 JavaScript 时也可以显示图表并切换 code/preview/split。
 - Mermaid 源码非法会中止构建，保留上一次输出。构建机需要 Chrome/Chromium：可使用 Puppeteer 安装的浏览器，或配置 `code.mermaid.executablePath` / `PUPPETEER_EXECUTABLE_PATH` 指向现有浏览器；`code.mermaid.args` 提供构建浏览器启动参数。普通文档与代码高亮不启动浏览器。
 - `renderBlock` 扩展可调用 `context.requireScript(url)` 注册本页必需脚本，构建器逐页去重注入。第三方或个人配置的脚本独立于 workspace 渲染，保持显式配置。
-- 全部样式仍在站点 CSS 中；示例 [style.css](../../examples/blog/.tio-page/style.css) 提供深浅主题、原生模式控件和窄屏分屏样式。
+- 全部样式仍在站点 CSS 中；示例 [style.css](../../tests/fixtures/pages/blog/style.css) 提供深浅主题、原生模式控件和窄屏分屏样式。
 
 `renderBlock(block, context)` 可扩展或覆盖块渲染，`context.renderChildren` 用于递归渲染子块。未知块默认使构建失败，避免静默丢失内容。路由使用解码的根路径（`/post/中文` 输出 `post/中文/index.html`），重复输出或缺失附件会失败。
 
-完整迁移与发布示例见 [博客示例](../../examples/blog/README.md)。
+个人博客的模板、配置、样式和部署工作流由目标 workspace 自行维护；本包不包含特定博客实现。
 
 ## npm 发行
 
@@ -104,6 +104,6 @@ npm publish --access public
 
 `prepack` 自动构建发布产物。检查脚本会安装真实 tarball，再验证独立 CLI、用户配置类型、实际博客模板类型、高亮/静态 SVG 与阅读端资源边界。Mermaid 的测试构建使用 `@tio/tests` 安装的 Playwright Chromium；运行前安装 `corepack pnpm --filter @tio/tests exec playwright install chromium`。产物在 `tests/.cache/pages-package/`。不应把该本地产物验证或 `npm publish --dry-run` 记为已上传 registry。
 
-这里提供的 GitHub Pages 工作流属于目标 workspace 仓库：模板位于 `examples/blog/github-pages.yml`，迁移时写入目标目录的 `.github/workflows/pages.yml`。它安装已发布的 npm 包，读取同仓库的 `.tio-page/` 和 `workspaces/`，构建并部署该 workspace 的站点。本体仓库不注册博客部署或 npm 自动发布工作流；npm 包由维护者按上述命令单独发布。
+这里提供的 GitHub Pages 工作流属于目标 workspace 仓库：工作流保存在目标目录的 `.github/workflows/pages.yml`。它安装已发布的 npm 包，读取同仓库的 `.tio-page/` 和 `workspaces/`，构建并部署该 workspace 的站点。本体仓库不注册博客部署或 npm 自动发布工作流；npm 包由维护者按上述命令单独发布。
 
 `slug` is re-exported from `github-slugger` for trusted site configuration. A blog may configure `slugify: (title) => slug(title, true)` and its own post route function; the package does not prescribe publication fields or URL rules.
