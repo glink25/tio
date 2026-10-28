@@ -9,6 +9,7 @@ import { clsx, type ClassValue } from 'clsx';
 import { X, FileText, Database } from 'lucide-react';
 import {
   createContext,
+  useCallback,
   useContext,
   forwardRef,
   useEffect,
@@ -26,6 +27,7 @@ export { OverlayPresence, useOverlayOpen, useReducedMotion, motion } from './mot
 
 import { useMobileDialogPosition } from './mobile-dialog';
 import { registerOverlay } from './overlay-history';
+import { useOverlayInteraction } from './overlay-interaction';
 import { ChoiceSelect } from './select';
 export function cn(...values: ClassValue[]) {
   return twMerge(clsx(values));
@@ -74,7 +76,9 @@ export function Modal({
   header,
   footer,
   hideHeader = false,
+  restoreFocus,
 }: {
+  restoreFocus?: () => void;
   layout?: 'default' | 'workspace';
   hideHeader?: boolean;
   trackHistory?: boolean;
@@ -92,6 +96,7 @@ export function Modal({
   const open = useOverlayOpen();
   useOverlayBack(close, trackHistory && open);
   const position = useMobileDialogPosition();
+  const interaction = useOverlayInteraction(open, close, restoreFocus);
   return (
     <Dialog.Root
       open={open}
@@ -102,14 +107,7 @@ export function Modal({
       <Dialog.Portal container={useContext(PortalContext)}>
         <Dialog.Overlay className="tio-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
         <Dialog.Content
-          onCloseAutoFocus={(event) => {
-            // A replacement dialog may already own focus when this exit finishes.
-            const focusedDialog = document.activeElement?.closest(
-              '.tio-dialog[data-state="open"], .tio-drawer[data-state="open"]',
-            );
-            if (focusedDialog && !focusedDialog.contains(event.target as Node))
-              event.preventDefault();
-          }}
+          {...interaction}
           onEscapeKeyDown={(event) => {
             // Floating controls are portalled; their Escape must not dismiss the containing dialog.
             const floating = [
@@ -197,6 +195,14 @@ export function Drawer({
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const open = useOverlayOpen();
   useOverlayBack(close, open);
+  const { ref: attachInteraction, ...interaction } = useOverlayInteraction(open, close);
+  const attach = useCallback(
+    (node: HTMLDivElement | null) => {
+      setPortalContainer(node);
+      attachInteraction(node);
+    },
+    [attachInteraction],
+  );
   return (
     <Dialog.Root
       open={open}
@@ -209,7 +215,8 @@ export function Drawer({
         <Dialog.Content
           {...{ inert: !open ? '' : undefined }}
           style={position}
-          ref={setPortalContainer}
+          {...interaction}
+          ref={attach}
           aria-describedby={undefined}
           className="tio-drawer fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col overflow-hidden bg-panel shadow-xl"
         >

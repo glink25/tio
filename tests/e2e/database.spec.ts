@@ -133,6 +133,24 @@ test('record drawer content supports typing, slash insertion and reopening', asy
 test('cell drafts and committed cells share keyboard and menu undo/redo without reopening the workspace', async ({
   page,
 }) => {
+  // Layout changes must not discard a cell's unconfirmed input (including
+  // viewport changes while a mobile keyboard opens).
+  const canvas = page.locator('canvas').first();
+  await expect(canvas).toBeVisible();
+  const bounds = await canvas.boundingBox();
+  await page.mouse.dblclick(bounds!.x + 120, bounds!.y + 59);
+  const cellEditor = page.getByRole('dialog', { name: 'Name', exact: true });
+  const cellInput = cellEditor.getByRole('textbox', { name: 'Name', exact: true });
+  await cellInput.fill('Unconfirmed cell draft');
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event('resize'));
+    window.dispatchEvent(new Event('scroll'));
+  });
+  await expect(cellInput).toHaveValue('Unconfirmed cell draft');
+  await expect(cellInput).toBeFocused();
+  await cellInput.press('Escape');
+  await expect(cellEditor).toBeHidden();
+  expect(Object.values(await properties(page))).not.toContain('Unconfirmed cell draft');
   await openRecord(page);
   const name = page.getByRole('group', { name: 'Name editor', exact: true });
   const input = name.getByRole('textbox', { name: 'Name', exact: true });

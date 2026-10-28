@@ -15,6 +15,7 @@ import { Toaster, toast as sonnerToast, type ExternalToast } from 'sonner';
 
 import { PortalContext, Modal, cn } from './index';
 import { OverlayPresence, useOverlayOpen } from './motion';
+import { useOverlayInteraction } from './overlay-interaction';
 import { ThemeContext } from './theme';
 
 export const NotificationContext = createContext('host');
@@ -78,17 +79,18 @@ export function Menu({
   const overlayOpen = useOverlayOpen();
   const [localOpen, setLocalOpen] = useState(false);
   const container = useContext(PortalContext);
+  const active = overlayOpen && (open ?? localOpen);
+  const change = (next: boolean) => {
+    setLocalOpen(next);
+    onOpenChange?.(next);
+  };
+  const interaction = useOverlayInteraction(active, () => change(false));
   return (
-    <MenuPrimitive.Root
-      open={overlayOpen && (open ?? localOpen)}
-      onOpenChange={(next) => {
-        setLocalOpen(next);
-        onOpenChange?.(next);
-      }}
-    >
+    <MenuPrimitive.Root open={active} onOpenChange={change}>
       <MenuPrimitive.Trigger asChild>{trigger}</MenuPrimitive.Trigger>
       <MenuPrimitive.Portal container={container}>
         <MenuPrimitive.Content
+          {...interaction}
           aria-label={label}
           align={align}
           sideOffset={6}
@@ -195,6 +197,7 @@ export function Popover({
     setLocalOpen(next);
     onOpenChange?.(next);
   };
+  const interaction = useOverlayInteraction(active, () => change(false), restoreFocus);
   if (mobile && mobilePlacement !== 'anchor')
     return (
       <>
@@ -204,6 +207,7 @@ export function Popover({
         <OverlayPresence>
           {active && (
             <Modal
+              restoreFocus={restoreFocus}
               mobilePlacement={mobilePlacement}
               title={label ?? ''}
               close={() => change(false)}
@@ -230,14 +234,7 @@ export function Popover({
             event.stopPropagation();
             change(false);
           }}
-          onCloseAutoFocus={
-            restoreFocus
-              ? (event) => {
-                  event.preventDefault();
-                  restoreFocus();
-                }
-              : undefined
-          }
+          {...interaction}
           aria-label={label}
           align={align}
           sideOffset={6}

@@ -230,6 +230,17 @@ export function MobileEditorToolbar({
   const keyboard = useVirtualKeyboard();
   const focused = useEditorFocus({ includeEditorUI: true });
   const dom = useEditorDOMElement();
+  const [embeddedFocus, setEmbeddedFocus] = useState(false);
+  useEffect(() => {
+    if (!dom) return;
+    const update = () => {
+      const active = dom.ownerDocument.activeElement;
+      setEmbeddedFocus(!!active && dom.contains(active) && !!active.closest('.database-embed'));
+    };
+    update();
+    dom.ownerDocument.addEventListener('focusin', update);
+    return () => dom.ownerDocument.removeEventListener('focusin', update);
+  }, [dom]);
   const theme = useTheme();
   const { i18n } = useTranslation();
   const [portal, setPortal] = useState<HTMLDivElement | null>(null);
@@ -253,7 +264,7 @@ export function MobileEditorToolbar({
         />,
         target,
       )}
-      {portal && focused && (
+      {portal && focused && !embeddedFocus && (
         <RenderInPortalElement target={portal}>
           <UIModeContext.Provider value="mobile">
             <div className="tio-mobile-editor-toolbar" data-keyboard={keyboard}>

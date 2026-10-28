@@ -28,6 +28,7 @@ export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
 import { useT, useTranslation } from '@tio/i18n';
 import { MentionLabel, EmptyNotice, useTheme, PortalContext, EditHistoryContext } from '@tio/ui';
+import type { NodeView } from '@tiptap/pm/view';
 import { FilePlus, Database, Code } from 'lucide-react';
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 
@@ -44,13 +45,42 @@ const DatabaseBlock = createReactBlockSpec(
     render: function DatabaseBlockRenderer({ block }) {
       const render = useContext(EmbedContext);
       return (
-        <div className="database-embed my-5 block w-full min-w-0" contentEditable={false}>
+        <div
+          className="database-embed my-5 block w-full min-w-0"
+          contentEditable={false}
+          tabIndex={-1}
+          onPointerDownCapture={(event) => {
+            // Safari does not always focus tapped buttons. Give this interactive
+            // island a focus owner before native selection can enter the editor.
+            if (
+              !(event.target instanceof Element) ||
+              event.target.closest('input, textarea, select, [contenteditable="true"]')
+            )
+              return;
+            event.currentTarget.focus({ preventScroll: true });
+          }}
+        >
           {render(block.props.databaseId, block.props.viewId)}
         </div>
       );
     },
   },
 )();
+// Keep the block selectable/movable, while its embedded application owns
+// events inside the non-editable content. Do not use selectable:false: its
+// upstream implementation schedules a blur that can steal an input's focus.
+const renderDatabaseBlock = DatabaseBlock.implementation.render!;
+DatabaseBlock.implementation.render = function (...args) {
+  const rendered = renderDatabaseBlock.apply(this, args);
+  if (this.renderType === 'nodeView') {
+    const nodeView = rendered as NodeView;
+    const stopEvent = nodeView.stopEvent?.bind(nodeView);
+    nodeView.stopEvent = (event) =>
+      (event.target instanceof Element && !!event.target.closest('.database-embed')) ||
+      (stopEvent?.(event) ?? false);
+  }
+  return rendered;
+};
 const AppSliceContext = createContext<(block: Block) => React.ReactNode>(() => null);
 const AppSliceBlock = createReactBlockSpec(
   {

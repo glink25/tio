@@ -63,9 +63,21 @@ export function GridView(props: RowsProps) {
     null,
   );
   useEffect(() => {
-    const close = () => {
-      setEditing(null);
+    setEditing(null);
+    setHeader(null);
+  }, [view.id]);
+  useEffect(() => {
+    if (editing && (!editingRecord || !editingField)) setEditing(null);
+  }, [editing, editingRecord, editingField]);
+  useEffect(() => {
+    const reposition = () => {
       setHeader(null);
+      if (!editing) return;
+      const col = fields.findIndex((field) => field.id === editing.fieldId);
+      const row = rows.findIndex((record) => record.id === editing.recordId);
+      if (col < 0 || row < 0) return;
+      const bounds = gridRef.current?.getBounds(col, row);
+      if (bounds) setAnchor({ x: bounds.x, y: bounds.y + bounds.height });
     };
     const scroll = (event: Event) => {
       if (
@@ -73,18 +85,18 @@ export function GridView(props: RowsProps) {
         event.target.closest('.tio-popover, .tio-menu, .tio-dialog')
       )
         return;
-      close();
+      reposition();
     };
-    window.addEventListener('resize', close);
+    window.addEventListener('resize', reposition);
     window.addEventListener('scroll', scroll, true);
-    const observer = new ResizeObserver(close);
+    const observer = new ResizeObserver(reposition);
     if (containerRef.current) observer.observe(containerRef.current);
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', close);
+      window.removeEventListener('resize', reposition);
       window.removeEventListener('scroll', scroll, true);
     };
-  }, []);
+  }, [editing, fields, rows]);
   const dark = useTheme() === 'dark';
   const [colors, setColors] = useState<Record<string, string>>({});
   useEffect(() => {
