@@ -5,6 +5,7 @@ import {
   type DocumentCover,
 } from './media';
 export * from './media';
+export * from './app-mode';
 export * from './diagnostics';
 import { validateFieldDefinition } from './fields';
 import { assertJson } from './json';
@@ -96,6 +97,7 @@ export interface TioObject {
   parentId?: string | null;
   order?: number;
   blocks?: Block[];
+  appMode?: boolean;
   fields?: Field[];
   databaseId?: string;
   properties?: Record<string, unknown>;
@@ -180,6 +182,8 @@ export function validateBuiltin(object: TioObject): TioObject {
     typeof input.parentId !== 'string'
   )
     throw new Error('非法父级');
+  if (input.type === 'page' && input.appMode !== undefined && typeof input.appMode !== 'boolean')
+    throw new Error('Invalid app mode');
   if (['page', 'record'].includes(input.type)) validateBlocks(input.blocks);
   if (['record', 'databaseView'].includes(input.type) && typeof input.databaseId !== 'string')
     throw new Error('缺少数据库引用');

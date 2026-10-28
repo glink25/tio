@@ -1,9 +1,10 @@
 import { useT } from '@tio/i18n';
-import { Moon, Sun } from 'lucide-react';
+import { Moon, Sun, Monitor } from 'lucide-react';
 import { createContext, useContext } from 'react';
 
 import { IconButton } from './index';
 export type Theme = 'light' | 'dark';
+export type ThemePreference = Theme | 'system';
 export const ThemeContext = createContext<Theme | null>(null);
 export function useTheme(): Theme {
   const theme = useContext(ThemeContext);
@@ -14,17 +15,24 @@ export function ThemeSwitcher({
   value,
   onChange,
 }: {
-  value: Theme;
-  onChange: (theme: Theme) => void;
+  value: ThemePreference;
+  onChange: (theme: ThemePreference) => void;
 }) {
   const t = useT();
+  const next = value === 'light' ? 'dark' : value === 'dark' ? 'system' : 'light';
   return (
     <IconButton
-      label={t(value === 'light' ? 'theme.dark' : 'theme.light')}
+      label={`${t(`theme.${value}`)} · ${t('theme.switchTo', { mode: t(`theme.${next}`) })}`}
       className="p-1.5"
-      onClick={() => onChange(value === 'light' ? 'dark' : 'light')}
+      onClick={() => onChange(next)}
     >
-      {value === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+      {value === 'light' ? (
+        <Sun size={16} />
+      ) : value === 'dark' ? (
+        <Moon size={16} />
+      ) : (
+        <Monitor size={16} />
+      )}
     </IconButton>
   );
 }

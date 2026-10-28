@@ -43,8 +43,8 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
               <div className="flex items-center justify-between border-b border-line pb-5">
                 <span>{t('ui.appearance')}</span>
                 <ThemeSwitcher
-                  value={presentation.theme}
-                  onChange={(theme) => setPresentation({ theme })}
+                  value={presentation.themePreference}
+                  onChange={(theme) => setPresentation({ themePreference: theme })}
                 />
               </div>
               <div className="flex items-center justify-between">

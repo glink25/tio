@@ -1,5 +1,5 @@
-import { t, useTranslation } from '@tio/i18n';
-import { Notifications, toast, ThemeContext } from '@tio/ui';
+import { useTranslation } from '@tio/i18n';
+import { Notifications, toast, ThemeContext, LoadingSkeleton } from '@tio/ui';
 import { useEffect, lazy, Suspense } from 'react';
 
 import { useWorkspace } from '../features/workspace/use-workspace';
@@ -47,17 +47,34 @@ export function App() {
         }}
       />
       {model.session ? (
-        <Suspense fallback={<div className="p-10 text-sm text-muted">{t('common.loading')}</div>}>
-          <WorkspacePage key={model.session.id} model={model} />
-        </Suspense>
+        <div hidden={model.openingWorkspace}>
+          <Suspense fallback={<WorkspaceLoading />}>
+            <WorkspacePage key={model.session.id} model={model} />
+          </Suspense>
+        </div>
       ) : (
-        <WelcomePage model={model} />
+        !model.openingWorkspace && <WelcomePage model={model} />
       )}
+      {model.openingWorkspace && <WorkspaceLoading />}
       {model.session && (
         <Suspense fallback={null}>
           <WorkspaceDialogs key={model.session?.id} model={model} />
         </Suspense>
       )}
     </ThemeContext.Provider>
+  );
+}
+
+function WorkspaceLoading() {
+  return (
+    <div className="flex min-h-dvh">
+      <aside className="hidden w-[260px] shrink-0 border-r border-line bg-surface p-4 md:block">
+        <LoadingSkeleton layout="list" />
+      </aside>
+      <div className="min-w-0 flex-1">
+        <div aria-hidden="true" className="h-12" />
+        <LoadingSkeleton />
+      </div>
+    </div>
   );
 }

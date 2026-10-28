@@ -18,6 +18,7 @@ export function Frame({
   onHeight,
   log,
   generation,
+  fullscreen = false,
 }: {
   model: EditorController;
   page: TioObject;
@@ -29,10 +30,11 @@ export function Frame({
   onHeight: (height: number) => void;
   log: (message: string) => void;
   generation: number;
+  fullscreen?: boolean;
 }) {
   const ref = useRef<HTMLIFrameElement>(null);
-  const live = useRef({ m, permission, onHeight, log });
-  live.current = { m, permission, onHeight, log };
+  const live = useRef({ m, permission, onHeight, log, fullscreen });
+  live.current = { m, permission, onHeight, log, fullscreen };
   const theme = useTheme();
   const { i18n } = useTranslation();
   const token = useMemo(() => {
@@ -94,7 +96,9 @@ export function Frame({
         locale: i18n.language,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }),
-      resize: (h) => live.current.onHeight(h),
+      resize: (h) => {
+        if (!live.current.fullscreen) live.current.onHeight(h);
+      },
     });
     const close = () => {
       disposed = true;
@@ -219,7 +223,14 @@ export function Frame({
           ? `${m.appSlice.runtimeUrl}${m.appSlice.runtimeUrl.includes('?') ? '&' : '?'}external=${permission.allowExternalResources ? '1' : '0'}#token=${token}`
           : undefined
       }
-      style={{ width: '100%', height, border: 0, background: 'white', colorScheme: 'light' }}
+      style={{
+        display: 'block',
+        width: '100%',
+        height: fullscreen ? '100%' : height,
+        border: 0,
+        background: 'white',
+        colorScheme: 'light',
+      }}
     />
   );
 }

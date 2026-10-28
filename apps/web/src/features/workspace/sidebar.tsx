@@ -32,7 +32,7 @@ import {
   Pencil,
   Move,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { Identity } from '../../components/identity';
 import type { WorkspaceController } from './use-workspace';
@@ -109,9 +109,11 @@ export function WorkspaceSwitcher({
 export function ObjectMenu({
   model: m,
   object: o,
+  pageActions,
 }: {
   model: WorkspaceController;
   object: TioObject;
+  pageActions?: ReactNode;
 }) {
   return (
     <Menu
@@ -139,6 +141,7 @@ export function ObjectMenu({
           {t('page.child')}
         </MenuItem>
       )}
+      {pageActions}
       <MenuSeparator />
       <MenuItem danger onSelect={() => m.deleteObject(o)}>
         <Trash2 size={15} />
@@ -147,7 +150,13 @@ export function ObjectMenu({
     </Menu>
   );
 }
-export function Sidebar({ model: m }: { model: WorkspaceController }) {
+export function Sidebar({
+  model: m,
+  pageActions,
+}: {
+  model: WorkspaceController;
+  pageActions?: ReactNode;
+}) {
   const mobile = useMobile();
   const content = (
     <div className="flex h-full min-h-0 flex-col px-2 py-3">
@@ -218,7 +227,7 @@ export function Sidebar({ model: m }: { model: WorkspaceController }) {
           </IconButton>
         </div>
         <nav aria-label={t('ui.pages')}>
-          <PageTree model={m} />
+          <PageTree model={m} pageActions={pageActions} />
         </nav>
       </div>
       <div className="mt-3 border-t border-line pt-2">
@@ -271,10 +280,12 @@ function PageTree({
   model: m,
   parent = null,
   depth = 0,
+  pageActions,
 }: {
   model: WorkspaceController;
   parent?: string | null;
   depth?: number;
+  pageActions?: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const children = m.nav
@@ -337,11 +348,15 @@ function PageTree({
                   <Plus size={14} />
                 </IconButton>
               )}
-              <ObjectMenu model={m} object={o} />
+              <ObjectMenu
+                model={m}
+                object={o}
+                pageActions={o.id === m.current?.id ? pageActions : null}
+              />
             </div>
           </div>
           {!collapsed.has(o.id) && depth < 100 && (
-            <PageTree model={m} parent={o.id} depth={depth + 1} />
+            <PageTree model={m} parent={o.id} depth={depth + 1} pageActions={pageActions} />
           )}
         </div>
       ))}

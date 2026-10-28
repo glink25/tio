@@ -114,7 +114,7 @@ export function DatabaseEmbed({
         <Button onClick={() => setRetry((n) => n + 1)}>{t('common.retry')}</Button>
       </EmptyNotice>
     );
-  if (!loaded) return <LoadNotice runtime={m.runtime} id={databaseId} loading />;
+  if (!loaded) return <LoadNotice runtime={m.runtime} id={databaseId} loading inline />;
   if (!db || db.deleted) return <EmptyNotice>{t('database.missing')}</EmptyNotice>;
   const choose = (next: string) => {
     setSelected(next);

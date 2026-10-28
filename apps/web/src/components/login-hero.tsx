@@ -94,8 +94,8 @@ export function LoginHero() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeSwitcher
-            value={presentation.theme}
-            onChange={(theme) => setPresentation({ theme })}
+            value={presentation.themePreference}
+            onChange={(theme) => setPresentation({ themePreference: theme })}
           />
           <LanguageSwitcher
             value={presentation.locale}

@@ -1,4 +1,4 @@
-import { editable, knownTypes } from '@tio/core';
+import { editable, knownTypes, firstAppSlice, isAppMode } from '@tio/core';
 import { Editor } from '@tio/editor-blocknote';
 import { useTranslation, useT } from '@tio/i18n';
 import {
@@ -13,6 +13,7 @@ import {
   MenuItem,
   MenuSeparator,
   useNotify,
+  readingLayout,
 } from '@tio/ui';
 import { RecordQueryContext } from '@tio/views';
 import {
@@ -29,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 
+import { AppModeMenuItem } from './app-mode-menu';
 import { AppSlice } from './app-slice/view';
 import { useEditorController, type EditorSurfaceProps } from './controller';
 import { DatabaseEmbed } from './database-embed';
@@ -48,6 +50,10 @@ export function EditorSurface(props: EditorSurfaceProps) {
   const toast = useNotify();
   const m = useEditorController(props);
   const current = m.current;
+  const appMode = isAppMode(
+    current ?? m.objects.find((o) => o.id === props.target.id && !o.deleted),
+  );
+  const appBlock = appMode ? firstAppSlice(current?.blocks ?? []) : undefined;
   const historyRoot = useHistoryShortcuts(m.history);
   const records = useCallback(
     (query: import('@tio/core').RecordQuery) => m.runtime.records(query),
@@ -71,6 +77,14 @@ export function EditorSurface(props: EditorSurfaceProps) {
       fullWidth = !!widthPref[prefKey];
     }
   }
+  const appModeAction =
+    current?.type === 'page' ? (
+      <AppModeMenuItem
+        page={current}
+        disabled={!m.can(current)}
+        onToggle={() => m.patch(current, { appMode: !isAppMode(current) })}
+      />
+    ) : null;
   const actions = (
     <>
       {current && (
@@ -104,6 +118,7 @@ export function EditorSurface(props: EditorSurfaceProps) {
                 <Maximize2 size={15} />
                 {t(fullWidth ? 'ui.readingWidth' : 'ui.fullWidth')}
               </MenuItem>
+              {appModeAction}
               <MenuItem onSelect={() => m.setReadOnly(!m.readOnly)}>
                 <BookOpen size={15} />
                 {t(m.readOnly ? 'common.edit' : 'common.read')}
@@ -153,8 +168,11 @@ export function EditorSurface(props: EditorSurfaceProps) {
         <RecordQueryContext.Provider value={records}>
           <div ref={historyRoot} className="relative min-w-0">
             {props.renderHeader ? (
-              props.renderHeader(actions)
-            ) : (
+              props.renderHeader(actions, {
+                appMode,
+                navigationPageActions: appMode ? appModeAction : null,
+              })
+            ) : appMode ? null : (
               <header className="sticky top-0 z-10 flex h-12 items-center justify-end gap-2 bg-panel/95 px-4">
                 {actions}
               </header>
@@ -190,6 +208,26 @@ export function EditorSurface(props: EditorSurfaceProps) {
             )}
             {!current && props.target.id ? (
               <LoadNotice runtime={m.runtime} id={props.target.id} />
+            ) : current && appMode ? (
+              <main
+                className={cn(
+                  'w-full min-w-0',
+                  props.target.mode === 'preview' ? 'h-[78dvh]' : 'h-dvh',
+                )}
+                data-app-mode
+              >
+                {appBlock ? (
+                  <AppSlice
+                    key={`${current.id}:${appBlock.id}`}
+                    model={m}
+                    page={current}
+                    block={appBlock}
+                    fullscreen
+                  />
+                ) : (
+                  <EmptyNotice>{t('ui.appModeEmpty')}</EmptyNotice>
+                )}
+              </main>
             ) : current ? (
               <>
                 {(current.type === 'page' || current.type === 'database') && (
@@ -204,8 +242,8 @@ export function EditorSurface(props: EditorSurfaceProps) {
                 )}
                 <main
                   className={cn(
-                    'mx-auto min-w-0 px-5 pt-10 pb-24 md:px-12 md:pt-16',
-                    fullWidth ? 'max-w-none' : 'max-w-[856px]',
+                    readingLayout,
+                    fullWidth && 'max-w-none',
                     current.cover && current.icon && 'pt-0 md:pt-0',
                   )}
                 >

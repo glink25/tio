@@ -30,10 +30,19 @@ test.beforeEach(async ({ page }) => {
     const context = { sessionId: 'embed', workspaceId: objects[0].id };
     const pair = createLoopback();
     serveHost(pair.host, context, repository);
+    const grants = new Map();
     const one = await mountBridgedEditor(document.getElementById('one')!, pair.client, context, {
       workspaceId: objects[0].id,
       target,
       presentation: { locale: 'en', theme: 'light' },
+      appSlice: {
+        permissionStore: {
+          get: (key: string) => grants.get(key),
+          set: (key: string, permission: unknown) => {
+            grants.set(key, permission);
+          },
+        },
+      },
     });
     const pair2 = createLoopback();
     serveHost(pair2.host, { ...context, sessionId: 'second' }, repository);
@@ -44,7 +53,7 @@ test.beforeEach(async ({ page }) => {
       { workspaceId: objects[0].id, target, presentation: { locale: 'zh', theme: 'dark' } },
     );
     Object.assign(window, {
-      fixture: { one, two, repository, executeBasic, context, target, recordId: record.id },
+      fixture: { grants, one, two, repository, executeBasic, context, target, recordId: record.id },
     });
   }, '/@fs' + repoRoot);
 });
@@ -311,4 +320,97 @@ test('an image upload finishing after navigation never updates either document i
   await expect(page.locator('#one').getByRole('tab', { name: 'Upload', exact: true })).toHaveCount(
     0,
   );
+});
+
+test('app mode renders a single sandbox, replaces removed instances and respects host read-only', async ({
+  page,
+}) => {
+  await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    f.grants.set(JSON.stringify(['local', f.context.workspaceId, f.target.id, 'first']), {
+      data: 'readWrite',
+      allowExternalResources: false,
+    });
+    await f.one.setPresentation({ readOnly: true });
+    const snapshot = await f.repository.readSnapshot();
+    const object = snapshot.entries.find((e: any) => e.object.id === f.target.id).object;
+    const apps = ['first', 'second'].map((id) => ({
+      id,
+      type: 'appSlice',
+      props: {
+        title: id,
+        html: `<h1>${id}</h1>`,
+        runtimeVersion: 1,
+        height: 320,
+        autoHeight: true,
+      },
+      content: [],
+      children: [],
+    }));
+    await f.repository.commit({
+      id: crypto.randomUUID(),
+      expectedVersion: snapshot.version,
+      changes: [{ ...object, appMode: true, blocks: apps }],
+      assetIds: [],
+    });
+  });
+  const one = page.locator('#one');
+  await expect(one.locator('.bn-editor')).toHaveCount(0);
+  await expect(one.frameLocator('iframe').locator('h1')).toHaveText('first');
+  const oldFrame = page
+    .frames()
+    .find((frame) => frame.parentFrame() && frame.url() === 'about:srcdoc')!;
+  const denial = await one.locator('iframe').evaluate(async (element) => {
+    // Opaque origin remains enforced by the browser.
+    try {
+      void (element as HTMLIFrameElement).contentWindow!.document;
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  expect(denial).toBe(true);
+  const appFrame = await one
+    .locator('iframe')
+    .elementHandle()
+    .then((handle) => handle!.contentFrame());
+  expect(
+    await appFrame!.evaluate(async () => {
+      try {
+        await (window as any).tio.page.update(
+          { title: 'Forbidden' },
+          (await (window as any).tio.page.get()).version,
+        );
+        return 'allowed';
+      } catch (error) {
+        return (error as any).code;
+      }
+    }),
+  ).toBe('PERMISSION_DENIED');
+  await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    const snapshot = await f.repository.readSnapshot();
+    const object = snapshot.entries.find((e: any) => e.object.id === f.target.id).object;
+    await f.repository.commit({
+      id: crypto.randomUUID(),
+      expectedVersion: snapshot.version,
+      changes: [{ ...object, blocks: object.blocks.slice(1) }],
+      assetIds: [],
+    });
+  });
+  await expect(one.frameLocator('iframe').locator('h1')).toHaveText('second');
+  expect(oldFrame.isDetached()).toBe(true);
+  await page.evaluate(async () => {
+    const f = (window as any).fixture;
+    const snapshot = await f.repository.readSnapshot();
+    const object = snapshot.entries.find((e: any) => e.object.id === f.target.id).object;
+    await f.repository.commit({
+      id: crypto.randomUUID(),
+      expectedVersion: snapshot.version,
+      changes: [{ ...object, blocks: [] }],
+      assetIds: [],
+    });
+  });
+  await expect(one.locator('iframe')).toHaveCount(0);
+  await expect(one).toContainText('This page has no App Slice');
 });

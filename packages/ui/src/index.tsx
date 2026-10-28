@@ -253,6 +253,7 @@ export function EmptyNotice({ children }: { children: ReactNode }) {
 }
 
 export { useTheme, ThemeSwitcher, ThemeContext } from './theme';
+export { LoadingSkeleton, readingLayout } from './skeleton';
 
 export {
   Menu,

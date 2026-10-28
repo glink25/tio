@@ -49,6 +49,7 @@ export function useWorkspace() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [openingWorkspace, setOpeningWorkspace] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [creating, setCreating] = useState(false);
   const creation = useRef<{ running: boolean; session?: WorkspaceSession }>({ running: false });
@@ -156,6 +157,7 @@ export function useWorkspace() {
   async function activate(s: WorkspaceSession, fromHistory = false) {
     if (activating.current) return;
     activating.current = true;
+    setOpeningWorkspace(true);
     setBusy(true);
     try {
       const initial = !sessionRef.current;
@@ -196,6 +198,7 @@ export function useWorkspace() {
       if (previous) writeRoute(previous.workspaceId, previous.selectedId ?? '', true);
     } finally {
       activating.current = false;
+      setOpeningWorkspace(false);
       setBusy(false);
     }
   }
@@ -527,6 +530,7 @@ export function useWorkspace() {
     statusError: services.statusError,
     identity: services.identity,
     loading,
+    openingWorkspace,
     loadError,
     loadSpaces,
     recent,

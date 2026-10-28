@@ -1,6 +1,6 @@
 import { t } from '@tio/i18n';
-import { Button, IconButton } from '@tio/ui';
-import { ArrowLeft, LoaderCircle, Plus } from 'lucide-react';
+import { Button, IconButton, LoadingSkeleton } from '@tio/ui';
+import { ArrowLeft, Plus } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { Brand } from '../components/brand';
@@ -59,10 +59,7 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
         )}
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-8">
           {m.loading ? (
-            <output className="my-auto flex items-center justify-center gap-3 text-sm text-muted">
-              <LoaderCircle className="animate-spin" size={20} />
-              {t(m.connection ? 'welcome.loadingSpaces' : 'welcome.initializing')}
-            </output>
+            <LoadingSkeleton layout="list" />
           ) : m.loadError ? (
             <div role="alert" className="my-auto space-y-4 text-center text-sm">
               <p>{m.loadError}</p>

@@ -53,3 +53,9 @@ await table.records.update(created.id, { amount: 40 }, created.version);
 CSP 在用户 HTML 前安装，剔除用户 meta 策略和 base。禁止同源访问、原生表单提交、弹窗、顶层导航、嵌套 frame、worker 和 object；表单使用按钮事件与 SDK。外部授权允许 HTTPS 资源和 HTTPS/WSS 请求，仍受 CORS 约束，没有特权代理。
 
 iframe 自身导航不能作为完整防外传边界，iframe 不保证 CPU/内存配额或中止无限循环。修改已授权代码的人属于可信维护者。运行器在 SDK 初始化后安装脚本并派发 DOMContentLoaded/load，不提供 npm 转译或打包。
+
+## App Mode
+
+`page.appMode` 启用文档的应用展示；有编辑权限者从文档菜单开启、从宿主导航当前页面菜单关闭。正文按深度优先顺序的第一个 App Slice 填满展示区域，编辑器正文与块工具栏不挂载；无实例时显示空状态，不自动修改配置。全屏展示忽略固定高度与 `ui.resize`，应用自行滚动，沙箱及授权规则保持一致。
+
+`EditorSurfaceProps.renderHeader(actions, {appMode, navigationPageActions})` 提供布局状态与可直接放置的菜单项。App Mode 开启时，编辑器提供关闭菜单项，宿主仅将其放入导航树当前页面菜单；资格、阅读限制、权限与运行时命令均留在编辑器中。宿主不为此加载正文、查找 App Slice 或修改文档配置。宿主隐藏顶部栏，保留侧栏和收起时的展开入口。

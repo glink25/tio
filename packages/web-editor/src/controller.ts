@@ -33,7 +33,10 @@ export interface EditorSurfaceProps {
   runtime: EditorSession;
   workspaceId: string;
   target: EditorTarget;
-  renderHeader?: (actions: ReactNode) => ReactNode;
+  renderHeader?: (
+    actions: ReactNode,
+    layout: { appMode: boolean; navigationPageActions: ReactNode },
+  ) => ReactNode;
   autoFocusTitle?: boolean;
   pageActions?: ReactNode;
   onOpen?: (target: EditorTarget) => void;

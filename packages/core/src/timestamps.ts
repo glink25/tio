@@ -47,7 +47,10 @@ export function sameContent(a: TioObject, b: TioObject): boolean {
     normalize(
       Object.fromEntries(
         Object.entries(object).filter(
-          ([key]) => !navigation.has(key) && !(object.type === 'databaseView' && view.has(key)),
+          ([key]) =>
+            !navigation.has(key) &&
+            !(object.type === 'page' && key === 'appMode') &&
+            !(object.type === 'databaseView' && view.has(key)),
         ),
       ),
     );

@@ -1,6 +1,6 @@
 import { type Block, type TioObject } from '@tio/core';
 import { useTranslation } from '@tio/i18n';
-import { IconButton } from '@tio/ui';
+import { IconButton, cn } from '@tio/ui';
 import { Settings } from 'lucide-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 
@@ -16,10 +16,12 @@ export function AppSlice({
   model: m,
   page,
   block,
+  fullscreen = false,
 }: {
   model: EditorController;
   page: TioObject;
   block: Block;
+  fullscreen?: boolean;
 }) {
   const { i18n } = useTranslation();
   const zh = i18n.language === 'zh';
@@ -46,23 +48,29 @@ export function AppSlice({
   if (!flatten(page.blocks ?? []).some((b) => b.id === block.id)) return null;
   return (
     <section
-      className="my-4 w-full min-w-0 overflow-hidden rounded-lg border border-line bg-panel"
+      className={cn(
+        'w-full min-w-0 overflow-hidden bg-panel',
+        fullscreen ? 'h-full' : 'my-4 rounded-lg border border-line',
+      )}
       contentEditable={false}
       data-app-slice={block.id}
     >
-      <div className="flex h-10 items-center justify-between border-b border-line px-3">
-        <span className="text-xs font-medium text-secondary">App Slice</span>
-        <IconButton
-          ref={trigger}
-          label={zh ? 'App Slice 设置' : 'App Slice settings'}
-          className="p-1.5"
-          onClick={() => setOpen(true)}
-        >
-          <Settings size={16} />
-        </IconButton>
-      </div>
+      {!fullscreen && (
+        <div className="flex h-10 items-center justify-between border-b border-line px-3">
+          <span className="text-xs font-medium text-secondary">App Slice</span>
+          <IconButton
+            ref={trigger}
+            label={zh ? 'App Slice 设置' : 'App Slice settings'}
+            className="p-1.5"
+            onClick={() => setOpen(true)}
+          >
+            <Settings size={16} />
+          </IconButton>
+        </div>
+      )}
       {running ? (
         <Frame
+          fullscreen={fullscreen}
           model={m}
           page={page}
           block={block}
