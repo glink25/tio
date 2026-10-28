@@ -30,7 +30,7 @@
 
 纯领域、工作空间和同步包不依赖 React、浏览器存储或具体端点；依赖边界由 `scripts/check-boundaries.mjs` 检查。提供方和适配器归宿主，不能反向进入编辑器。
 
-业务数据不含句柄、凭据、Blob URL 或 UI 实例。当前不读取或迁移历史格式；未知内容保留与历史兼容是不同要求。详见[数据契约](../protocols/data-format.md)、[编辑器接入](../../packages/web-editor/docs/integration.md)和[文件存储](../../packages/file-storage/docs/storage.md)。
+业务数据不含句柄、凭据、Blob URL 或 UI 实例。遵循[0.2.0 兼容性里程碑原则](../zen.md)：正式发布 0.2.0 前，数据结构、协议和接口按全新设计，不考虑历史兼容、迁移或升级，也不保留相关实现；0.2.0 及后续版本无需兼容或迁移此前数据。从 0.2.0 开始，后续变更才考虑对 0.2.0 及以后版本的兼容性、迁移和升级，具体方案届时设计。未知内容仍须无损保留。详见[数据契约](../protocols/data-format.md)、[编辑器接入](../../packages/web-editor/docs/integration.md)和[文件存储](../../packages/file-storage/docs/storage.md)。
 
 ## 静态发布
 

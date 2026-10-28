@@ -2,7 +2,7 @@
 
 静态发布能力见 [@glink25/tio-pages](../../packages/pages/README.md)，个人博客位于同级 `tio-blog` workspace，其配置与使用说明随该 workspace 保存。
 
-渲染和文件输出分开：`ssr` 只投影当前块为 HTML；`page` 接收显式路由计划，处理页面引用和附件；Node 宿主复用 `FileWorkspaceContent` 读取标准对象及分片。博客模板通过 PageMap 的页面提及、Tags 关系与发布字段决定输出，不依赖编辑器生命周期。Urodele 转换限定在示例迁移器中，核心不引入历史 Tio 格式兼容。
+渲染和文件输出分开：`ssr` 只投影当前块为 HTML；`page` 接收显式路由计划，处理页面引用和附件；Node 宿主复用 `FileWorkspaceContent` 读取标准对象及分片。博客模板通过 PageMap 的页面提及、Tags 关系与发布字段决定输出，不依赖编辑器生命周期。下文记录的 Urodele 转换属于外部博客导入，不构成历史 Tio 格式兼容要求。Tio Pages 遵循[0.2.0 兼容性里程碑原则](../zen.md)：正式发布 0.2.0 前，数据结构、协议和接口按全新设计，不考虑历史兼容、迁移或升级；0.2.0 及后续版本无需兼容或迁移此前数据。从 0.2.0 开始，后续变更才考虑对 0.2.0 及以后版本的兼容性、迁移和升级，具体方案届时设计。
 
 ## 本次本地验收（2026-10-27）
 
@@ -84,7 +84,7 @@ node tests/scripts/audit-pages-output.mjs ../tio-blog/.tio-page/dist tests/.cach
 
 所有内建对象直接更新 v1 契约，要求 UTC `createdAt`、`updatedAt`。统一命令层维护时间，专用导入保留来源值；编辑器文档信息只读展示。上述 PageMap 手工日期方案已经移除，博客直接读取文章页面的系统时间，Pin 和创建时间排序规则不变。
 
-转换前完整备份到同级 `tio-blog-before-system-timestamps-20261028-103720`，一次性转换 161 个对象，为 42 篇文章恢复原始日期，移除 PageMap 两个日期列及值与视图引用，并刷新 JSON ZIP。生产代码不包含旧格式兼容。
+转换前完整备份到同级 `tio-blog-before-system-timestamps-20261028-103720`，一次性转换 161 个对象，为 42 篇文章恢复原始日期，移除 PageMap 两个日期列及值与视图引用，并刷新 JSON ZIP。这是 0.2.0 前对特定本地空间的一次性处理，不构成兼容或迁移承诺；本次生产代码不包含旧格式兼容，后续版本责任遵循上述里程碑原则。
 
 ## 列表与站点导航补齐（2026-10-28）
 
