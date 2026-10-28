@@ -1,54 +1,30 @@
 import { t } from '@tio/i18n';
-import { LoadingSkeleton } from '@tio/ui';
-import { Button, Modal, ThemeSwitcher, LanguageSwitcher, cn, useOverlayBack } from '@tio/ui';
-import { lazy, Suspense, useState, useRef, useEffect } from 'react';
-const AutomationDialog = lazy(() => import('../features/automation/panel'));
+import {
+  Button,
+  Modal,
+  ChoiceSelect,
+  LanguageSwitcher,
+  SettingsGroup,
+  SettingsRow,
+  SettingsAction,
+  cn,
+  useOverlayBack,
+} from '@tio/ui';
+import { Palette, HardDrive, ArrowRightLeft } from 'lucide-react';
+import { useState } from 'react';
 
-import { Identity } from '../components/identity';
+import { ConnectionInfo } from '../components/identity';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { usePresentation, setPresentation } from '../services/browser-presentation';
 const sections = ['general', 'storage', 'transfer'] as const;
+const icons = { general: Palette, storage: HardDrive, transfer: ArrowRightLeft };
 export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
   const [section, setSection] = useState<(typeof sections)[number] | null>(null);
-  const [automationOpen, setAutomationOpen] = useState(false);
-  const automationEntry = useRef<HTMLButtonElement>(null);
-  const openedAutomation = useRef(false);
-  const automationClose = useRef<() => void>(() => setAutomationOpen(false));
-  useOverlayBack(() => {
-    if (automationOpen) automationClose.current();
-    else m.setSettingsOpen(false);
-  });
-  useEffect(() => {
-    if (!automationOpen && openedAutomation.current)
-      requestAnimationFrame(() => automationEntry.current?.focus());
-  }, [automationOpen]);
+  useOverlayBack(() => m.setSettingsOpen(false));
   const presentation = usePresentation();
   const selected = section ?? 'general';
+  const actions = m.session ? m.workspaceActions(m.session) : {};
   const label = (key: typeof selected) => t(`ui.${key}`);
-  if (automationOpen && m.runtime && m.session)
-    return (
-      <Suspense
-        fallback={
-          <Modal
-            layout="workspace"
-            trackHistory={false}
-            title={t('automation.center')}
-            close={() => setAutomationOpen(false)}
-          >
-            <LoadingSkeleton layout="inline" />
-          </Modal>
-        }
-      >
-        <AutomationDialog
-          runtime={m.runtime}
-          workspaceId={m.session.workspaceId}
-          close={() => setAutomationOpen(false)}
-          registerClose={(close) => {
-            automationClose.current = close;
-          }}
-        />
-      </Suspense>
-    );
   return (
     <Modal
       wide
@@ -56,90 +32,130 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
       title={t('ui.settings')}
       close={() => m.setSettingsOpen(false)}
     >
-      <div className="flex min-h-[55dvh] flex-col gap-6 md:flex-row">
-        <nav className={cn('shrink-0 space-y-1 md:w-48', section && 'hidden md:block')}>
-          {sections.map((key) => (
-            <Button
-              key={key}
-              className={cn('w-full justify-start', key === selected && 'bg-surface-hover')}
-              onClick={() => setSection(key)}
-            >
-              {label(key)}
-            </Button>
-          ))}
-          <Button
-            ref={automationEntry}
-            className="w-full justify-start"
-            disabled={!m.runtime || !m.session}
-            onClick={() => {
-              openedAutomation.current = true;
-              automationClose.current = () => setAutomationOpen(false);
-              setAutomationOpen(true);
-            }}
-          >
-            {t('ui.automation')}
-          </Button>
-          <Button
-            className="w-full justify-start"
-            onClick={() => {
-              m.setTrashOpen(true);
-            }}
-          >
-            {t('ui.trash')}
-          </Button>
+      <div className="-m-6 flex min-h-[60dvh] flex-col md:flex-row">
+        <nav
+          aria-label={t('ui.settings')}
+          className={cn('shrink-0 space-y-1 bg-surface p-4 md:w-52', section && 'hidden md:block')}
+        >
+          {sections.map((key) => {
+            const Icon = icons[key];
+            return (
+              <Button
+                key={key}
+                aria-current={key === selected ? 'page' : undefined}
+                className={cn(
+                  'w-full justify-start text-sm',
+                  key === selected && 'bg-surface-hover text-ink',
+                )}
+                onClick={() => setSection(key)}
+              >
+                <Icon size={16} />
+                {label(key)}
+              </Button>
+            );
+          })}
         </nav>
-        <section className={cn('min-w-0 flex-1 md:px-7', !section && 'hidden md:block')}>
+        <div className={cn('min-w-0 flex-1 px-6 py-7 md:px-10', !section && 'hidden md:block')}>
           <Button className="mb-4 md:hidden" onClick={() => setSection(null)}>
             ← {t('ui.back')}
           </Button>
-          <h2 className="mb-7 text-2xl font-semibold">{label(selected)}</h2>
-          {selected === 'general' && (
-            <div className="space-y-6">
-              <div className="flex items-center justify-between border-b border-line pb-5">
-                <span>{t('ui.appearance')}</span>
-                <ThemeSwitcher
-                  value={presentation.themePreference}
-                  onChange={(theme) => setPresentation({ themePreference: theme })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <span>{t('common.language')}</span>
-                <LanguageSwitcher
-                  value={presentation.locale}
-                  onChange={(locale) => setPresentation({ locale })}
-                />
-              </div>
-            </div>
-          )}
-          {selected === 'storage' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Identity identity={m.identity} />
-              </div>
-              {m.identity?.details.map((detail) => (
-                <div key={detail.label} className="text-sm">
-                  <span className="text-muted">{detail.label}</span> · {detail.value}
-                </div>
-              ))}
-              <Button className="block" onClick={() => m.setLogoutOpen(true)}>
-                {t('workspace.disconnect')}
-              </Button>
-            </div>
-          )}
-          {selected === 'transfer' && (
-            <div className="flex flex-col items-start gap-3">
-              <Button variant="outline" onClick={() => m.importRef.current?.click()}>
-                {t('workspace.import')}
-              </Button>
-              <Button variant="outline" onClick={() => void m.download()}>
-                {t('workspace.exportFull')}
-              </Button>
-              <Button variant="outline" onClick={() => void m.download(true)}>
-                {t('workspace.exportMarkdown')}
-              </Button>
-            </div>
-          )}
-        </section>
+          <h2 className="mb-8 text-xl font-semibold">{label(selected)}</h2>
+          <div className="space-y-9">
+            {selected === 'general' && (
+              <SettingsGroup title={t('settings.preferences')}>
+                <SettingsRow
+                  title={t('ui.appearance')}
+                  description={t('settings.appearanceDescription')}
+                >
+                  <ChoiceSelect
+                    label={t('ui.appearance')}
+                    value={presentation.themePreference}
+                    className="w-36"
+                    search={false}
+                    options={(['light', 'dark', 'system'] as const).map((id) => ({
+                      id,
+                      text: t(`theme.${id}`),
+                      label: t(`theme.${id}`),
+                    }))}
+                    onValueChange={(value) =>
+                      setPresentation({ themePreference: value as 'light' | 'dark' | 'system' })
+                    }
+                  />
+                </SettingsRow>
+                <SettingsRow
+                  title={t('common.language')}
+                  description={t('settings.languageDescription')}
+                >
+                  <LanguageSwitcher
+                    value={presentation.locale}
+                    onChange={(locale) => setPresentation({ locale })}
+                  />
+                </SettingsRow>
+              </SettingsGroup>
+            )}
+            {selected === 'storage' && (
+              <>
+                <SettingsGroup title={t('settings.connection')}>
+                  <div className="py-4">
+                    <ConnectionInfo identity={m.identity} />
+                  </div>
+                </SettingsGroup>
+                <SettingsGroup title={t('workspace.manage')}>
+                  {actions.share && (
+                    <SettingsRow title={t('workspace.share')}>
+                      <SettingsAction onClick={() => m.requestWorkspaceAction(m.session!, 'share')}>
+                        {t('workspace.share')}
+                      </SettingsAction>
+                    </SettingsRow>
+                  )}
+                  <SettingsRow title={t('workspace.disconnect')}>
+                    <SettingsAction onClick={() => m.setLogoutOpen(true)}>
+                      {t('workspace.disconnect')}
+                    </SettingsAction>
+                  </SettingsRow>
+                  {actions.delete && (
+                    <SettingsRow title={t('workspace.delete')}>
+                      <SettingsAction
+                        danger
+                        onClick={() => m.requestWorkspaceAction(m.session!, 'delete')}
+                      >
+                        {t('workspace.delete')}
+                      </SettingsAction>
+                    </SettingsRow>
+                  )}
+                </SettingsGroup>
+              </>
+            )}
+            {selected === 'transfer' && (
+              <SettingsGroup title={t('settings.data')}>
+                <SettingsRow
+                  title={t('workspace.import')}
+                  description={t('settings.importDescription')}
+                >
+                  <SettingsAction onClick={() => m.importRef.current?.click()}>
+                    {t('workspace.import')}
+                  </SettingsAction>
+                </SettingsRow>
+                <SettingsRow
+                  title={t('workspace.exportFull')}
+                  description={t('settings.exportDescription')}
+                >
+                  <SettingsAction onClick={() => void m.download()}>
+                    {t('workspace.exportFull')}
+                  </SettingsAction>
+                </SettingsRow>
+                <SettingsRow
+                  title={t('workspace.exportMarkdown')}
+                  description={t('settings.markdownDescription')}
+                >
+                  <SettingsAction onClick={() => void m.download(true)}>
+                    {t('workspace.exportMarkdown')}
+                  </SettingsAction>
+                </SettingsRow>
+              </SettingsGroup>
+            )}
+          </div>
+        </div>
       </div>
     </Modal>
   );

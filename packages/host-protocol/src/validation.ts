@@ -100,6 +100,12 @@ export function requestPayload(method: string | undefined, p: any) {
     typeof p.text !== 'string'
   )
     throw new HostError('invalid');
+  if (
+    method === 'queryMentions' &&
+    p.kind !== undefined &&
+    !['page', 'database', 'record'].includes(p.kind)
+  )
+    throw new HostError('invalid');
   if (method === 'queryMentions' && typeof p.text !== 'string') throw new HostError('invalid');
   if (method === 'readChanges' && !integer(p.since)) throw new HostError('invalid');
   if (method === 'acknowledgeCommits' && (typeof p.clientId !== 'string' || !integer(p.sequence)))

@@ -5,11 +5,14 @@ import {
   type MentionReference,
   type MentionResolution,
 } from '@tio/core';
+import { useT } from '@tio/i18n';
 import { useTranslation } from '@tio/i18n';
-import { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react';
 
+import { useNotify } from './overlays';
 import { ReferencePicker, ReferenceIcon } from './reference-picker';
 import { LoadingIndicator } from './skeleton';
+import { usePagedOptions } from './use-paged-options';
 
 export const MentionContext = createContext<MentionService | undefined>(undefined);
 export function MentionLabel({
@@ -42,7 +45,9 @@ export function MentionLabel({
   const result = current?.result;
   const failed = current?.failed;
 
-  const [retry, setRetry] = useState(0);
+  const notify = useNotify();
+  const notifyRef = useRef(notify);
+  notifyRef.current = notify;
   useEffect(() => {
     let live = true,
       generation = 0;
@@ -66,6 +71,8 @@ export function MentionLabel({
         },
         () => {
           if (live && current === generation)
+            notifyRef.current(zh ? '提及目标读取失败' : 'Failed to load reference');
+          if (live && current === generation)
             setResolved((previous) => ({
               service,
               reference: stableReference,
@@ -84,7 +91,7 @@ export function MentionLabel({
       live = false;
       stop?.();
     };
-  }, [service, stableReference, retry]);
+  }, [service, stableReference, zh]);
   const title =
     result?.status === 'ready'
       ? result.title
@@ -100,8 +107,8 @@ export function MentionLabel({
               : 'Access denied'
             : result.status === 'error'
               ? zh
-                ? '读取失败，点击重试'
-                : 'Failed to load; retry'
+                ? '提及目标读取失败'
+                : 'Failed to load reference'
               : zh
                 ? '提及目标不可用'
                 : 'Reference unavailable';
@@ -109,18 +116,18 @@ export function MentionLabel({
     <button
       type="button"
       contentEditable={false}
-      title={failed ? (zh ? '刷新失败，点击重试' : 'Refresh failed; click to retry') : undefined}
+      title={failed ? (zh ? '提及目标读取失败' : 'Failed to load reference') : undefined}
       data-refresh-error={failed || undefined}
       style={failed ? { textDecorationStyle: 'wavy' } : undefined}
       className={`inline-flex max-w-full items-center gap-1 rounded px-1 align-baseline underline ${result?.status === 'ready' ? '' : 'text-muted'}`}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (failed) setRetry((n) => n + 1);
-        else if (result?.status === 'ready') service?.navigate(reference);
-        else if (result?.status === 'error') setRetry((n) => n + 1);
+        if (result?.status === 'ready') service?.navigate(reference);
+        else if (result?.status === 'error')
+          notifyRef.current(zh ? '提及目标读取失败' : 'Failed to load reference');
         else if (result?.status === 'deleted')
-          window.alert(zh ? '提及目标已被删除' : 'The referenced target has been deleted');
+          notifyRef.current(zh ? '提及目标已被删除' : 'The referenced target has been deleted');
       }}
     >
       {showIcon && <ReferenceIcon kind={reference.kind} />}
@@ -146,72 +153,37 @@ export function MentionPicker({
   const zh = i18n.language === 'zh';
   const [active, setActive] = useState(inline);
   const [query, setQuery] = useState('');
-  const [after, setAfter] = useState<string>();
-  const [items, setItems] = useState<Awaited<ReturnType<MentionService['query']>>['items']>([]);
-  const [next, setNext] = useState<string>();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const [sourceErrors, setSourceErrors] = useState<string[]>([]);
-  const [retry, setRetry] = useState(0);
-  useEffect(() => {
-    if (!active) return;
-    let live = true;
-    setLoading(true);
-    setError(false);
-    if (!service) {
-      setError(true);
-      setLoading(false);
-      return;
-    }
-    void service.query(query, after).then(
-      (page) => {
-        if (!live) return;
-        setItems((previous) =>
-          after
-            ? [
-                ...previous,
-                ...page.items.filter(
-                  (item) =>
-                    !previous.some((p) => mentionKey(p.reference) === mentionKey(item.reference)),
-                ),
-              ]
-            : page.items,
-        );
-        setSourceErrors(page.sourceErrors ?? []);
-        setNext(page.next);
-        setLoading(false);
-      },
-      () => {
-        if (live) {
-          setError(true);
-          setLoading(false);
-        }
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [service, active, query, after, retry]);
+  const t = useT();
+  const [kind, setKind] = useState<string>('all');
+  const page = usePagedOptions({
+    active,
+    source: service,
+    queryKey: JSON.stringify([query, kind]),
+    key: (item: import('@tio/core').MentionCandidate) => mentionKey(item.reference),
+    load: (after) =>
+      service
+        ? service.query(
+            query,
+            after,
+            kind === 'all' ? undefined : (kind as MentionReference['kind']),
+          )
+        : Promise.reject(new Error('Unavailable')),
+  });
+  const items = page.items;
   return (
     <ReferencePicker
       label={label ?? (zh ? '搜索提及目标' : 'Search mention targets')}
       inline={inline}
-      warning={
-        sourceErrors.length ? (
-          <button
-            type="button"
-            className="p-2 text-xs text-muted"
-            onClick={() => {
-              setAfter(undefined);
-              setRetry((n) => n + 1);
-            }}
-          >
-            {zh
-              ? `${sourceErrors.includes('github') ? 'GitHub 协作者' : '提及目标'}读取失败，点击重试`
-              : `Failed to load ${sourceErrors.includes('github') ? 'GitHub collaborators' : 'references'}; retry`}
-          </button>
-        ) : undefined
-      }
+      multiple={multiple}
+      tabs={[
+        { id: 'all', label: t('picker.all') },
+        ...(service?.kinds ?? ['page', 'database', 'record']).map((id) => ({
+          id,
+          label: t(`picker.${id}` as import('@tio/i18n').TranslationKey),
+        })),
+      ]}
+      tab={kind}
+      onTab={setKind}
       selected={mentionReferences(value).map((ref) => ({
         id: mentionKey(ref),
         kind: ref.kind,
@@ -234,7 +206,6 @@ export function MentionPicker({
       query={query}
       onQuery={(text) => {
         setQuery(text);
-        setAfter(undefined);
       }}
       onActiveChange={setActive}
       onSelect={(id) => {
@@ -253,10 +224,9 @@ export function MentionPicker({
       onRemove={(id) =>
         onChange(multiple ? mentionReferences(value).filter((ref) => mentionKey(ref) !== id) : null)
       }
-      loading={loading}
-      error={error}
-      retry={() => setRetry((n) => n + 1)}
-      more={next ? () => setAfter(next) : undefined}
+      loading={page.loading}
+      error={page.failed}
+      more={page.more}
     />
   );
 }

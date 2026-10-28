@@ -63,7 +63,11 @@ export function Menu({
   label,
   open,
   onOpenChange,
+  align = 'end',
+  collisionPadding = 12,
 }: {
+  align?: 'start' | 'center' | 'end';
+  collisionPadding?: number;
   open?: boolean;
   onOpenChange?: (value: boolean) => void;
   trigger: ReactNode;
@@ -77,9 +81,9 @@ export function Menu({
       <MenuPrimitive.Portal container={container}>
         <MenuPrimitive.Content
           aria-label={label}
-          align="end"
+          align={align}
           sideOffset={6}
-          collisionPadding={12}
+          collisionPadding={collisionPadding}
           className="tio-menu z-[80] max-w-[calc(100vw-24px)] min-w-52 rounded-lg border border-line bg-panel p-1.5 text-sm text-ink shadow-xl"
         >
           {children}

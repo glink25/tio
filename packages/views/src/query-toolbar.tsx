@@ -2,6 +2,7 @@ import { isDateValue, isDerivedField, valueText, type Field } from '@tio/core';
 import { createEvaluator } from '@tio/database';
 import type { TranslationKey } from '@tio/i18n';
 import { useT } from '@tio/i18n';
+import { SelectInput } from '@tio/ui';
 import { Button, IconButton, Menu, MenuItem, Popover, cn } from '@tio/ui';
 import {
   Plus,
@@ -99,13 +100,13 @@ export function QueryToolbar(p: RowsProps) {
                 const field = fields.find((f) => f.id === filter.fieldId);
                 return (
                   <div key={i} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                    <select
+                    <SelectInput
                       aria-label={t('database.filterField')}
                       value={filter.fieldId}
-                      onChange={(e) =>
+                      onValueChange={(value) =>
                         onView({
                           filters: filters.map((f, n) =>
-                            n === i ? { fieldId: e.target.value, op: 'contains', value: '' } : f,
+                            n === i ? { fieldId: value, op: 'contains', value: '' } : f,
                           ),
                         })
                       }
@@ -115,16 +116,14 @@ export function QueryToolbar(p: RowsProps) {
                           {f.name}
                         </option>
                       ))}
-                    </select>
-                    <select
+                    </SelectInput>
+                    <SelectInput
                       aria-label={t('ui.type')}
                       value={filter.op}
-                      onChange={(e) =>
+                      onValueChange={(value) =>
                         onView({
                           filters: filters.map((f, n) =>
-                            n === i
-                              ? { ...f, op: e.target.value as typeof f.op, value: undefined }
-                              : f,
+                            n === i ? { ...f, op: value as typeof f.op, value: undefined } : f,
                           ),
                         })
                       }
@@ -154,7 +153,7 @@ export function QueryToolbar(p: RowsProps) {
                           )}
                         </option>
                       ))}
-                    </select>
+                    </SelectInput>
                     <IconButton
                       label={t('ui.remove')}
                       className="p-1"
@@ -242,15 +241,13 @@ export function QueryToolbar(p: RowsProps) {
             <fieldset disabled={readOnly} className="space-y-2">
               {sorts.map((sort, i) => (
                 <div key={i} className="flex gap-2">
-                  <select
+                  <SelectInput
                     className="min-w-0 flex-1"
                     aria-label={t('database.sortField')}
                     value={sort.fieldId}
-                    onChange={(e) =>
+                    onValueChange={(value) =>
                       onView({
-                        sorts: sorts.map((s, n) =>
-                          n === i ? { ...s, fieldId: e.target.value } : s,
-                        ),
+                        sorts: sorts.map((s, n) => (n === i ? { ...s, fieldId: value } : s)),
                       })
                     }
                   >
@@ -259,21 +256,21 @@ export function QueryToolbar(p: RowsProps) {
                         {f.name}
                       </option>
                     ))}
-                  </select>
-                  <select
+                  </SelectInput>
+                  <SelectInput
                     aria-label={t('database.sort')}
                     value={sort.direction}
-                    onChange={(e) =>
+                    onValueChange={(value) =>
                       onView({
                         sorts: sorts.map((s, n) =>
-                          n === i ? { ...s, direction: e.target.value as 'asc' | 'desc' } : s,
+                          n === i ? { ...s, direction: value as 'asc' | 'desc' } : s,
                         ),
                       })
                     }
                   >
                     <option value="asc">{t('database.asc')}</option>
                     <option value="desc">{t('database.desc')}</option>
-                  </select>
+                  </SelectInput>
                   <IconButton
                     label={t('ui.remove')}
                     className="p-1"
@@ -333,10 +330,10 @@ export function QueryToolbar(p: RowsProps) {
               </label>
               <label className="flex items-center justify-between">
                 {t('ui.layout')}
-                <select
+                <SelectInput
                   aria-label={t('ui.layout')}
                   value={view.layout ?? 'table'}
-                  onChange={(e) => onView({ layout: e.target.value })}
+                  onValueChange={(value) => onView({ layout: value })}
                 >
                   <option value="table">{t('database.table')}</option>
                   <option value="board">{t('database.board')}</option>
@@ -345,16 +342,16 @@ export function QueryToolbar(p: RowsProps) {
                       {layout.label}
                     </option>
                   ))}
-                </select>
+                </SelectInput>
               </label>
               {view.layout === 'board' && (
                 <label className="block">
                   {t('ui.group')}
-                  <select
+                  <SelectInput
                     className="mt-1 w-full"
                     aria-label={t('database.group')}
                     value={view.groupBy ?? ''}
-                    onChange={(e) => onView({ groupBy: e.target.value })}
+                    onValueChange={(value) => onView({ groupBy: value })}
                   >
                     <option value="">{t('ui.group')}</option>
                     {fields
@@ -364,7 +361,7 @@ export function QueryToolbar(p: RowsProps) {
                           {f.name}
                         </option>
                       ))}
-                  </select>
+                  </SelectInput>
                   {!fields.some((f) => ['select', 'status'].includes(f.type)) && (
                     <Button className="mt-2 text-xs" onClick={onFields}>
                       {t('ui.noGroup')}

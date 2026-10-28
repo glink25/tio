@@ -1,6 +1,6 @@
 import { valueText } from '@tio/core';
 import { useT } from '@tio/i18n';
-import { ReferencePicker } from '@tio/ui';
+import { ReferencePicker, usePagedOptions } from '@tio/ui';
 import { useContext, useEffect, useState } from 'react';
 
 import { RecordQueryContext, type FieldInputProps } from './extensions';
@@ -16,55 +16,31 @@ export function RelationPicker({
   const queryRecords = useContext(RecordQueryContext);
   const [active, setActive] = useState(!!inlineReferencePicker);
   const [query, setQuery] = useState('');
-  const [after, setAfter] = useState<string>();
-  const [next, setNext] = useState<string>();
-  const [records, setRecords] = useState<typeof objects>([]);
   const [known, setKnown] = useState<typeof objects>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false);
-  const [retry, setRetry] = useState(0);
+  const page = usePagedOptions({
+    active: active && !!queryRecords && !!field.targetDatabaseId,
+    source: queryRecords,
+    queryKey: JSON.stringify([field.targetDatabaseId, query]),
+    key: (item: (typeof objects)[number]) => item.id,
+    load: async (after) => {
+      const result = await queryRecords!({
+        databaseId: field.targetDatabaseId!,
+        text: query,
+        after,
+        limit: 100,
+      });
+      return { items: result.entries.map((e) => e.object), next: result.next };
+    },
+  });
   useEffect(() => {
-    setAfter(undefined);
-    setRecords([]);
     setKnown([]);
-    setNext(undefined);
   }, [field.targetDatabaseId]);
   useEffect(() => {
-    if (!active || !queryRecords || !field.targetDatabaseId) return;
-    let live = true;
-    setLoading(true);
-    setError(false);
-    void queryRecords({ databaseId: field.targetDatabaseId, text: query, after, limit: 100 }).then(
-      (page) => {
-        if (!live) return;
-        setRecords((previous) =>
-          after
-            ? [
-                ...previous,
-                ...page.entries
-                  .map((e) => e.object)
-                  .filter((o) => !previous.some((p) => p.id === o.id)),
-              ]
-            : page.entries.map((e) => e.object),
-        );
-        setKnown((previous) => [
-          ...previous.filter((o) => !page.entries.some((e) => e.object.id === o.id)),
-          ...page.entries.map((e) => e.object),
-        ]);
-        setNext(page.next);
-        setLoading(false);
-      },
-      () => {
-        if (live) {
-          setError(true);
-          setLoading(false);
-        }
-      },
-    );
-    return () => {
-      live = false;
-    };
-  }, [active, queryRecords, field.targetDatabaseId, query, after, retry]);
+    setKnown((previous) => [
+      ...new Map([...previous, ...page.items].map((o) => [o.id, o])).values(),
+    ]);
+  }, [page.items]);
+  const records = page.items;
   const selected: string[] = Array.isArray(value)
     ? value
     : typeof value === 'string'
@@ -98,12 +74,11 @@ export function RelationPicker({
       query={query}
       onQuery={(text) => {
         setQuery(text);
-        setAfter(undefined);
       }}
-      loading={loading}
-      error={error}
-      retry={() => setRetry((n) => n + 1)}
-      more={next ? () => setAfter(next) : undefined}
+      multiple={field.multiple !== false}
+      loading={page.loading}
+      error={page.failed}
+      more={page.more}
       onSelect={(id) =>
         onChange(
           field.multiple === false

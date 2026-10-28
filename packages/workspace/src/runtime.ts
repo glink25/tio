@@ -404,10 +404,14 @@ export class WorkspaceRuntime {
     }
     this.publish();
   }
-  async mentionCandidates(text: string, after?: string) {
+  async mentionCandidates(
+    text: string,
+    after?: string,
+    kind?: import('@tio/core').MentionQuery['kind'],
+  ) {
     if (this.disposed) throw new HostError('closed');
     if (!this.repository.queryMentions) throw new HostError('unsupported');
-    return this.repository.queryMentions({ text, after, limit: 50 });
+    return this.repository.queryMentions({ text, after, kind, limit: 50 });
   }
   async mentionMetadata(ids: string[]) {
     if (this.disposed) throw new HostError('closed');
@@ -1249,6 +1253,11 @@ export class WorkspaceRuntime {
   }
   snapshot() {
     return structuredClone(this.store.getState().objects);
+  }
+  /** Discard queued input and wait only for work that has already started. */
+  async discardAndClose() {
+    this.dispose(true);
+    await Promise.allSettled([this.preparing, this.running, this.retrying]);
   }
   dispose(force = false) {
     if (!force && (this.pending.length || this.preparingCount))

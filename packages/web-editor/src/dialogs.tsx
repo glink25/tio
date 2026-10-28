@@ -1,5 +1,5 @@
 import { useT } from '@tio/i18n';
-import { Button, Modal } from '@tio/ui';
+import { Button, Modal, OptionsPanel } from '@tio/ui';
 import { Database, Plus } from 'lucide-react';
 
 import type { EditorController } from './controller';
@@ -53,15 +53,22 @@ export function EditorDialogs({ model: m }: { model: EditorController }) {
             <Plus size={15} />
             {t('document.createEmbed')}
           </Button>
-          <div className="mt-4 flex flex-col">
-            {m.objects
-              .filter((o) => o.type === 'database' && !o.deleted)
-              .map((db) => (
-                <Button className="justify-start" key={db.id} onClick={() => m.embed(db)}>
-                  <Database size={16} />
-                  {db.name}
-                </Button>
-              ))}
+          <div className="mt-4">
+            <OptionsPanel
+              label={t('document.embedTitle')}
+              options={m.objects
+                .filter((o) => o.type === 'database' && !o.deleted)
+                .map((db) => ({
+                  id: db.id,
+                  text: db.name ?? '',
+                  label: db.name,
+                  icon: <Database size={16} />,
+                }))}
+              onSelect={(id) => {
+                const database = m.objects.find((o) => o.id === id);
+                if (database) m.embed(database);
+              }}
+            />
           </div>
         </Modal>
       )}

@@ -1,5 +1,6 @@
 import { editable, id, type TioObject } from '@tio/core';
 import { useT } from '@tio/i18n';
+import { SelectInput } from '@tio/ui';
 import { LoadingIndicator } from '@tio/ui';
 import { Button, EmptyNotice } from '@tio/ui';
 import { DatabaseView } from '@tio/views';
@@ -148,14 +149,18 @@ export function DatabaseEmbed({
       <EmptyNotice>
         <p>{t('ui.viewMissing')}</p>
         {views.length > 0 && m.current && m.can(m.current) && (
-          <select aria-label={t('ui.repair')} value="" onChange={(e) => repair(e.target.value)}>
+          <SelectInput
+            aria-label={t('ui.repair')}
+            value=""
+            onValueChange={(value) => repair(value)}
+          >
             <option value="">{t('ui.repair')}</option>
             {views.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.name}
               </option>
             ))}
-          </select>
+          </SelectInput>
         )}
       </EmptyNotice>
     );

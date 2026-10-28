@@ -20,7 +20,7 @@ import { paste, ClipboardMetadata, clipboardOriginals } from './clipboard';
 import { CodeBlock } from './code-block';
 import { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
-import { MentionMenu } from './mention-menu';
+import { MentionMenu, SlashMenu } from './mention-menu';
 export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
 import { useT, useTranslation } from '@tio/i18n';
@@ -387,6 +387,7 @@ export function EditorContent({
           />
           <SuggestionMenuController
             triggerCharacter="/"
+            suggestionMenuComponent={SlashMenu}
             getItems={async (query) =>
               filterSuggestionItems(
                 [

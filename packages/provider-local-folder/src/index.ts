@@ -1,6 +1,16 @@
 import { StorageError, segments, type FileStorageProvider } from '@tio/storage';
 export class LocalFolderProvider implements FileStorageProvider {
   constructor(readonly handle: FileSystemDirectoryHandle) {}
+  async deleteWorkspace(workspaceId: string) {
+    if (!/^[a-zA-Z0-9_-]+$/.test(workspaceId))
+      throw new StorageError('invalid', 'Invalid workspace ID');
+    try {
+      const directory = await this.handle.getDirectoryHandle('workspaces');
+      await directory.removeEntry(workspaceId, { recursive: true });
+    } catch (error) {
+      if ((error as DOMException).name !== 'NotFoundError') throw storageError(error);
+    }
+  }
   async canWrite() {
     try {
       return (await this.handle.queryPermission({ mode: 'readwrite' })) === 'granted';

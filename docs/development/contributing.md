@@ -27,6 +27,6 @@ Oxfmt 负责格式、导入与 Tailwind 排序；Oxlint 负责正确性与类型
 
 Web 连接入口注册于 `apps/web/src/services/connection-entry/`。各集成声明稳定 ID、翻译键、图标、层级、可用状态、提示与执行动作；同一集成的入口按按钮组渲染，次要入口可声明仅图标展示，宿主统一渲染和防止重复触发。目录选择须直接在点击调用链中执行；底层存储 provider 不依赖 React，也不承担登录按钮展示。
 
-空状态插画源位于 `apps/web/src/components/illustrations/`，由 `EmptyStateIllustration` 统一提供尺寸、主题颜色和读屏文案。工作空间采用打开的空收纳盒，回收站采用掀盖的空桶，以可见内腔表达无内容；使用原创 SVG，不增加插画库依赖。设计参考 [Ant Design Empty](https://ant.design/components/empty/) 的空容器表达，以及 [Atlassian Illustrations](https://atlassian.design/foundations/illustrations) 的中性、单一概念原则。
+空状态插画源位于 `packages/ui/src/illustrations/`，由 `EmptyStateIllustration` 统一提供尺寸、主题颜色和读屏文案。页面采用空白纸张，工作空间采用打开的空收纳盒，回收站采用掀盖的空桶，以可见内腔表达无内容；使用原创 SVG，不增加插画库依赖。设计参考 [Ant Design Empty](https://ant.design/components/empty/) 的空容器表达，以及 [Atlassian Illustrations](https://atlassian.design/foundations/illustrations) 的中性、单一概念原则。
 
 独立静态发布包的构建与 npm 发行见 [Tio Pages](../../packages/pages/README.md)。完整检查先构建该包，再检查消费者类型；修改公开接口或打包方式后另运行 `corepack pnpm test:pages-package`，验证真实 tarball，不能仅以 monorepo 内导入成功替代发布验收。

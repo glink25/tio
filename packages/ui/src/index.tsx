@@ -6,7 +6,7 @@ export { EditHistoryContext, useDraftHistory, type EditHistory } from './edit-hi
 import * as Dialog from '@radix-ui/react-dialog';
 import { useT } from '@tio/i18n';
 import { clsx, type ClassValue } from 'clsx';
-import { X, Languages, FileText, Database } from 'lucide-react';
+import { X, FileText, Database } from 'lucide-react';
 import {
   createContext,
   useContext,
@@ -22,8 +22,7 @@ export const PortalContext = createContext<HTMLElement | undefined>(undefined);
 import { twMerge } from 'tailwind-merge';
 
 import { useMobileDialogPosition } from './mobile-dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
-export { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './select';
+import { ChoiceSelect } from './select';
 export function cn(...values: ClassValue[]) {
   return twMerge(clsx(values));
 }
@@ -219,25 +218,19 @@ export function LanguageSwitcher({
   const t = useT();
 
   return (
-    <Select
+    <ChoiceSelect
+      label={t('common.language')}
       value={value}
+      className="w-36"
+      search={false}
+      options={[
+        { id: 'zh', text: '简体中文', label: '简体中文' },
+        { id: 'en', text: 'English', label: 'English' },
+      ]}
       onValueChange={(language) => {
         if (language === 'zh' || language === 'en') onChange(language);
       }}
-    >
-      <SelectTrigger
-        aria-label={t('common.language')}
-        title={t('common.language')}
-        className="w-36 gap-1.5 px-2 text-xs"
-      >
-        <Languages size={15} aria-hidden className="shrink-0" />
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent align="end">
-        <SelectItem value="zh">简体中文</SelectItem>
-        <SelectItem value="en">English</SelectItem>
-      </SelectContent>
-    </Select>
+    />
   );
 }
 export function ObjectIcon({
@@ -295,7 +288,8 @@ export function EmptyNotice({ children }: { children: ReactNode }) {
 }
 
 export { useTheme, ThemeSwitcher, ThemeContext } from './theme';
-export { LoadingSkeleton, LoadingIndicator, readingLayout } from './skeleton';
+export { LoadingSkeleton, LoadingIndicator, SidebarSkeleton, readingLayout } from './skeleton';
+export { EmptyStateIllustration } from './empty-state-illustration';
 
 export {
   Menu,
@@ -341,3 +335,15 @@ export function useOverlayBack(close: () => void, enabled = true) {
 }
 
 export { ReferencePicker, ReferenceIcon, type ReferenceOption } from './reference-picker';
+
+export {
+  OptionsPanel,
+  type OptionsPanelProps,
+  type ChoiceOption,
+  type ChoiceTab,
+} from './options-panel';
+export { ChoiceSelect, SelectInput } from './select';
+
+export { usePagedOptions } from './use-paged-options';
+
+export { SettingsGroup, SettingsRow, SettingsAction } from './settings';

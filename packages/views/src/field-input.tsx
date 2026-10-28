@@ -12,6 +12,7 @@ import {
 import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
 import { useT, type TranslationKey } from '@tio/i18n';
+import { OptionsPanel } from '@tio/ui';
 import { LoadingIndicator } from '@tio/ui';
 import { MentionLabel, MentionPicker, Button, useDraftHistory, Popover } from '@tio/ui';
 import { useState, useEffect, useRef } from 'react';
@@ -512,75 +513,37 @@ export function FieldInput(props: FieldInputProps) {
     const options = field.options ?? [];
     const multiple = field.type === 'multiSelect';
     const selected = Array.isArray(draft) ? draft : draft ? [draft] : [];
-    const filtered = options.filter((o) =>
-      o.label.toLocaleLowerCase().includes(search.toLocaleLowerCase()),
-    );
     control = (
       <div className="w-full min-w-0 space-y-2">
-        <input
-          className="w-full"
-          aria-label={t('database.searchOptions')}
-          data-history="native"
-          placeholder={t('database.searchOptions')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
         <FieldValue field={field} value={draft} objects={objects} onOpen={onOpen} />
-        <div
-          role="listbox"
-          tabIndex={0}
-          aria-label={field.name}
-          aria-multiselectable={multiple}
-          onKeyDown={(e) => {
-            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
-            const items = Array.from(
-              e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'),
+        <OptionsPanel
+          label={t('database.searchOptions')}
+          query={search}
+          onQuery={setSearch}
+          selected={selected as string[]}
+          options={options.map((o) => ({
+            id: o.id,
+            text: o.label,
+            label: <OptionTag label={o.label} color={o.color} />,
+            group:
+              field.type === 'status' && o.group
+                ? t(`database.${o.group}` as TranslationKey)
+                : undefined,
+          }))}
+          onClose={() => setOptionsOpen(false)}
+          onSelect={(id) => {
+            if (props.commitMode === 'form' && !multiple) setOptionsOpen(false);
+            change(
+              multiple
+                ? selected.includes(id)
+                  ? selected.filter((v) => v !== id)
+                  : [...selected, id]
+                : selected.includes(id)
+                  ? null
+                  : id,
             );
-            const index = items.indexOf(document.activeElement as HTMLButtonElement);
-            const next =
-              e.key === 'Home'
-                ? 0
-                : e.key === 'End'
-                  ? items.length - 1
-                  : (index + (e.key === 'ArrowUp' ? -1 : 1) + items.length) % items.length;
-            e.preventDefault();
-            items[next]?.focus();
           }}
-          className="max-h-56 overflow-y-auto"
-        >
-          {!filtered.length && <p className="p-2 text-xs text-muted">{t('database.noOptions')}</p>}
-          {filtered.map((o, i) => (
-            <div key={o.id}>
-              {field.type === 'status' && o.group && o.group !== filtered[i - 1]?.group && (
-                <p className="px-2 py-1 text-xs text-muted">
-                  {t(`database.${o.group}` as TranslationKey)}
-                </p>
-              )}
-              <button
-                type="button"
-                role="option"
-                aria-label={o.label}
-                aria-selected={selected.includes(o.id)}
-                className="flex w-full items-center justify-between gap-2 rounded p-2 text-left hover:bg-surface-hover aria-selected:bg-surface"
-                onClick={() => {
-                  if (props.commitMode === 'form' && !multiple) setOptionsOpen(false);
-                  change(
-                    multiple
-                      ? selected.includes(o.id)
-                        ? selected.filter((id) => id !== o.id)
-                        : [...selected, o.id]
-                      : selected.includes(o.id)
-                        ? null
-                        : o.id,
-                  );
-                }}
-              >
-                <OptionTag label={o.label} color={o.color} />
-                <span aria-hidden>{selected.includes(o.id) ? '✓' : ''}</span>
-              </button>
-            </div>
-          ))}
-        </div>
+        />
       </div>
     );
     if (props.commitMode === 'form') {

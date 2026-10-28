@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <ellipse cx="64" cy="113" rx="34" ry="5" fill="currentColor" opacity=".07"/>
+  <g stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M29 30h50l17 17v57H29Z" fill="currentColor" fill-opacity=".055"/>
+    <path d="M37 21h39l21 21v55H37Z" fill="var(--color-panel, #fff)"/>
+    <path d="M76 21v21h21" fill="currentColor" fill-opacity=".06"/>
+    <path d="M52 61h30M52 72h22" opacity=".3"/>
+  </g>
+</svg>

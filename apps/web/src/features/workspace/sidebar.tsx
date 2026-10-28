@@ -1,5 +1,6 @@
 import { titleOf, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
+import { OptionsPanel } from '@tio/ui';
 import {
   Button,
   IconButton,
@@ -9,19 +10,14 @@ import {
   MenuItem,
   MenuSeparator,
   Popover,
-  Command,
-  CommandInput,
-  CommandList,
-  CommandItem,
-  CommandEmpty,
   Modal,
   useMobile,
 } from '@tio/ui';
+import { Zap, Settings } from 'lucide-react';
 import {
   Search,
   Plus,
   ChevronsUpDown,
-  Check,
   Trash2,
   MoreHorizontal,
   Star,
@@ -33,7 +29,7 @@ import {
 } from 'lucide-react';
 import { type ReactNode } from 'react';
 
-import { Identity } from '../../components/identity';
+import { ConnectionInfo, Identity } from '../../components/identity';
 import { PageTree } from './page-tree';
 import type { WorkspaceController } from './use-workspace';
 
@@ -64,23 +60,21 @@ export function WorkspaceSwitcher({
         </Button>
       }
     >
-      <Command>
-        <CommandInput placeholder={t('ui.spaces')} />
-        <CommandList>
-          <CommandEmpty className="p-4 text-sm text-muted">{t('ui.noResults')}</CommandEmpty>
-          {m.sessions.map((s) => (
-            <CommandItem
-              key={s.id}
-              value={s.id + ' ' + s.name}
-              onSelect={() => void m.activate(s)}
-              className="flex items-center gap-2"
-            >
-              <span className="flex-1 truncate">{s.name}</span>
-              {s.id === m.session?.id && <Check size={15} />}
-            </CommandItem>
-          ))}
-        </CommandList>
-      </Command>
+      <OptionsPanel
+        label={t('ui.spaces')}
+        selected={m.session ? [m.session.id] : []}
+        options={m.sessions.map((session) => ({
+          id: session.id,
+          text: session.name,
+          label: session.name,
+        }))}
+        onClose={() => m.setMenu(false)}
+        onSelect={(id) => {
+          const session = m.sessions.find((item) => item.id === id);
+          if (session) void m.activate(session);
+          m.setMenu(false);
+        }}
+      />
       <div className="mt-2 border-t border-line pt-2">
         <Button
           className="w-full justify-start"
@@ -240,13 +234,37 @@ export function Sidebar({
         </nav>
       </div>
       <div className="mt-3 border-t border-line pt-2">
-        <Button
-          className="w-full justify-start text-sm"
-          aria-label={t('ui.settings')}
-          onClick={() => m.setSettingsOpen(true)}
+        <Menu
+          align="start"
+          collisionPadding={8}
+          label={t('ui.settings')}
+          trigger={
+            <Button
+              data-settings-entry
+              className="w-full justify-start text-sm"
+              aria-label={t('ui.settings')}
+            >
+              <Identity identity={m.identity} />
+            </Button>
+          }
         >
-          <Identity identity={m.identity} />
-        </Button>
+          <div className="max-w-72 px-2.5 py-3">
+            <ConnectionInfo identity={m.identity} />
+          </div>
+          <MenuSeparator />
+          <MenuItem disabled={!m.runtime || !m.session} onSelect={() => m.setAutomationOpen(true)}>
+            <Zap size={16} />
+            {t('ui.automation')}
+          </MenuItem>
+          <MenuItem onSelect={() => m.setTrashOpen(true)}>
+            <Trash2 size={16} />
+            {t('ui.trash')}
+          </MenuItem>
+          <MenuItem onSelect={() => m.setSettingsOpen(true)}>
+            <Settings size={16} />
+            {t('ui.settings')}
+          </MenuItem>
+        </Menu>
       </div>
     </div>
   );

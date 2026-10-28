@@ -189,6 +189,8 @@ export class LocalStore {
     );
     try {
       const settings = tx.objectStore('settings');
+      if (await settings.get('workspace-lifecycle/' + this.instanceId))
+        throw new HostError('closed');
       const signature = JSON.stringify(request);
       const receipt = await settings.get(this.key('$commit/' + request.id));
       if (receipt) {
@@ -478,3 +480,21 @@ export class LocalStore {
 
 export { LocalCatalog } from './catalog';
 export { RecoveryJournal } from './journal';
+
+/** Permanently remove one instance, including staged assets, receipts and recovery history. */
+export async function deleteLocalWorkspace(instanceId: string) {
+  const db = await openHostDatabase('tio-workspaces');
+  try {
+    const tx = db.transaction(['objects', 'assets', 'settings', 'recovery'], 'readwrite');
+    const range = IDBKeyRange.bound(instanceId + '/', instanceId + '/\uffff');
+    for (const name of ['objects', 'assets', 'settings']) await tx.objectStore(name).delete(range);
+    let cursor = await tx.objectStore('recovery').index('instance').openCursor(instanceId);
+    while (cursor) {
+      await cursor.delete();
+      cursor = await cursor.continue();
+    }
+    await tx.done;
+  } finally {
+    db.close();
+  }
+}

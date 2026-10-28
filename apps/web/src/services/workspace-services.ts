@@ -22,6 +22,7 @@ import {
 } from './connection-adapters';
 import { credentials, clearCredentials } from './github-auth';
 import { HostSaveRecovery } from './save-recovery';
+import { WorkspaceLifecycle } from './workspace-lifecycle';
 export class WorkspaceServices {
   constructor(private factory: ConnectionFactory = createConnectionBinding) {}
   private binding?: ConnectionBinding;
@@ -63,6 +64,11 @@ export class WorkspaceServices {
   }
   get hasReplicaSync() {
     return !!this.runner;
+  }
+  get contentReady() {
+    return this.active
+      ? (this.binding?.isContentReady?.(this.active.session.workspaceId) ?? true)
+      : false;
   }
   get canReauthorize() {
     return !!this.binding?.adapter.reauthorize;
@@ -107,6 +113,64 @@ export class WorkspaceServices {
     return state.code === 'available';
   }
   private catalog = new LocalCatalog();
+  private lifecycle = new WorkspaceLifecycle(this.catalog, async (id) => {
+    try {
+      await this.stopWorkspace(id);
+    } catch (error) {
+      this.reportStatusError(error);
+    }
+  });
+  onWorkspaceClosed = (_id: string) => {};
+  workspaceActions(session: WorkspaceSession) {
+    if (session.connectionId !== this.connection?.id) return {};
+    return this.binding?.workspaceActions?.(session.workspaceId) ?? {};
+  }
+  private async stopWorkspace(id: string) {
+    const active = this.active?.session.id === id ? this.active : undefined;
+    if (active) {
+      // Detach first, so polling and recovery cannot start further work.
+      this.active = undefined;
+      const recovery = this.recovery;
+      this.recovery = undefined;
+      const closing = active.runtime.discardAndClose();
+      await recovery?.stop();
+      await closing;
+      this.onWorkspaceClosed(id);
+    }
+    const entry = this.repositories.get(id);
+    if (entry) {
+      entry.unsubscribe?.();
+      await entry.runner?.stop();
+      entry.repository.close();
+      this.repositories.delete(id);
+    }
+    this.onChange();
+  }
+  deleteWorkspace(session: WorkspaceSession) {
+    return this.transition(async () => {
+      this.assertLive();
+      const action = this.workspaceActions(session).delete;
+      if (action?.kind !== 'direct') throw new HostError('unsupported');
+      await this.lifecycle.lock(session.id, () => this.lifecycle.mark(session.id, 'deleting'));
+      await this.stopWorkspace(session.id);
+      await this.lifecycle.lock(session.id, async () => {
+        try {
+          await action.execute();
+        } catch (error) {
+          if (error instanceof StorageError && error.code === 'permission' && this.binding)
+            throw new ConnectionAccessError(this.binding.adapter.classifyError(error), {
+              cause: error,
+            });
+          throw error;
+        }
+        await this.catalog.removeSession(session.id);
+        await this.lifecycle.mark(session.id, 'deleted');
+      });
+      localStorage.removeItem('tio.sidebar.' + session.workspaceId);
+      this.accessStates.delete(session.workspaceId);
+      this.onChange();
+    });
+  }
   private transitions: Promise<unknown> = Promise.resolve();
   private transition<T>(work: () => Promise<T>): Promise<T> {
     const next = this.transitions.then(work);
@@ -231,6 +295,7 @@ export class WorkspaceServices {
         connectionId: this.connection!.id,
         name: workspace.name ?? '',
       };
+      if (await this.catalog.read('workspace-lifecycle/' + session.id)) continue;
       await this.catalog.saveSession(session);
       if (binding.sync) this.repository(session);
     }
@@ -249,7 +314,10 @@ export class WorkspaceServices {
     let entry = this.repositories.get(session.id);
     if (!entry) {
       if (!this.binding) throw new Error('Connection is not initialized');
-      const repository = this.binding.repository(session.workspaceId, session.id);
+      const repository = this.lifecycle.guard(
+        session.id,
+        this.binding.repository(session.workspaceId, session.id),
+      );
       entry = { repository };
       this.repositories.set(session.id, entry);
       const synchronization = this.binding?.sync?.(session.workspaceId, repository);
@@ -311,8 +379,23 @@ export class WorkspaceServices {
           },
         );
         entry.runner = runner;
+        let completing = false;
         runner.onStatus = () => {
-          if (runner.status === 'synced') synchronization?.onComplete?.();
+          if (runner.status === 'synced' && !completing) {
+            completing = true;
+            // Publish the downloaded navigation before revealing an initialized empty state.
+            const refresh =
+              this.active?.session.id === session.id
+                ? this.active.runtime.poll()
+                : Promise.resolve();
+            void refresh
+              .then(() => synchronization.onComplete?.())
+              .catch((error) => this.reportStatusError(error))
+              .finally(() => {
+                completing = false;
+                this.status();
+              });
+          }
           this.status();
         };
         entry.unsubscribe = repository.subscribeChanges((event) => {
@@ -365,6 +448,7 @@ export class WorkspaceServices {
   }
   open(session: WorkspaceSession) {
     return this.transition(async () => {
+      await this.lifecycle.assertOpen(session.id);
       await this.active?.runtime.flush();
       const entry = this.repository(session);
       if (
@@ -379,20 +463,23 @@ export class WorkspaceServices {
         this.assertLive();
         await this.closeActive();
         this.assertLive();
+        return await this.lifecycle.lock(session.id, async () => {
+          await this.lifecycle.assertOpen(session.id);
+          runtime.automation =
+            entry.repository.automation ?? this.binding?.automation?.(runtime, session.workspaceId);
+          this.active = { session, runtime };
+          this.statusError = undefined;
+          this.recovery = new HostSaveRecovery(runtime, {
+            checkAccess: () => this.checkAccess(session.workspaceId),
+            onError: (error) => this.saveFailed(error),
+          });
+          this.startPolling();
+          return runtime;
+        });
       } catch (error) {
-        runtime.dispose();
+        runtime.dispose(true);
         throw error;
       }
-      runtime.automation =
-        entry.repository.automation ?? this.binding?.automation?.(runtime, session.workspaceId);
-      this.active = { session, runtime };
-      this.statusError = undefined;
-      this.recovery = new HostSaveRecovery(runtime, {
-        checkAccess: () => this.checkAccess(session.workspaceId),
-        onError: (error) => this.saveFailed(error),
-      });
-      this.startPolling();
-      return runtime;
     });
   }
   startSync(onStatus: (status: SyncSnapshot) => void) {
@@ -529,6 +616,7 @@ export class WorkspaceServices {
     const recovery = this.recovery;
     this.recovery = undefined;
     this.active = undefined;
+    this.lifecycle.close();
     this.abandoning = this.transition(async () => {
       await recovery?.stop();
       active?.runtime.dispose(true);
@@ -549,6 +637,7 @@ export class WorkspaceServices {
     return this.abandoning;
   }
   dispose() {
+    this.lifecycle.close();
     if (this.abandoning) return this.abandoning;
     this.invalidateConnection();
     return this.transition(async () => {

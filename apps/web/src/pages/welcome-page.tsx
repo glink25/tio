@@ -1,10 +1,10 @@
 import { t } from '@tio/i18n';
 import { Button, IconButton, LoadingSkeleton } from '@tio/ui';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { EmptyStateIllustration } from '@tio/ui';
+import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { Brand } from '../components/brand';
-import { EmptyStateIllustration } from '../components/empty-state-illustration';
 import { Identity } from '../components/identity';
 import { LoginHero } from '../components/login-hero';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
@@ -76,20 +76,30 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
                 </div>
               ) : (
                 m.sessions.map((s) => (
-                  <Button
-                    disabled={m.busy}
-                    key={s.id}
-                    variant="outline"
-                    className="w-full justify-between py-4 text-left"
-                    onClick={() => void m.activate(s)}
-                  >
-                    <span className="truncate">{s.name}</span>
-                    {m.recent === s.id && (
-                      <span className="shrink-0 rounded bg-surface-hover px-2 py-1 text-xs text-muted">
-                        {t('ui.recent')}
-                      </span>
+                  <div key={s.id} className="flex items-center gap-2">
+                    <Button
+                      disabled={m.busy || m.actionBusy}
+                      variant="outline"
+                      className="min-w-0 flex-1 justify-between py-4 text-left"
+                      onClick={() => void m.activate(s)}
+                    >
+                      <span className="truncate">{s.name}</span>
+                      {m.recent === s.id && (
+                        <span className="shrink-0 rounded bg-surface-hover px-2 py-1 text-xs text-muted">
+                          {t('ui.recent')}
+                        </span>
+                      )}
+                    </Button>
+                    {m.workspaceActions(s).delete && (
+                      <IconButton
+                        label={`${t('workspace.delete')} · ${s.name}`}
+                        disabled={m.busy || m.actionBusy}
+                        onClick={() => m.requestWorkspaceAction(s, 'delete')}
+                      >
+                        <Trash2 size={16} />
+                      </IconButton>
                     )}
-                  </Button>
+                  </div>
                 ))
               )}
             </>

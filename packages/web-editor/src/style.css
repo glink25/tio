@@ -178,6 +178,11 @@
   max-width: calc(100vw - 24px);
   padding: 6px;
 }
+.tio-editor [data-slot='tooltip-content'] {
+  width: max-content;
+  max-width: min(20rem, calc(100vw - 24px));
+  overflow-wrap: anywhere;
+}
 .tio-editor [data-slot='dropdown-menu-item'],
 .tio-editor [data-slot='dropdown-menu-sub-trigger'],
 .tio-editor [data-slot='dropdown-menu-checkbox-item'],

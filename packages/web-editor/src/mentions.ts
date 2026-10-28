@@ -104,9 +104,17 @@ export function createMentionService(
     }
   };
   return {
-    async query(text, after) {
-      let cursor: { text: string; content?: string; contentDone?: boolean; person: number } = {
+    kinds: ['page', 'database', 'record', ...(people ? ['github-user' as const] : [])],
+    async query(text, after, kind) {
+      let cursor: {
+        text: string;
+        kind?: MentionReference['kind'];
+        content?: string;
+        contentDone?: boolean;
+        person: number;
+      } = {
         text,
+        kind,
         person: 0,
       };
       if (after) {
@@ -114,6 +122,7 @@ export function createMentionService(
           cursor = JSON.parse(after);
           if (
             cursor.text !== text ||
+            cursor.kind !== kind ||
             !Number.isSafeInteger(cursor.person) ||
             cursor.person < 0 ||
             (cursor.content !== undefined && typeof cursor.content !== 'string') ||
@@ -125,10 +134,12 @@ export function createMentionService(
         }
       }
       const [content, collaborators] = await Promise.allSettled([
-        cursor.contentDone
+        cursor.contentDone || kind === 'github-user'
           ? Promise.resolve({ items: [] as MentionCandidate[], next: undefined })
-          : runtime.mentionCandidates(text, cursor.content),
-        people ? people() : Promise.resolve([] as MentionCandidate[]),
+          : runtime.mentionCandidates(text, cursor.content, kind),
+        people && (!kind || kind === 'github-user')
+          ? people()
+          : Promise.resolve([] as MentionCandidate[]),
       ]);
       const sourceErrors: ('content' | 'github')[] = [];
       if (content.status === 'rejected') sourceErrors.push('content');
@@ -157,7 +168,13 @@ export function createMentionService(
         items: [...items, ...selected],
         next:
           nextContent || person < users.length
-            ? JSON.stringify({ text, content: nextContent, contentDone: !nextContent, person })
+            ? JSON.stringify({
+                text,
+                kind,
+                content: nextContent,
+                contentDone: !nextContent,
+                person,
+              })
             : undefined,
         sourceErrors,
       };

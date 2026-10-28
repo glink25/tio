@@ -11,6 +11,7 @@ import { canonical, encode, managedPath, pathFor } from '@tio/serialization';
 import { StorageError, type FileStorageProvider } from '@tio/storage';
 
 import { ChunkTree } from './chunks';
+import { decodeStored, parseStored } from './decode';
 export { ChunkTree } from './chunks';
 
 /** One shared layout for all file backends. No business merge or transport-specific behavior. */
@@ -92,13 +93,24 @@ export class FileWorkspaceContent implements WorkspaceContentPort {
     const path = pathFor({ id, workspaceId: this.workspaceId } as TioObject);
     const bytes = await this.files.read(path);
     if (!bytes) return undefined;
-    const json = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    const json = parseStored(bytes);
     let object: TioObject;
-    if (json.$storage) {
-      if (json.$storage.version !== 1 || json.id !== id || json.workspaceId !== this.workspaceId)
+    if (json && typeof json === 'object' && '$storage' in json) {
+      const manifest = json as {
+        id?: unknown;
+        workspaceId?: unknown;
+        $storage?: { version?: unknown; root?: unknown };
+      };
+      if (
+        manifest.$storage?.version !== 1 ||
+        typeof manifest.$storage.root !== 'string' ||
+        manifest.id !== id ||
+        manifest.workspaceId !== this.workspaceId
+      )
         throw new StorageError('invalid', 'Invalid object manifest');
-      object = this.types.decode(await this.tree.read(json.$storage.root));
-    } else object = this.types.decode(json);
+      const value = await this.tree.read(manifest.$storage.root);
+      object = decodeStored(() => this.types.decode(value));
+    } else object = decodeStored(() => this.types.decode(json));
     if (object.workspaceId !== this.workspaceId || object.id !== id)
       throw new StorageError('invalid', 'Object identity mismatch');
     if (!options.fresh && fingerprint) {

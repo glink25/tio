@@ -1,4 +1,32 @@
 export const en = {
+  'picker.all': 'All',
+  'picker.github-user': 'People',
+  'picker.page': 'Pages',
+  'picker.database': 'Databases',
+  'picker.record': 'Records',
+  'settings.connection': 'Connection',
+  'settings.preferences': 'Preferences',
+  'settings.data': 'Workspace data',
+  'settings.appearanceDescription': 'Choose how Tio looks on this device.',
+  'settings.languageDescription': 'Choose the language used for menus and controls.',
+  'settings.importDescription': 'Import a Tio workspace archive.',
+  'settings.exportDescription': 'Download your workspace content and files.',
+  'settings.markdownDescription': 'Download your content as Markdown.',
+
+  'workspace.delete': 'Delete workspace',
+  'workspace.share': 'Share workspace',
+  'workspace.manage': 'Workspace management',
+  'workspace.deletePermanently': 'Permanently delete',
+  'workspace.deleteDevice':
+    'Permanently delete this workspace, its documents, attachments and recovery data from this device. Unsaved changes will be discarded. This cannot be undone.',
+  'workspace.deleteFolder':
+    'Permanently delete the entire {{path}} directory, including all files inside it. Unsaved changes will be discarded. Other workspaces and the connection folder are kept. This cannot be undone.',
+  'workspace.deleteGitHub':
+    'Delete repository {{repository}} on GitHub, in Settings → Danger Zone. This deletes the entire repository, including files outside Tio. GitHub controls the required permissions. Opening GitHub does not delete this workspace or its local copy in Tio.',
+  'workspace.shareGitHub':
+    'Manage collaborators for {{repository}} on GitHub to share access to the entire repository. GitHub controls invitations and permissions. Opening GitHub does not mean sharing has completed.',
+  'workspace.openGitHub': 'Continue on GitHub',
+
   'automation.triggerPage': 'Trigger page',
   'automation.step': 'Step {{number}}',
   'automation.resultRecords': 'Result records',
@@ -428,6 +456,8 @@ export const en = {
   'ui.table': 'Table',
   'ui.collapse': 'Collapse sidebar',
   'ui.empty': 'Nothing here yet',
+  'ui.emptyPages': 'No pages yet',
+  'workspace.initializing': 'Initializing workspace…',
   'ui.back': 'Back',
   'ui.done': 'Done',
   'ui.removedField': 'Deleting this property removes its values from records.',
@@ -586,6 +616,34 @@ export const en = {
   'errors.reload': 'Reload',
 } as const;
 export const zh: Record<keyof typeof en, string> = {
+  'picker.all': '全部',
+  'picker.github-user': '人员',
+  'picker.page': '页面',
+  'picker.database': '数据库',
+  'picker.record': '记录',
+  'settings.connection': '连接信息',
+  'settings.preferences': '偏好设置',
+  'settings.data': '空间数据',
+  'settings.appearanceDescription': '选择此设备上 Tio 的显示外观。',
+  'settings.languageDescription': '选择菜单和控件使用的语言。',
+  'settings.importDescription': '导入 Tio 工作空间归档文件。',
+  'settings.exportDescription': '下载工作空间的内容和附件。',
+  'settings.markdownDescription': '将空间内容下载为 Markdown。',
+
+  'workspace.delete': '删除工作空间',
+  'workspace.share': '分享工作空间',
+  'workspace.manage': '工作空间管理',
+  'workspace.deletePermanently': '永久删除',
+  'workspace.deleteDevice':
+    '永久删除此设备上的工作空间、文档、附件和恢复数据，丢弃尚未保存的修改。此操作无法撤销。',
+  'workspace.deleteFolder':
+    '永久删除整个 {{path}} 目录及其所有文件，并丢弃尚未保存的修改。其他工作空间和连接文件夹将保留。此操作无法撤销。',
+  'workspace.deleteGitHub':
+    '请在 GitHub 仓库 {{repository}} 的 Settings → Danger Zone 中删除仓库。删除会影响整个仓库，包括 Tio 以外的文件；所需权限由 GitHub 管理。打开网页不会删除 Tio 中的工作空间或本地副本。',
+  'workspace.shareGitHub':
+    '请在 GitHub 上管理 {{repository}} 的协作者，以共享整个仓库的访问权限。邀请和权限由 GitHub 管理；打开网页不代表分享已经完成。',
+  'workspace.openGitHub': '前往 GitHub',
+
   'automation.triggerPage': '触发页面',
   'automation.step': '第 {{number}} 步',
   'automation.resultRecords': '产生的记录',
@@ -1008,6 +1066,8 @@ export const zh: Record<keyof typeof en, string> = {
   'ui.table': '表格',
   'ui.collapse': '折叠侧栏',
   'ui.empty': '这里还没有内容',
+  'ui.emptyPages': '还没有页面',
+  'workspace.initializing': '正在初始化工作空间…',
   'ui.back': '返回',
   'ui.done': '完成',
   'ui.removedField': '删除属性将从记录中移除对应值。',

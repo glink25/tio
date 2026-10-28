@@ -29,7 +29,7 @@ test('workspace automation configuration persists and creates content from a rea
   await page.getByRole('menuitem', { name: '新建数据库', exact: true }).click();
   await expect(page.getByLabel('页面标题')).toHaveValue('新建数据库');
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '自动化', exact: true }).click();
+  await page.getByRole('menuitem', { name: '自动化', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '设置', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: '新建自动化', exact: true }).first().click();
   await page.getByLabel('名称', { exact: true }).fill('页面索引');
@@ -56,15 +56,14 @@ test('workspace automation configuration persists and creates content from a rea
   await page.getByRole('button', { name: '返回', exact: true }).click();
   await page.reload();
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '自动化', exact: true }).click();
+  await page.getByRole('menuitem', { name: '自动化', exact: true }).click();
   await page.getByRole('button', { name: '页面索引', exact: false }).first().click();
   await expect(page.getByRole('textbox', { name: '正文模板' })).toContainText('页面索引');
   await expect(page.getByRole('textbox', { name: '名称', exact: true }).last()).toHaveValue(
     '直接输入的属性',
   );
   await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog', { name: '设置', exact: true })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '自动化中心', exact: true })).toHaveCount(0);
   // Opening a new page through the host must trigger without displaying the database first.
   await page.evaluate(async (root) => {
     const { WorkspaceRuntime } = await import(root + '/packages/workspace/src/index.ts');
@@ -112,7 +111,7 @@ async function openWorkspace(page: Page) {
 }
 async function openCenter(page: Page) {
   await page.getByRole('button', { name: '设置', exact: true }).click();
-  await page.getByRole('button', { name: '自动化', exact: true }).click();
+  await page.getByRole('menuitem', { name: '自动化', exact: true }).click();
 }
 
 test('reordering referenced steps shows errors and incomplete drafts can be discarded', async ({
@@ -156,8 +155,7 @@ test('reordering referenced steps shows errors and incomplete drafts can be disc
   await leave.getByRole('button', { name: '继续编辑' }).click();
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: '放弃修改' }).click();
-  await expect(page.getByRole('dialog', { name: '设置', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: '自动化', exact: true }).click();
+  await openCenter(page);
   await page.getByRole('button', { name: /^多步流程/ }).click();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await page.getByRole('button', { name: '操作选项', exact: true }).first().click();

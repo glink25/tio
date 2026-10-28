@@ -3,6 +3,7 @@ import { AutomationRunner } from '@tio/automation';
 import type { Connection, TioObject, SearchQuery, PageQuery } from '@tio/core';
 import { WorkerSearch } from '@tio/database/search-browser';
 import { FileWorkspaceContent } from '@tio/file-storage';
+import { t } from '@tio/i18n';
 import { LocalStore } from '@tio/local-store';
 import {
   GitHubClient,
@@ -10,6 +11,7 @@ import {
   GitHubError,
   type GitHubEndpoint,
 } from '@tio/provider-github';
+import { StorageError } from '@tio/storage';
 
 import type { ConnectionBinding } from './connection-adapters';
 import { accessToken, credentials, loginGitHub } from './github-auth';
@@ -67,9 +69,11 @@ export function githubBinding(connection: Connection): ConnectionBinding {
     markComplete() {
       if (!disposed) localStorage.setItem(this.completeKey, 'true');
     }
+    get complete() {
+      return localStorage.getItem(this.completeKey) === 'true';
+    }
     private requireComplete() {
-      if (!localStorage.getItem(this.completeKey))
-        throw new Error('工作空间仍在下载，请同步完成后重试');
+      if (!this.complete) throw new Error('工作空间仍在下载，请同步完成后重试');
     }
     private workerSearch: WorkerSearch = new WorkerSearch(this);
     search(query: SearchQuery): Promise<import('@tio/core').SearchPage> {
@@ -123,6 +127,26 @@ export function githubBinding(connection: Connection): ConnectionBinding {
       details: [],
     },
     adapter,
+    isContentReady: (workspaceId) => replicas.get(workspaceId)?.complete ?? false,
+    workspaceActions(workspaceId) {
+      const links = adapter.workspaceLinks(workspaceId);
+      return {
+        delete: {
+          kind: 'external',
+          url: links.delete,
+          title: t('workspace.delete'),
+          description: t('workspace.deleteGitHub', { repository: links.repository }),
+          confirmLabel: t('workspace.openGitHub'),
+        },
+        share: {
+          kind: 'external',
+          url: links.share,
+          title: t('workspace.share'),
+          description: t('workspace.shareGitHub', { repository: links.repository }),
+          confirmLabel: t('workspace.openGitHub'),
+        },
+      };
+    },
     mentionPeople(workspaceId) {
       const auth = credentials();
       if (disposed || auth?.userId !== userId)
@@ -162,14 +186,28 @@ export function githubBinding(connection: Connection): ConnectionBinding {
     },
     async discover() {
       const found = await adapter.discover();
-      persist();
       const objects: TioObject[] = [];
       for (const item of found) {
         if (item.problem) continue;
-        if (!item.workspaceId) continue;
-        const workspace = await content(item.workspaceId).read(item.workspaceId);
-        if (workspace?.type === 'workspace') objects.push(workspace);
+        if (!item.workspaceId || !item.endpoint) continue;
+        const bound = endpoints.get(item.workspaceId);
+        if (bound && bound.repositoryId !== item.repo.id) continue;
+        try {
+          const candidate = new FileWorkspaceContent(
+            new GitHubProvider(client, item.endpoint),
+            item.workspaceId,
+          );
+          const workspace = await candidate.read(item.workspaceId);
+          if (workspace?.type === 'workspace') {
+            endpoints.set(item.workspaceId, item.endpoint);
+            objects.push(workspace);
+          }
+        } catch (error) {
+          if (!(error instanceof StorageError && ['invalid', 'missing'].includes(error.code)))
+            throw error;
+        }
       }
+      persist();
       return objects;
     },
     content,

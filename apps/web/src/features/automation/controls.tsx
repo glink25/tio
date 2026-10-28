@@ -7,21 +7,11 @@ import {
   type TioObject,
 } from '@tio/core';
 import { useT, type TranslationKey } from '@tio/i18n';
-import {
-  Button,
-  IconButton,
-  Popover,
-  Command,
-  CommandInput,
-  CommandList,
-  CommandItem,
-  CommandEmpty,
-  CommandGroup,
-  cn,
-} from '@tio/ui';
+import { ChoiceSelect, OptionsPanel } from '@tio/ui';
+import { Button, IconButton, Popover, cn } from '@tio/ui';
 import { FieldInput } from '@tio/views';
-import { Braces, Check, ChevronDown, X, Plus } from 'lucide-react';
-import { useState, useId, type ReactNode } from 'react';
+import { Braces, X, Plus } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 
 import { compatible, operators, comparisonField, type Variable } from './model';
 export const inputClass =
@@ -39,63 +29,18 @@ export function Choice({
   label: string;
   disabled?: boolean;
 }) {
-  const t = useT();
-  const listId = useId();
-  const [open, setOpen] = useState(false);
   return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
+    <ChoiceSelect
+      search
+      value={value}
+      onValueChange={onChange}
       label={label}
-      mobilePlacement="anchor"
-      className="p-1"
-      trigger={
-        <Button
-          type="button"
-          role="combobox"
-          aria-label={label}
-          aria-expanded={open}
-          aria-controls={listId}
-          disabled={disabled}
-          className="w-full justify-between border border-line bg-panel px-3 py-2 text-left"
-        >
-          <span className="truncate">
-            {options.find((o) => o.value === value)?.label ??
-              (value ? t('automation.selectionUnavailable') : label)}
-          </span>
-          <ChevronDown size={14} className="shrink-0 text-muted" />
-        </Button>
-      }
-    >
-      <Command>
-        <CommandInput
-          aria-label={t('automation.searchChoices')}
-          placeholder={t('automation.searchChoices')}
-          className="w-full border-b border-line p-2 outline-none"
-        />
-        <CommandList id={listId} className="max-h-64 overflow-y-auto">
-          <CommandEmpty className="p-3 text-sm text-muted">
-            {t('automation.noChoices')}
-          </CommandEmpty>
-          {options.map((option) => (
-            <CommandItem
-              key={option.value}
-              value={`${option.label} ${option.value}`}
-              onSelect={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              className="flex cursor-pointer items-center justify-between gap-2 rounded p-2 text-sm data-[selected=true]:bg-surface-hover"
-            >
-              <span>{option.label}</span>
-              {value === option.value && <Check size={14} />}
-            </CommandItem>
-          ))}
-        </CommandList>
-      </Command>
-    </Popover>
+      disabled={disabled}
+      options={options.map((o) => ({ id: o.value, text: o.label, label: o.label }))}
+    />
   );
 }
+
 export function Label({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="space-y-2">
@@ -155,46 +100,30 @@ export function VariablePicker({
         </IconButton>
       }
     >
-      <Command>
-        <CommandInput
-          aria-label={t('automation.searchVariables')}
-          placeholder={t('automation.searchVariables')}
-          className="w-full border-b border-line p-2 outline-none"
-        />
-        <CommandList className="max-h-72 overflow-y-auto">
-          <CommandEmpty className="p-3 text-sm text-muted">
-            {t('automation.noChoices')}
-          </CommandEmpty>
-          {[...new Set(variables.map((v) => v.group))].map((group) => (
-            <CommandGroup
-              key={group}
-              heading={group}
-              className="p-1 text-xs text-muted [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-2"
-            >
-              {variables
-                .filter((v) => v.group === group)
-                .map((variable) => (
-                  <CommandItem
-                    key={variable.path}
-                    value={`${variable.group} ${variable.label} ${variable.path}`}
-                    className="flex cursor-pointer items-center justify-between gap-3 rounded p-2 text-sm text-ink data-[selected=true]:bg-surface-hover"
-                    onSelect={() => {
-                      onSelect(variable);
-                      setOpen(false);
-                    }}
-                  >
-                    <span>{variable.label}</span>
-                    <span className="text-xs text-muted">
-                      {variable.many
-                        ? t('automation.recordList')
-                        : t(`database.${variable.field.type}` as TranslationKey)}
-                    </span>
-                  </CommandItem>
-                ))}
-            </CommandGroup>
-          ))}
-        </CommandList>
-      </Command>
+      <OptionsPanel
+        label={t('automation.searchVariables')}
+        options={variables.map((v) => ({
+          id: v.path,
+          text: v.label,
+          label: (
+            <span className="flex items-center justify-between gap-3">
+              <span>{v.label}</span>
+              <span className="text-xs text-muted">
+                {v.many
+                  ? t('automation.recordList')
+                  : t(`database.${v.field.type}` as TranslationKey)}
+              </span>
+            </span>
+          ),
+          group: v.group,
+        }))}
+        onClose={() => setOpen(false)}
+        onSelect={(id) => {
+          const variable = variables.find((v) => v.path === id);
+          if (variable) onSelect(variable);
+          setOpen(false);
+        }}
+      />
     </Popover>
   );
 }

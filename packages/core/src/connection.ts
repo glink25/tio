@@ -51,3 +51,11 @@ export function connectionError(error: unknown, connectionId: string): Connectio
     scope: { connectionId },
   };
 }
+
+/** Provider-owned workspace management; presentation is supplied by the host integration. */
+export type WorkspaceAction = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+} & ({ kind: 'direct'; execute(): Promise<void> } | { kind: 'external'; url: string });
+export type WorkspaceActions = Partial<Record<'delete' | 'share', WorkspaceAction>>;

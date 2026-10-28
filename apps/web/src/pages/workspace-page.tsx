@@ -1,12 +1,14 @@
 import { titleOf, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
-import { Button, IconButton, MenuItem, Modal, cn, useMobile } from '@tio/ui';
+import { SelectInput } from '@tio/ui';
+import { Button, IconButton, MenuItem, Modal, LoadingSkeleton, cn, useMobile } from '@tio/ui';
 import { EditorSurface, type AppSlicePermissionStore } from '@tio/web-editor';
 import { ChevronRight, PanelLeft, Star, Move, Maximize2 } from 'lucide-react';
 import { Fragment, type ReactNode } from 'react';
 
 import { SyncStatus } from '../components/sync-status';
 import { Sidebar, WorkspaceSwitcher } from '../features/workspace/sidebar';
+import { statusLabel } from '../features/workspace/status';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { usePresentation } from '../services/browser-presentation';
 
@@ -138,7 +140,27 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
             presentation={presentation}
             runtime={m.runtime}
             workspaceId={m.session!.workspaceId}
-            target={{ id: m.selected || current?.id || '' }}
+            target={{ id: m.contentReady ? m.selected || current?.id || '' : '' }}
+            renderEmptyState={
+              m.contentReady
+                ? undefined
+                : () =>
+                    m.status.visual === 'attention' ? (
+                      <div
+                        role="alert"
+                        className="flex min-h-[60dvh] flex-col items-center justify-center gap-4 p-12 text-center text-sm"
+                      >
+                        <p>{statusLabel(m.status)}</p>
+                        <Button variant="outline" onClick={() => void m.retryInitialization()}>
+                          {t('common.retry')}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div aria-label={t('workspace.initializing')} aria-busy="true">
+                        <LoadingSkeleton />
+                      </div>
+                    )
+            }
             renderHeader={(actions, layout) => (
               <>
                 <Sidebar model={m} pageActions={layout.navigationPageActions} />
@@ -182,11 +204,11 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
                 <Maximize2 size={17} />
               </IconButton>
               <span className="shrink-0 text-muted">{t('ui.addTo')}</span>
-              <select
+              <SelectInput
                 aria-label={t('ui.location')}
                 className="max-w-64 min-w-0 !border-0 !bg-transparent"
                 value={preview.parentId ?? ''}
-                onChange={(e) => m.movePage(preview.id, e.target.value || null)}
+                onValueChange={(value) => m.movePage(preview.id, value || null)}
               >
                 <option value="">{m.workspace?.name}</option>
                 {m.nav
@@ -196,7 +218,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
                       {titleOf(o)}
                     </option>
                   ))}
-              </select>
+              </SelectInput>
             </div>
             <EditorSurface
               mentions={m.mentions}

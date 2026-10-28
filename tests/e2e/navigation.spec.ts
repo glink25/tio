@@ -48,6 +48,13 @@ test('new pages prepend, keyboard sorting persists and deleting the selected pag
   await handle.focus();
   await page.keyboard.press('Space');
   await expect(handle).toHaveAttribute('aria-pressed', 'true');
+  // Keyboard activation schedules sensor attachment and droppable measurement after render.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+      ),
+  );
   await page.keyboard.press('ArrowUp');
   await expect(page.locator('aside nav [data-drop-position=before]')).toContainText('Beta');
   await page.keyboard.press('Space');
@@ -64,7 +71,8 @@ test('new pages prepend, keyboard sorting persists and deleting the selected pag
   await remove(page, 'Beta');
   await expect(page.getByLabel('页面标题')).toHaveValue('开始');
   await remove(page, '开始');
-  await expect(page.getByText('选择一个页面，或创建新页面', { exact: true })).toBeVisible();
+  await expect(page.getByText('还没有页面', { exact: true })).toBeAttached();
+  await expect(page.getByRole('button', { name: '新建页面', exact: true }).last()).toBeVisible();
 });
 
 test('child pages prepend and pointer dragging can reorder and move a subtree', async ({

@@ -2,6 +2,7 @@ import { createCodeBlockSpec } from '@blocknote/core';
 import { createReactBlockSpec } from '@blocknote/react';
 import { codeText } from '@tio/core';
 import { useTranslation } from '@tio/i18n';
+import { SelectInput } from '@tio/ui';
 import { LoadingIndicator } from '@tio/ui';
 import { lazy, Suspense, useState } from 'react';
 
@@ -49,12 +50,12 @@ export const CodeBlock = createReactBlockSpec(
       return (
         <div className="tio-code-block" data-mode={Preview ? mode : 'code'}>
           <div className="tio-code-toolbar" contentEditable={false}>
-            <select
+            <SelectInput
               aria-label={zh ? '代码语言' : 'Code language'}
               value={id}
               disabled={!editor.isEditable}
-              onChange={(event) => {
-                const language = event.target.value;
+              onValueChange={(value) => {
+                const language = value;
                 editor.updateBlock(block, {
                   props: { language, ...(previewFor(language) ? { displayMode: 'split' } : {}) },
                 });
@@ -66,7 +67,7 @@ export const CodeBlock = createReactBlockSpec(
                   {value === 'text' && zh ? '纯文本' : item.name}
                 </option>
               ))}
-            </select>
+            </SelectInput>
             {Preview && (
               <fieldset aria-label={zh ? '显示模式' : 'Display mode'}>
                 {(['code', 'preview', 'split'] as const).map((value) => (

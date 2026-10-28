@@ -39,6 +39,7 @@ export interface EditorSurfaceProps {
   ) => ReactNode;
   autoFocusTitle?: boolean;
   pageActions?: ReactNode;
+  renderEmptyState?: () => ReactNode;
   onOpen?: (target: EditorTarget) => void;
   readOnly?: boolean;
   onNavigate: (target: EditorTarget) => void;

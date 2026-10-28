@@ -2,12 +2,49 @@ import { object, textBlock } from '@tio/core';
 import { FileWorkspaceContent } from '@tio/file-storage';
 import { MemoryProvider } from '@tio/provider-memory';
 import { pathFor } from '@tio/serialization';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+
+import { hash } from '../../../packages/file-storage/src/chunks';
 const limit = 1024;
 const setup = () => {
   const files = new MemoryProvider();
   return { files, content: new FileWorkspaceContent(files, 'w', { maxFileBytes: limit }) };
 };
+
+it('normalizes malformed stored content without swallowing transport errors', async () => {
+  const { files, content } = setup();
+  const path = 'workspaces/w/objects/w.json';
+  for (const bytes of [
+    new TextEncoder().encode('{broken'),
+    new Uint8Array([0xff]),
+    new TextEncoder().encode('null'),
+    new TextEncoder().encode(
+      JSON.stringify(object('workspace', 'w', { id: 'w', schemaVersion: 2 })),
+    ),
+  ]) {
+    await files.write(path, bytes);
+    await expect(content.read('w')).rejects.toMatchObject({
+      code: 'invalid',
+      cause: expect.any(Error),
+    });
+  }
+  const chunk = new TextEncoder().encode('not-json');
+  const root = await hash(chunk);
+  await files.write(
+    path,
+    new TextEncoder().encode(
+      JSON.stringify({ id: 'w', workspaceId: 'w', $storage: { version: 1, root } }),
+    ),
+  );
+  await files.write(`workspaces/w/chunks/${root.slice(0, 2)}/${root}.json`, chunk);
+  await expect(content.read('w')).rejects.toMatchObject({ code: 'invalid' });
+  const read = files.read.bind(files);
+  const failure = new TypeError('Network unavailable');
+  vi.spyOn(files, 'read').mockImplementation((path) =>
+    path.includes('/chunks/') ? Promise.reject(failure) : read(path),
+  );
+  await expect(content.read('w')).rejects.toBe(failure);
+});
 it('bounds JSON data and index files, preserving huge strings, Unicode and arbitrary subtrees', async () => {
   const { files, content } = setup();
   const page = object('page', 'w', {

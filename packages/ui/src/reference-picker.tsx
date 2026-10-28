@@ -1,19 +1,10 @@
 import { useT } from '@tio/i18n';
-import {
-  ArrowUpRight,
-  Check,
-  ChevronDown,
-  Database,
-  FileText,
-  Search,
-  UserRound,
-  X,
-} from 'lucide-react';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { ArrowUpRight, ChevronDown, Database, FileText, UserRound, X } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
 
 import { Button } from './index';
-import { Command, CommandInput, CommandItem, CommandList, Popover } from './overlays';
-import { LoadingIndicator } from './skeleton';
+import { OptionsPanel, type ChoiceTab } from './options-panel';
+import { Popover } from './overlays';
 
 export interface ReferenceOption {
   id: string;
@@ -43,13 +34,18 @@ export function ReferencePicker({
   onRemove,
   loading,
   error,
-  retry,
   more,
   inline = false,
   onActiveChange,
-  warning,
+  tabs,
+  tab,
+  onTab,
+  multiple = true,
 }: {
-  warning?: ReactNode;
+  tabs?: ChoiceTab[];
+  tab?: string;
+  onTab?: (id: string) => void;
+  multiple?: boolean;
   label: string;
   selected: ReferenceOption[];
   options: ReferenceOption[];
@@ -59,17 +55,12 @@ export function ReferencePicker({
   onRemove: (id: string) => void;
   loading?: boolean;
   error?: boolean;
-  retry?: () => void;
   more?: () => void;
   inline?: boolean;
   onActiveChange?: (active: boolean) => void;
 }) {
   const t = useT();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  useEffect(() => {
-    if (open || inline) inputRef.current?.focus();
-  }, [open, inline]);
   const changeOpen = (next: boolean) => {
     setOpen(next);
     onActiveChange?.(next);
@@ -98,69 +89,24 @@ export function ReferencePicker({
   const content = (
     <div className="space-y-2">
       {inline && tokens}
-      {warning}
-      <Command
-        shouldFilter={false}
-        onKeyDownCapture={(event) => {
-          if (event.key === 'Escape' && !inline) {
-            event.preventDefault();
-            event.stopPropagation();
-            changeOpen(false);
-          }
-          if (event.nativeEvent.isComposing && event.key === 'Enter') {
-            event.preventDefault();
-            event.stopPropagation();
-          }
+      <OptionsPanel
+        label={label}
+        options={options.map((item) => ({ ...item, icon: <ReferenceIcon kind={item.kind} /> }))}
+        selected={selected.map((item) => item.id)}
+        query={query}
+        onQuery={onQuery}
+        remote
+        loading={loading}
+        more={!error ? more : undefined}
+        tabs={tabs}
+        tab={tab}
+        onTab={onTab}
+        onClose={() => changeOpen(false)}
+        onSelect={(id) => {
+          onSelect(id);
+          if (!multiple) changeOpen(false);
         }}
-      >
-        <div className="flex items-center gap-2 border-b border-line px-2 pb-2">
-          <Search size={15} className="shrink-0 text-muted" aria-hidden />
-          <CommandInput
-            data-history="native"
-            ref={inputRef}
-            aria-label={label}
-            placeholder={t('database.searchReferences')}
-            value={query}
-            onValueChange={onQuery}
-            className="w-full min-w-0 border-0 bg-transparent px-0 shadow-none outline-none!"
-          />
-        </div>
-        <CommandList aria-label={label} className="max-h-60 overflow-y-auto py-1">
-          {loading ? (
-            <LoadingIndicator className="w-full p-3" />
-          ) : error ? (
-            <div role="alert" className="p-2 text-xs text-muted">
-              {t('database.referenceLoadFailed')}
-              <Button type="button" onClick={retry}>
-                {t('common.retry')}
-              </Button>
-            </div>
-          ) : (
-            <>
-              {options.map((item) => (
-                <CommandItem
-                  key={item.id}
-                  value={item.id}
-                  onSelect={() => onSelect(item.id)}
-                  className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 text-sm data-[selected=true]:bg-surface-hover"
-                >
-                  <ReferenceIcon kind={item.kind} />
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  {selected.some((s) => s.id === item.id) && <Check size={14} aria-hidden />}
-                </CommandItem>
-              ))}
-              {!options.length && (
-                <p className="p-3 text-xs text-muted">{t('database.noOptions')}</p>
-              )}
-            </>
-          )}
-        </CommandList>
-      </Command>
-      {more && !loading && !error && (
-        <Button type="button" className="w-full text-xs" onClick={more}>
-          {t('database.loadMore')}
-        </Button>
-      )}
+      />
     </div>
   );
   if (inline) return content;

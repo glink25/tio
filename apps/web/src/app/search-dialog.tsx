@@ -1,18 +1,8 @@
 import { titleOf, valueText, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
-import { LoadingIndicator } from '@tio/ui';
-import {
-  Button,
-  Modal,
-  Command,
-  CommandInput,
-  CommandList,
-  CommandItem,
-  CommandEmpty,
-  ObjectIcon,
-  cn,
-} from '@tio/ui';
-import { useEffect, useState } from 'react';
+import { OptionsPanel, usePagedOptions } from '@tio/ui';
+import { Modal, ObjectIcon } from '@tio/ui';
+import { useState } from 'react';
 import { useStore } from 'zustand';
 
 import type { WorkspaceController } from '../features/workspace/use-workspace';
@@ -29,36 +19,14 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
   const version = useStore(m.runtime!.state, (state) => state.version);
   const [type, setType] = useState('all');
   const [selected, setSelected] = useState('');
-  const [results, setResults] = useState<TioObject[]>([]);
-  const [complete, setComplete] = useState(false);
-  const [error, setError] = useState('');
-  const [revision, retry] = useState(0);
-  useEffect(() => {
-    let cancelled = false;
-    setResults([]);
-    setComplete(false);
-    setError('');
-    const timer = setTimeout(() => {
-      void (async () => {
-        let after: string | undefined;
-        const found = new Map<string, TioObject>();
-        do {
-          const page = await m.runtime!.search({ text: m.query, type, after, limit: 250 });
-          if (cancelled) return;
-          for (const object of page.items) found.set(object.id, object);
-          setResults([...found.values()].slice(0, 50));
-          setComplete(page.complete);
-          after = page.next;
-        } while (after && !cancelled);
-      })().catch((error) => {
-        if (!cancelled) setError(String(error));
-      });
-    }, 150);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [m.runtime, m.query, type, revision, version]);
+  const page = usePagedOptions({
+    active: true,
+    source: m.runtime,
+    queryKey: JSON.stringify([m.query, type, version]),
+    key: (object: TioObject) => object.id,
+    load: (after) => m.runtime!.search({ text: m.query, type, after, limit: 50 }),
+  });
+  const results = page.items;
   const item = results.find((o) => o.id === selected) ?? results[0];
   const name = (o: TioObject) =>
     o.type === 'record'
@@ -87,69 +55,51 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
       title={t('workspace.searchTitle')}
       close={() => m.setSearching(false)}
     >
-      <Command shouldFilter={false} value={item?.id ?? ''} onValueChange={setSelected}>
-        <CommandInput
-          aria-label={t('workspace.search')}
-          placeholder={t('ui.searchHint')}
-          value={m.query}
-          onValueChange={m.setQuery}
+      <div className="grid gap-5 md:grid-cols-[1.3fr_1fr]">
+        <OptionsPanel
+          label={t('workspace.search')}
+          query={m.query}
+          onQuery={m.setQuery}
+          remote
+          loading={page.loading}
+          more={page.more}
+          onHighlight={setSelected}
+          tabs={(['all', 'page', 'database', 'record'] as const).map((id) => ({
+            id,
+            label: t(`picker.${id}`),
+          }))}
+          tab={type}
+          onTab={setType}
+          onClose={() => m.setSearching(false)}
+          options={results.map((o) => ({
+            id: o.id,
+            text: name(o),
+            icon: <ObjectIcon type={o.type} />,
+            label: (
+              <span className="block min-w-0">
+                <span className="block truncate font-medium">{name(o)}</span>
+                <span className="mt-1 block truncate text-xs text-muted">{path(o)}</span>
+                <span className="mt-1 line-clamp-2 text-xs text-secondary">{excerpt(o)}</span>
+              </span>
+            ),
+          }))}
+          onSelect={(id) => {
+            const object = results.find((o) => o.id === id);
+            if (object) m.navigate(object);
+          }}
         />
-        <div className="my-3 flex gap-1">
-          {(['all', 'page', 'database', 'record'] as const).map((v) => (
-            <Button
-              key={v}
-              className={cn('text-xs', v === type && 'bg-surface-hover')}
-              onClick={() => setType(v)}
-            >
-              {t(
-                v === 'all'
-                  ? 'ui.all'
-                  : v === 'page'
-                    ? 'ui.pages'
-                    : v === 'database'
-                      ? 'ui.databases'
-                      : 'ui.records',
-              )}
-            </Button>
-          ))}
-        </div>
-        {!complete && !error && <LoadingIndicator />}
-        {error && (
-          <p role="alert">
-            {error} <Button onClick={() => retry((v) => v + 1)}>{t('common.retry')}</Button>
-          </p>
-        )}
-        <div className="grid gap-5 md:grid-cols-[1.3fr_1fr]">
-          <CommandList className="min-h-64">
-            <CommandEmpty className="p-8 text-center text-muted">
-              {complete ? t('ui.noResults') : <LoadingIndicator />}
-            </CommandEmpty>
-            {results.map((o) => (
-              <CommandItem key={o.id} value={o.id} onSelect={() => m.navigate(o)}>
-                <div className="flex gap-3">
-                  <ObjectIcon type={o.type} />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{name(o)}</div>
-                    <p className="mt-1 truncate text-xs text-muted">{path(o)}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-secondary">{excerpt(o)}</p>
-                  </div>
-                </div>
-              </CommandItem>
-            ))}
-          </CommandList>
-          <aside className="hidden min-w-0 rounded-lg border border-line bg-surface p-6 md:block">
-            {item && (
-              <>
-                <p className="mb-3 text-xs text-muted">{path(item)}</p>
-                <h2 className="mb-4 text-2xl font-semibold break-words">{name(item)}</h2>
-                <p className="text-sm leading-7 break-words whitespace-pre-wrap text-secondary">
-                  {excerpt(item)}
-                </p>
-              </>
-            )}
-          </aside>
-        </div>
-      </Command>
+        <aside className="hidden min-w-0 rounded-lg border border-line bg-surface p-6 md:block">
+          {item && (
+            <>
+              <p className="mb-3 text-xs text-muted">{path(item)}</p>
+              <h2 className="mb-4 text-2xl font-semibold break-words">{name(item)}</h2>
+              <p className="text-sm leading-7 break-words whitespace-pre-wrap text-secondary">
+                {excerpt(item)}
+              </p>
+            </>
+          )}
+        </aside>
+      </div>
     </Modal>
   );
 }

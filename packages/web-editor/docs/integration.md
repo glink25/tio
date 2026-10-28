@@ -24,6 +24,8 @@ await editor.dispose();
 
 宿主传入已解析的 `Presentation`，编辑器不写宿主偏好。每个实例具有独立主题、语言和门户上下文。`onReady` 在挂载后触发；`open` 先刷新并重新检查关闭状态；`dispose` 异步合并并发调用，刷新失败时保留会话。不得因远端故障丢弃当前草稿。
 
+React 接入的 `EditorSurface` 可通过 `renderEmptyState()` 定制无当前目标时的区域；默认显示空页面插画和新建按钮。Web 宿主首次下载尚未完成时暂不传入内容目标，通过该插槽展示骨架屏或初始化错误与重试；就绪后恢复原目标。指定目标的加载、缺失和权限提示仍由编辑器处理。
+
 `EditorSession` / `WorkspaceRuntime` 是 Web 与桥接接入共享的数据接口。宿主无界面修改使用 `executeBasic`，仍走仓库校验与变更事件。后台同步不依赖编辑器打开，系统副作用只在确认提交后触发，不在命令重放时执行。
 
 - [仓库与 JSON 桥接](../../host-protocol/docs/bridge.md)
@@ -33,7 +35,7 @@ await editor.dispose();
 
 ## 提及
 
-正文和数据库提及字段共用 `MentionService`，支持同空间页面、数据库、记录及宿主提供的 GitHub 人员。仓库提供独立 `queryMentions({text, after, limit})` 和批量 `readMetadata(ids)`；记录摘要标题从数据库标题字段派生，不读取目标正文到运行时缓存。
+正文和数据库提及字段共用 `MentionService`，支持同空间页面、数据库、记录及宿主提供的 GitHub 人员。仓库提供独立 `queryMentions({text, after, limit, kind?})` 和批量 `readMetadata(ids)`；记录摘要标题从数据库标题字段派生，不读取目标正文到运行时缓存。
 
 宿主可传入 `mentions` 替换默认服务；React 接入可用 `createMentionService(runtime, workspaceId, navigate, people?)` 组合内容与人员来源。`people` 按需返回 `{reference, title, description?}[]`，由宿主负责连接和缓存。`query` 返回 `sourceErrors` 时展示来源级重试，其他来源候选仍可使用。GitHub 人员引用保存 `{workspaceId, kind: 'github-user', id, login}`，离线解析使用用户名快照；点击仅打开 GitHub 主页。
 
@@ -46,3 +48,5 @@ await editor.dispose();
 文档支持 Markdown 和附件 ZIP 导入子页面，数据库支持 CSV/XLSX 导入子数据库。导入与导出均从更多菜单的独立分组进入二级菜单，各格式实现使用动态导入；CSV、XLSX 处理库不进入静态编辑器入口。数据库导出和列转换依赖 `EditorSession.databaseSnapshot` 分页读取完整数据库，列类型修改使用 `convertField` 与统一撤销历史；宿主仓库需要提供记录查询能力。文件创建和附件保存仍经过现有运行时与仓库。
 
 当前格式备份恢复应调用 `runtime.import(objects, assets)` 保留系统时间；普通创建与复制调用 `runtime.create`，由命令层生成新时间。文档信息由共享编辑器只读展示，宿主不维护独立时间字段。
+
+列表型选择共用 `@tio/ui` 的 `OptionsPanel`，异步候选通过 `usePagedOptions` 触底追加。`MentionService.query(text, after?, kind?)` 按类型在分页前筛选，`kinds` 声明可用分类；游标仅适用于原查询与类型。失败保留已加载候选并通过宿主通知通道提示，重新打开或改变查询后重新读取，不提供分页或重试按钮。

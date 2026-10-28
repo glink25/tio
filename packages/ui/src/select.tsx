@@ -1,89 +1,175 @@
-import * as SelectPrimitive from '@radix-ui/react-select';
-import { Check, ChevronDown, ChevronUp } from 'lucide-react';
-import { forwardRef, useContext, type ComponentPropsWithoutRef, type ElementRef } from 'react';
+import { useT } from '@tio/i18n';
+import { ChevronDown } from 'lucide-react';
+import {
+  Children,
+  cloneElement,
+  createContext,
+  forwardRef,
+  isValidElement,
+  useContext,
+  useState,
+  type ReactNode,
+  type ButtonHTMLAttributes,
+} from 'react';
 
-import { cn, PortalContext } from './index';
+import { Button, cn } from './index';
+import { OptionsPanel, type ChoiceOption } from './options-panel';
+import { Popover } from './overlays';
 
-export const Select = SelectPrimitive.Root;
-export const SelectValue = SelectPrimitive.Value;
-
-export const SelectTrigger = forwardRef<
-  ElementRef<typeof SelectPrimitive.Trigger>,
-  ComponentPropsWithoutRef<typeof SelectPrimitive.Trigger>
->(function SelectTrigger({ className, children, ...props }, ref) {
+const ValueContext = createContext<ReactNode>(null);
+function collect(children: ReactNode): ChoiceOption[] {
+  return Children.toArray(children).flatMap((child): ChoiceOption[] => {
+    if (
+      !isValidElement<{
+        value?: string;
+        textValue?: string;
+        children?: ReactNode;
+        disabled?: boolean;
+      }>(child)
+    )
+      return [];
+    if (child.type === 'option') {
+      const text = child.props.textValue ?? plainText(child.props.children);
+      return [
+        {
+          id: child.props.value ?? text,
+          text,
+          label: child.props.children,
+          disabled: child.props.disabled,
+        },
+      ];
+    }
+    return collect(child.props.children);
+  });
+}
+function plainText(node: ReactNode): string {
+  return Children.toArray(node)
+    .map((child) =>
+      typeof child === 'string' || typeof child === 'number'
+        ? String(child)
+        : isValidElement<{ children?: ReactNode }>(child)
+          ? plainText(child.props.children)
+          : '',
+    )
+    .join('');
+}
+export function ChoiceSelect({
+  value,
+  onValueChange,
+  options,
+  label,
+  disabled,
+  className,
+  search = false,
+  trigger,
+}: {
+  value: string;
+  onValueChange: (value: string) => void;
+  options: ChoiceOption[];
+  label: string;
+  disabled?: boolean;
+  className?: string;
+  search?: boolean;
+  trigger?: ReactNode;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [listId, setListId] = useState<string>();
   return (
-    <SelectPrimitive.Trigger
-      ref={ref}
-      className={cn(
-        'tio-button inline-flex h-9 w-full items-center justify-between gap-2 rounded-md border border-line bg-panel px-3 py-2 text-sm whitespace-nowrap text-ink shadow-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50 data-[placeholder]:text-muted [&>span]:line-clamp-1',
-        className,
-      )}
-      {...props}
+    <ValueContext.Provider
+      value={
+        options.find((o) => o.id === value)?.label ??
+        (value ? t('automation.selectionUnavailable') : label)
+      }
     >
-      {children}
-      <SelectPrimitive.Icon asChild>
-        <ChevronDown className="size-4 shrink-0 opacity-50" aria-hidden />
-      </SelectPrimitive.Icon>
-    </SelectPrimitive.Trigger>
-  );
-});
-
-export const SelectContent = forwardRef<
-  ElementRef<typeof SelectPrimitive.Content>,
-  ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(function SelectContent({ className, children, position = 'popper', ...props }, ref) {
-  const container = useContext(PortalContext);
-  return (
-    <SelectPrimitive.Portal container={container}>
-      <SelectPrimitive.Content
-        ref={ref}
-        position={position}
-        sideOffset={6}
-        collisionPadding={12}
-        className={cn(
-          'tio-select relative z-[80] max-h-[var(--radix-select-content-available-height)] min-w-32 overflow-hidden rounded-md border border-line bg-panel text-sm text-ink shadow-xl',
-          className,
+      <Popover
+        label={label}
+        open={open}
+        onOpenChange={setOpen}
+        mobilePlacement="anchor"
+        className={search ? 'w-72 p-1' : 'w-max min-w-[var(--radix-popover-trigger-width)] p-1'}
+        trigger={cloneElement(
+          isValidElement<ButtonHTMLAttributes<HTMLButtonElement>>(trigger) ? (
+            trigger
+          ) : (
+            <SelectTrigger aria-label={label} className={className}>
+              <SelectValue />
+            </SelectTrigger>
+          ),
+          {
+            role: 'combobox',
+            'aria-expanded': open,
+            'aria-controls': listId,
+            'aria-haspopup': 'listbox',
+            disabled:
+              disabled ||
+              (isValidElement<ButtonHTMLAttributes<HTMLButtonElement>>(trigger)
+                ? trigger.props.disabled
+                : false),
+          },
         )}
+      >
+        <OptionsPanel
+          onListId={setListId}
+          label={label}
+          options={options}
+          selected={[value]}
+          search={search}
+          onClose={() => setOpen(false)}
+          onSelect={(id) => {
+            onValueChange(id);
+            setOpen(false);
+          }}
+        />
+      </Popover>
+    </ValueContext.Provider>
+  );
+}
+function SelectValue({ placeholder }: { placeholder?: string }) {
+  return <span className="min-w-0 truncate">{useContext(ValueContext) ?? placeholder}</span>;
+}
+const SelectTrigger = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>(
+  function SelectTrigger({ children, className, ...props }, ref) {
+    return (
+      <Button
+        ref={ref}
+        type="button"
+        variant="outline"
+        className={cn('h-9 w-full justify-between text-sm', className)}
         {...props}
       >
-        <SelectPrimitive.ScrollUpButton className="flex cursor-default items-center justify-center py-1">
-          <ChevronUp className="size-4" aria-hidden />
-        </SelectPrimitive.ScrollUpButton>
-        <SelectPrimitive.Viewport
-          className={cn(
-            'p-1',
-            position === 'popper' && 'w-full min-w-[var(--radix-select-trigger-width)]',
-          )}
-        >
-          {children}
-        </SelectPrimitive.Viewport>
-        <SelectPrimitive.ScrollDownButton className="flex cursor-default items-center justify-center py-1">
-          <ChevronDown className="size-4" aria-hidden />
-        </SelectPrimitive.ScrollDownButton>
-      </SelectPrimitive.Content>
-    </SelectPrimitive.Portal>
-  );
-});
-
-export const SelectItem = forwardRef<
-  ElementRef<typeof SelectPrimitive.Item>,
-  ComponentPropsWithoutRef<typeof SelectPrimitive.Item>
->(function SelectItem({ className, children, ...props }, ref) {
+        {children}
+        <ChevronDown size={14} className="shrink-0 text-muted" aria-hidden />
+      </Button>
+    );
+  },
+);
+/** JSX option adapter for fixed option lists. */
+export function SelectInput({
+  value,
+  onValueChange,
+  children,
+  required,
+  ...props
+}: Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'value' | 'onChange'> & {
+  value: string | number;
+  onValueChange: (value: string) => void;
+  children: ReactNode;
+  required?: boolean;
+}) {
+  const t = useT();
   return (
-    <SelectPrimitive.Item
-      ref={ref}
-      className={cn(
-        'relative flex w-full cursor-default items-center rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none select-none focus:bg-surface-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50 max-md:min-h-11',
-        className,
-      )}
-      {...props}
-    >
-      <span className="absolute right-2 flex size-3.5 items-center justify-center">
-        <SelectPrimitive.ItemIndicator>
-          <Check className="size-4" aria-hidden />
-        </SelectPrimitive.ItemIndicator>
-      </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-    </SelectPrimitive.Item>
+    <ChoiceSelect
+      value={String(value)}
+      onValueChange={onValueChange}
+      options={collect(children)}
+      search={collect(children).length > 8}
+      label={props['aria-label'] ?? t('database.chooseReference')}
+      trigger={
+        <SelectTrigger {...props} aria-required={required}>
+          <SelectValue />
+        </SelectTrigger>
+      }
+    />
   );
-});
+}

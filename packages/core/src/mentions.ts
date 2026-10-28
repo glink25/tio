@@ -15,6 +15,7 @@ export interface MentionPage {
   sourceErrors?: ('github' | 'content')[];
 }
 export interface MentionQuery {
+  kind?: 'page' | 'database' | 'record';
   text: string;
   after?: string;
   limit: number;
@@ -87,7 +88,8 @@ export type MentionResolution =
   | { reference: MentionReference; status: 'ready'; title: string }
   | { reference: MentionReference; status: 'deleted' | 'missing' | 'denied' | 'error' };
 export interface MentionService {
-  query(text: string, after?: string): Promise<MentionPage>;
+  kinds?: MentionReference['kind'][];
+  query(text: string, after?: string, kind?: MentionReference['kind']): Promise<MentionPage>;
   resolve(references: MentionReference[]): Promise<MentionResolution[]>;
   subscribe(listener: () => void): () => void;
   navigate(reference: MentionReference): void;

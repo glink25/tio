@@ -5,6 +5,6 @@
     "allowJs": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["**/*.ts", "../packages/**/*.d.ts"],
+  "include": ["**/*.ts", "../packages/**/*.d.ts", "../apps/web/src/env.d.ts"],
   "exclude": ["node_modules", "test-results", "playwright-report", ".cache"]
 }

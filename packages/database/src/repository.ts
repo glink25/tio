@@ -69,6 +69,21 @@ export class ScanningQueries {
   }
 
   async mentions(query: MentionQuery): Promise<MentionPage> {
+    let after: string | undefined;
+    if (query.after) {
+      try {
+        const cursor = JSON.parse(query.after);
+        if (
+          cursor.text !== query.text ||
+          cursor.kind !== query.kind ||
+          typeof cursor.id !== 'string'
+        )
+          throw new HostError('invalid');
+        after = cursor.id;
+      } catch {
+        throw new HostError('invalid', 'Invalid mention cursor');
+      }
+    }
     const snapshot = await this.repository.readSnapshot();
     const objects = snapshot.entries.map((e) => e.object);
     const visible = visibility(objects);
@@ -76,7 +91,11 @@ export class ScanningQueries {
       {
         ...snapshot,
         entries: snapshot.entries.filter(({ object }) => {
-          if (!['page', 'database', 'record'].includes(object.type) || !visible(object))
+          if (
+            !['page', 'database', 'record'].includes(object.type) ||
+            (query.kind && object.type !== query.kind) ||
+            !visible(object)
+          )
             return false;
           const reference = {
             workspaceId: object.workspaceId,
@@ -88,7 +107,7 @@ export class ScanningQueries {
             .includes(query.text.toLocaleLowerCase());
         }),
       },
-      query,
+      { ...query, after },
     );
     return {
       items: page.entries.map(({ object }) => {
@@ -105,7 +124,9 @@ export class ScanningQueries {
             : {}),
         };
       }),
-      next: page.next,
+      next: page.next
+        ? JSON.stringify({ text: query.text, kind: query.kind, id: page.next })
+        : undefined,
     };
   }
   async scan(query: PageQuery) {

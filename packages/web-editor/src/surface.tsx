@@ -8,6 +8,7 @@ import {
   Button,
   IconButton,
   EmptyNotice,
+  EmptyStateIllustration,
   cn,
   Menu,
   MenuItem,
@@ -355,9 +356,11 @@ export function EditorSurface(props: EditorSurfaceProps) {
                   )}
                 </main>
               </>
+            ) : props.renderEmptyState ? (
+              props.renderEmptyState()
             ) : (
-              <div className="p-12 text-center">
-                <h2 className="mb-4 text-xl">{t('ui.noSelection')}</h2>
+              <div className="flex min-h-[60dvh] flex-col items-center justify-center gap-6 p-12 text-center">
+                <EmptyStateIllustration kind="pages" />
                 <Button variant="primary" onClick={() => m.addPage()}>
                   {t('workspace.newPage')}
                 </Button>

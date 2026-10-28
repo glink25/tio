@@ -1,5 +1,5 @@
 import { useTranslation } from '@tio/i18n';
-import { Notifications, toast, ThemeContext, LoadingSkeleton } from '@tio/ui';
+import { Notifications, toast, ThemeContext, LoadingSkeleton, SidebarSkeleton } from '@tio/ui';
 import { useEffect, lazy, Suspense } from 'react';
 
 import { useWorkspace } from '../features/workspace/use-workspace';
@@ -7,6 +7,7 @@ import { WelcomePage } from '../pages/welcome-page';
 import { usePresentation } from '../services/browser-presentation';
 import { ConnectionDialogs } from './connection-dialogs';
 import { GitHubDialog } from './github-dialog';
+import { WorkspaceActionDialog } from './workspace-action-dialog';
 const WorkspacePage = lazy(() =>
   import('../pages/workspace-page').then((m) => ({ default: m.WorkspacePage })),
 );
@@ -34,6 +35,7 @@ export function App() {
     <ThemeContext.Provider value={presentation.theme}>
       <Notifications />
       <ConnectionDialogs model={model} />
+      <WorkspaceActionDialog model={model} />
       {model.githubOpen && <GitHubDialog model={model} />}
       <input
         ref={model.importRef}
@@ -68,8 +70,8 @@ export function App() {
 function WorkspaceLoading() {
   return (
     <div className="flex min-h-dvh">
-      <aside className="hidden w-[260px] shrink-0 border-r border-line bg-surface p-4 md:block">
-        <LoadingSkeleton layout="list" />
+      <aside className="hidden w-[260px] shrink-0 border-r border-line bg-surface md:block">
+        <SidebarSkeleton />
       </aside>
       <div className="min-w-0 flex-1">
         <div aria-hidden="true" className="h-12" />

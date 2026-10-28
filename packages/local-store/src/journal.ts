@@ -13,6 +13,9 @@ export class RecoveryJournal<T> {
   async save(state: T): Promise<void> {
     await (await this.db).put('journals', state, this.key);
   }
+  async delete() {
+    await (await this.db).delete('journals', this.key);
+  }
   close() {
     void this.db.then((db) => db.close());
   }

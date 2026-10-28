@@ -43,6 +43,10 @@ export class FolderConnectionAdapter implements ConnectionAdapter {
       };
     return connectionError(error, this.connectionId);
   }
+  async deleteWorkspace(workspaceId: string) {
+    if (!this.handle) throw new StorageError('missing', 'Folder unavailable');
+    await new LocalFolderProvider(this.handle).deleteWorkspace(workspaceId);
+  }
   async getAccessState() {
     if (!this.handle) return this.publish('unrecoverable');
     try {

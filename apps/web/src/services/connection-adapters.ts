@@ -13,12 +13,14 @@ import type { WorkspaceRepository } from '@tio/core';
 import { WorkerSearch } from '@tio/database/search-browser';
 import { FileWorkspaceContent, FileRepository, type FileJournalState } from '@tio/file-storage';
 import { t } from '@tio/i18n';
-import { LocalStore, RecoveryJournal } from '@tio/local-store';
+import { LocalStore, RecoveryJournal, deleteLocalWorkspace } from '@tio/local-store';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
 import type { WorkspaceRuntime } from '@tio/workspace';
 
 import { githubBinding } from './github-binding';
 export interface ConnectionBinding {
+  isContentReady?(workspaceId: string): boolean;
+  workspaceActions?(workspaceId: string): import('@tio/core').WorkspaceActions;
   mentionPeople?(workspaceId: string): Promise<import('@tio/core').MentionCandidate[]>;
   dispose?(): void;
   automation?(runtime: WorkspaceRuntime, workspaceId: string): AutomationProvider;
@@ -72,6 +74,11 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
         subscribe: () => () => {},
         classifyError: (error) => connectionError(error, connection.id),
       },
+      workspaceActions: (workspaceId) => ({
+        delete: directDelete(t('workspace.deleteDevice'), () =>
+          deleteLocalWorkspace(connection.id + '_' + workspaceId),
+        ),
+      }),
       automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
       repository: (_workspaceId, instanceId) => searchable(new LocalStore(instanceId)),
       discover: async () => [],
@@ -91,6 +98,20 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
       },
     },
     adapter,
+    workspaceActions: (workspaceId) => ({
+      delete: directDelete(
+        t('workspace.deleteFolder', { path: `workspaces/${workspaceId}/` }),
+        async () => {
+          await adapter.deleteWorkspace(workspaceId);
+          const journal = new RecoveryJournal(connection.id + '_' + workspaceId);
+          try {
+            await journal.delete();
+          } finally {
+            journal.close();
+          }
+        },
+      ),
+    }),
     automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
     repository(workspaceId, instanceId) {
       if (!provider) throw new Error('Folder unavailable');
@@ -127,3 +148,16 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
     },
   };
 };
+
+function directDelete(
+  description: string,
+  execute: () => Promise<void>,
+): import('@tio/core').WorkspaceAction {
+  return {
+    kind: 'direct',
+    title: t('workspace.delete'),
+    description,
+    confirmLabel: t('workspace.deletePermanently'),
+    execute,
+  };
+}

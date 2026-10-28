@@ -62,6 +62,38 @@ describe('mention targets', () => {
     }
   });
 
+  it('filters types before paging, binds cursors to filters and queries only selected sources', async () => {
+    const { repository, runtime } = await setup();
+    const people = vi.fn(async () => [{ reference: person, title: '@octocat' }]);
+    try {
+      const records = await repository.queryMentions({ text: '', kind: 'record', limit: 1 });
+      expect(records.items.map((item) => item.reference.kind)).toEqual(['record']);
+      const first = await repository.queryMentions({ text: '', limit: 1 });
+      await expect(
+        repository.queryMentions({ text: '', kind: 'page', limit: 1, after: first.next }),
+      ).rejects.toMatchObject({ code: 'invalid' });
+      const service = createMentionService(runtime, 'w', vi.fn(), people);
+      const content = vi.spyOn(runtime, 'mentionCandidates');
+      expect(
+        (await service.query('', undefined, 'page')).items.map((item) => item.reference.kind),
+      ).toEqual(['page']);
+      expect(people).not.toHaveBeenCalled();
+      content.mockClear();
+      expect((await service.query('', undefined, 'github-user')).items).toEqual([
+        { reference: person, title: '@octocat' },
+      ]);
+      expect(content).not.toHaveBeenCalled();
+      const all = await service.query('');
+      if (all.next)
+        await expect(service.query('', all.next, 'page')).rejects.toMatchObject({
+          code: 'invalid',
+        });
+      expect(createMentionService(runtime, 'w', vi.fn()).kinds).not.toContain('github-user');
+    } finally {
+      await runtime.close();
+    }
+  });
+
   it('keeps optimistic record titles and rejects cross-workspace references', async () => {
     const { runtime } = await setup();
     try {

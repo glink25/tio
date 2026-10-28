@@ -2,6 +2,8 @@ import type { Json } from '@tio/core';
 import { canonical } from '@tio/serialization';
 import { StorageError, type FileStorageProvider } from '@tio/storage';
 
+import { decodeStored, parseStored } from './decode';
+
 type Node =
   | { kind: 'value'; value: Json }
   | { kind: 'string' | 'array' | 'object'; root: string }
@@ -92,7 +94,29 @@ export class ChunkTree {
       total += data.length;
       if (data.length > this.limit || total > 200 * 1024 * 1024 || (await hash(data)) !== id)
         throw new StorageError('invalid', 'Invalid chunk data');
-      return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)) as Node;
+      const node = parseStored(data);
+      if (!node || typeof node !== 'object' || !('kind' in node))
+        throw new StorageError('invalid', 'Invalid chunk node');
+      switch (node.kind) {
+        case 'value':
+          if ('value' in node) return node as Node;
+          break;
+        case 'refs':
+        case 'branches':
+          if (
+            'refs' in node &&
+            Array.isArray(node.refs) &&
+            node.refs.every((ref) => typeof ref === 'string')
+          )
+            return node as Node;
+          break;
+        case 'string':
+        case 'array':
+        case 'object':
+          if ('root' in node && typeof node.root === 'string') return node as Node;
+          break;
+      }
+      throw new StorageError('invalid', 'Invalid chunk node');
     };
     const references = async (id: string, depth: number): Promise<string[]> => {
       const node = await load(id, depth);
@@ -118,7 +142,7 @@ export class ChunkTree {
           return values.join('');
         }
         case 'object':
-          return Object.fromEntries(values as [string, Json][]);
+          return decodeStored(() => Object.fromEntries(values as [string, Json][]));
         default:
           throw new StorageError('invalid', 'Unknown chunk node');
       }

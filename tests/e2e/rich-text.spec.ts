@@ -212,6 +212,43 @@ test('inline mentions support keyboard insertion, atomic deletion and undo', asy
   await expect(page.locator('#one .bn-suggestion-menu')).toBeHidden();
 });
 
+test('mention completion appends on scroll without losing keyboard selection', async ({ page }) => {
+  await page.evaluate(async (root) => {
+    const { object } = await import(root + '/packages/core/src/index.ts');
+    const repository = (window as any).chromeFixture.repository;
+    const snapshot = await repository.readSnapshot();
+    await repository.commit({
+      id: 'many-mentions',
+      expectedVersion: snapshot.version,
+      assetIds: [],
+      changes: Array.from({ length: 80 }, (_, index) =>
+        object('page', 'chrome', {
+          id: `long-${String(index).padStart(3, '0')}`,
+          title: `Long reference ${String(index).padStart(3, '0')}`,
+          blocks: [],
+        }),
+      ),
+    });
+  }, '/@fs' + repoRoot);
+  await selectText(page);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.type(' @Long reference');
+  const menu = page.locator('#one .tio-mention-menu');
+  const options = menu.getByRole('option');
+  await expect(options).toHaveCount(50);
+  await page.keyboard.press('ArrowDown');
+  await expect(menu.getByRole('option', { selected: true })).toHaveText('Long reference 001');
+  await menu.locator('[cmdk-list]').evaluate((list) => {
+    list.scrollTop = list.scrollHeight;
+  });
+  await expect(options).toHaveCount(80);
+  await expect(menu.getByRole('option', { selected: true })).toHaveText('Long reference 001');
+  await page.keyboard.press('Enter');
+  await expect(
+    page.locator('#one [data-id="select"]').getByRole('button', { name: 'Long reference 001' }),
+  ).toBeVisible();
+});
+
 async function insertCode(page: Page, source: string, language = 'html', displayMode?: string) {
   await page.evaluate(
     async (value) => {
@@ -303,7 +340,8 @@ test('HTML code previews execute isolated scripts and load external resources', 
 test('HTML modes persist edits and read-only switching stays temporary', async ({ page }) => {
   const block = await insertCode(page, '<p>Before</p>', 'text');
   await expect(block.getByRole('group', { name: 'Display mode' })).toHaveCount(0);
-  await block.getByLabel('Code language').selectOption('html');
+  await block.getByLabel('Code language').click();
+  await page.getByRole('option', { name: 'HTML', exact: true }).click();
   await expect(block.locator('.tio-code-block')).toHaveAttribute('data-mode', 'split');
   await block.locator('.tio-code-source code').click();
   await page.locator('#one .bn-editor').evaluate((element) => {
@@ -346,7 +384,8 @@ test('HTML modes persist edits and read-only switching stays temporary', async (
 
 test('Mermaid keeps its preview when using the shared mode controls', async ({ page }) => {
   const block = await insertCode(page, 'flowchart TD\n A --> B', 'text');
-  await block.getByLabel('Code language').selectOption('mermaid');
+  await block.getByLabel('Code language').click();
+  await page.getByRole('option', { name: 'Mermaid', exact: true }).click();
   await expect(block.locator('.tio-code-block')).toHaveAttribute('data-mode', 'split');
   await expect(block.locator('.tio-mermaid-preview svg')).toBeVisible();
   await block.getByRole('button', { name: 'Code', exact: true }).click();

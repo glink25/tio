@@ -1,13 +1,25 @@
+import { LoadingSkeleton, useOverlayBack } from '@tio/ui';
+import { lazy, Suspense, useRef, useEffect } from 'react';
+const AutomationDialog = lazy(() => import('../features/automation/panel'));
 import { titleOf } from '@tio/core';
 import { t } from '@tio/i18n';
-import { Button, Modal } from '@tio/ui';
+import { Button, Modal, OptionsPanel } from '@tio/ui';
+import { EmptyStateIllustration } from '@tio/ui';
 import { FileText } from 'lucide-react';
 
-import { EmptyStateIllustration } from '../components/empty-state-illustration';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { SearchDialog } from './search-dialog';
 import { SettingsDialog } from './settings-dialog';
 export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
+  const panelOpen = m.settingsOpen || m.trashOpen || m.automationOpen;
+  const previous = useRef(panelOpen);
+  useEffect(() => {
+    if (previous.current && !panelOpen)
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLButtonElement>('[data-settings-entry]')?.focus(),
+      );
+    previous.current = panelOpen;
+  }, [panelOpen]);
   return (
     <>
       {m.renaming && (
@@ -37,6 +49,7 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
         </Modal>
       )}
       {m.searching && <SearchDialog model={m} />}
+      {m.automationOpen && m.runtime && m.session && <AutomationEntry model={m} />}
       {m.settingsOpen && <SettingsDialog model={m} />}
       {m.renameId && (
         <Modal mobilePlacement="center" title={t('ui.rename')} close={() => m.setRenameId(null)}>
@@ -85,34 +98,54 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
       )}
       {m.moveTarget && (
         <Modal title={t('workspace.move')} close={() => m.setMoveTarget(null)}>
-          <div className="flex flex-col">
-            <Button
-              className="justify-start"
-              onClick={() => {
-                m.movePage(m.moveTarget!, null);
-                m.setMoveTarget(null);
-              }}
-            >
-              {t('workspace.root')}
-            </Button>
-            {m.nav
-              .filter((o) => o.id !== m.moveTarget)
-              .map((o) => (
-                <Button
-                  className="justify-start"
-                  key={o.id}
-                  onClick={() => {
-                    m.movePage(m.moveTarget!, o.id);
-                    m.setMoveTarget(null);
-                  }}
-                >
-                  <FileText size={16} />
-                  {titleOf(o)}
-                </Button>
-              ))}
-          </div>
+          <OptionsPanel
+            label={t('workspace.move')}
+            options={[
+              { id: '$root', text: t('workspace.root'), label: t('workspace.root') },
+              ...m.nav
+                .filter((o) => o.id !== m.moveTarget)
+                .map((o) => ({
+                  id: o.id,
+                  text: titleOf(o),
+                  label: titleOf(o),
+                  icon: <FileText size={16} />,
+                })),
+            ]}
+            onClose={() => m.setMoveTarget(null)}
+            onSelect={(id) => {
+              m.movePage(m.moveTarget!, id === '$root' ? null : id);
+              m.setMoveTarget(null);
+            }}
+          />
         </Modal>
       )}
     </>
+  );
+}
+
+function AutomationEntry({ model: m }: { model: WorkspaceController }) {
+  const requestClose = useRef(() => m.setAutomationOpen(false));
+  useOverlayBack(() => requestClose.current());
+  return (
+    <Suspense
+      fallback={
+        <Modal
+          trackHistory={false}
+          title={t('automation.center')}
+          close={() => m.setAutomationOpen(false)}
+        >
+          <LoadingSkeleton layout="inline" />
+        </Modal>
+      }
+    >
+      <AutomationDialog
+        runtime={m.runtime!}
+        workspaceId={m.session!.workspaceId}
+        close={() => m.setAutomationOpen(false)}
+        registerClose={(close) => {
+          requestClose.current = close;
+        }}
+      />
+    </Suspense>
   );
 }

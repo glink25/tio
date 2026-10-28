@@ -75,6 +75,7 @@ export function useWorkspace() {
   }, [services]);
   const [githubOpen, setGithubOpen] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [automationOpen, setAutomationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [renameId, setRenameId] = useState<string | null>(null);
@@ -87,6 +88,51 @@ export function useWorkspace() {
   const [query, setQuery] = useState('');
   const [searching, setSearching] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [workspaceAction, setWorkspaceAction] = useState<{
+    session: WorkspaceSession;
+    operation: 'delete' | 'share';
+  } | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const actionRunning = useRef(false);
+  function requestWorkspaceAction(target: WorkspaceSession, operation: 'delete' | 'share') {
+    if (operation === 'share' && target.id !== sessionRef.current?.id) return;
+    if (!services.workspaceActions(target)[operation]) return;
+    setActionError('');
+    setWorkspaceAction({
+      session:
+        target.id === sessionRef.current?.id
+          ? { ...target, name: workspace?.name ?? target.name }
+          : target,
+      operation,
+    });
+  }
+  async function executeWorkspaceAction() {
+    if (!workspaceAction || actionRunning.current) return;
+    const { session: target, operation } = workspaceAction;
+    const action = services.workspaceActions(target)[operation];
+    if (!action) return;
+    if (action.kind === 'external') {
+      window.open(action.url, '_blank', 'noopener,noreferrer');
+      setWorkspaceAction(null);
+      return;
+    }
+    actionRunning.current = true;
+    setActionBusy(true);
+    setActionError('');
+    try {
+      if (operation === 'delete') await services.deleteWorkspace(target);
+      else await action.execute();
+      setWorkspaceAction(null);
+      await refreshSessions();
+    } catch (error) {
+      services.reportStatusError(error);
+      setActionError(errorMessage(error));
+    } finally {
+      actionRunning.current = false;
+      setActionBusy(false);
+    }
+  }
   const [moveTarget, setMoveTarget] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const sessionRef = useRef(session);
@@ -112,6 +158,20 @@ export function useWorkspace() {
   const refreshSessions = async () => setSessions(await services.sessions());
   useEffect(() => {
     let disposed = false;
+    services.onWorkspaceClosed = (id) => {
+      if (sessionRef.current?.id !== id) return;
+      runtimeRef.current = null;
+      sessionRef.current = null;
+      setRuntime(null);
+      setSession(null);
+      setSelected('');
+      setRecent(undefined);
+      setSettingsOpen(false);
+      setAutomationOpen(false);
+      setPreviewId(null);
+      setSyncStatus({ phase: 'idle' });
+      history.replaceState({}, '', location.pathname + location.search);
+    };
     services.onChange = () => {
       if (!disposed) void refreshSessions().catch((e) => reportError(e));
     };
@@ -151,6 +211,7 @@ export function useWorkspace() {
     return () => {
       disposed = true;
       services.onChange = () => {};
+      services.onWorkspaceClosed = () => {};
       void services.dispose().catch((e) => reportError(e));
     };
     // Bootstrap once per service lifetime; activation reads session state from refs.
@@ -573,7 +634,24 @@ export function useWorkspace() {
     }
   };
   return {
+    workspaceAction,
+    actionBusy,
+    actionError,
+    workspaceActions: (target: WorkspaceSession) => services.workspaceActions(target),
+    requestWorkspaceAction,
+    closeWorkspaceAction: () => {
+      if (!actionRunning.current) setWorkspaceAction(null);
+    },
+    executeWorkspaceAction,
     status,
+    contentReady: services.contentReady,
+    retryInitialization: async () => {
+      try {
+        await services.sync();
+      } catch (error) {
+        services.reportStatusError(error);
+      }
+    },
     restoreAuthorization,
     canReauthorize: services.canReauthorize,
     statusError: services.statusError,
@@ -593,6 +671,8 @@ export function useWorkspace() {
     github,
     githubOpen,
     setGithubOpen,
+    automationOpen,
+    setAutomationOpen,
     settingsOpen,
     setSettingsOpen,
     trashOpen,

@@ -76,6 +76,13 @@ export class GitHubAdapter implements ConnectionAdapter {
       };
     }
   }
+  workspaceLinks(workspaceId: string) {
+    const endpoint = this.endpoints.get(workspaceId);
+    if (!endpoint) throw new GitHubError(404, 'GitHub workspace is not bound');
+    const repository = endpoint.fullName;
+    const base = `https://github.com/${repository.split('/').map(encodeURIComponent).join('/')}`;
+    return { repository, delete: base + '/settings', share: base + '/settings/access' };
+  }
   async collaborators(workspaceId: string): Promise<import('@tio/core').MentionCandidate[]> {
     const endpoint = this.endpoints.get(workspaceId);
     if (!endpoint) throw new GitHubError(404, 'GitHub workspace is not bound');
@@ -111,7 +118,12 @@ export class GitHubAdapter implements ConnectionAdapter {
     return [...new Map(repos.filter(eligibleRepository).map((repo) => [repo.id, repo])).values()];
   }
   async discover() {
-    const result: { repo: GitHubRepository; workspaceId?: string; problem?: string }[] = [];
+    const result: {
+      repo: GitHubRepository;
+      workspaceId?: string;
+      endpoint?: GitHubEndpoint;
+      problem?: string;
+    }[] = [];
     for (const repo of await this.repositories()) {
       const existing = [...this.endpoints.values()].find((item) => item.repositoryId === repo.id);
       const endpoint = {
@@ -139,12 +151,22 @@ export class GitHubAdapter implements ConnectionAdapter {
             });
             continue;
           }
-          this.endpoints.set(ids[0], { ...endpoint, workspaceId: ids[0] });
         }
-        if (ids[0]) result.push({ repo, workspaceId: ids[0] });
+        if (ids[0])
+          result.push({
+            repo,
+            workspaceId: ids[0],
+            endpoint: { ...endpoint, workspaceId: ids[0] },
+          });
       } catch (error) {
-        if (!(error instanceof GitHubError && error.status === 409))
-          result.push({ repo, problem: (error as Error).message });
+        if (error instanceof GitHubError && !error.retryAt) {
+          if (error.status === 409) continue;
+          if ([403, 404, 422].includes(error.status)) {
+            result.push({ repo, problem: error.message });
+            continue;
+          }
+        }
+        throw error;
       }
     }
     return result;

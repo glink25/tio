@@ -181,7 +181,7 @@ test('new record uses the same forms and single relation clears without submitti
   await single.getByRole('button', { name: 'Single', exact: true }).click();
   await page.getByRole('combobox', { name: 'Single', exact: true }).fill('Collect');
   await page.getByRole('option', { name: 'Collect your first ideas' }).click();
-  await page.getByRole('combobox', { name: 'Single', exact: true }).press('Escape');
+  await expect(page.getByRole('combobox', { name: 'Single', exact: true })).toHaveCount(0);
   await single.getByRole('button', { name: 'Done', exact: true }).click();
   await expect(single).toContainText('Collect your first ideas');
   await single.getByRole('button', { name: 'Remove Collect your first ideas' }).click();
@@ -238,6 +238,9 @@ test('delete keys never remove records from cell selection or active text inputs
   await page.mouse.click(bounds!.x + 100, bounds!.y + 59);
   await page.keyboard.press('Delete');
   await rowClick(page, 0);
+  await expect(page.getByRole('region', { name: 'Row actions', exact: true })).toContainText(
+    '1 selected',
+  );
   await page.keyboard.press('Delete');
   await expect
     .poll(() =>
@@ -252,11 +255,11 @@ test('delete keys never remove records from cell selection or active text inputs
     .toBe(1);
 });
 
-test('relation search ignores late responses, appends pages, retries and retains selections', async ({
+test('relation search ignores late responses, appends automatically and recovers on a new query', async ({
   page,
 }) => {
   await openRecord(page);
-  const options = page.locator('[cmdk-list]').getByRole('option');
+  const options = page.getByRole('dialog', { name: 'Related', exact: true }).getByRole('option');
   await page.evaluate(() => {
     const f = (window as any).databaseFixture;
     const query = f.repository.queryRecords.bind(f.repository);
@@ -272,10 +275,9 @@ test('relation search ignores late responses, appends pages, retries and retains
   });
   const related = page.getByRole('group', { name: 'Related editor', exact: true });
   await related.getByRole('button', { name: 'Related', exact: true }).click();
-  await expect(options).toHaveCount(1);
+  await expect(options).toHaveCount(3);
   await options.first().click();
-  await page.getByRole('button', { name: 'Load more', exact: true }).click();
-  await expect(options).toHaveCount(2);
+  await expect(page.getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0);
   const search = page.getByRole('combobox', { name: 'Related', exact: true });
   await search.fill('Collect');
   await expect
@@ -288,12 +290,15 @@ test('relation search ignores late responses, appends pages, retries and retains
   await page.evaluate(() => (window as any).databaseFixture.releaseRelation());
   await expect(page.getByRole('option', { name: 'Collect your first ideas' })).toHaveCount(0);
   await search.fill('fail');
-  await expect(page.getByRole('alert')).toContainText('Unable to load options');
+  await expect(page.getByText('Unable to load options', { exact: true })).toBeVisible();
   await page.evaluate(() => {
     (window as any).databaseFixture.failRelation = false;
   });
-  await page.getByRole('button', { name: 'Retry', exact: true }).click();
-  await expect(page.getByText('No matching options')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry', exact: true })).toHaveCount(0);
+  await search.fill('missing');
+  await expect(
+    page.getByRole('dialog', { name: 'Related', exact: true }).getByText('No matching options'),
+  ).toBeVisible();
   await search.press('Escape');
   await related.getByRole('button', { name: 'Done', exact: true }).click();
   expect((await properties(page)).related).toHaveLength(1);
@@ -367,10 +372,19 @@ test('mention search appends pages and IME Enter does not select a candidate', a
   });
   const mention = page.getByRole('group', { name: 'Mention editor', exact: true });
   await mention.getByRole('button', { name: 'Mention', exact: true }).click();
-  const options = page.locator('[cmdk-list]').getByRole('option');
-  await expect(options).toHaveCount(1);
-  await page.getByRole('button', { name: 'Load more', exact: true }).click();
-  await expect(options).toHaveCount(2);
+  const options = page.getByRole('dialog', { name: 'Mention', exact: true }).getByRole('option');
+  await expect.poll(() => options.count()).toBeGreaterThan(2);
+  await expect(page.getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0);
+  const popup = page.getByRole('dialog', { name: 'Mention', exact: true });
+  await popup.getByRole('tab', { name: 'Pages', exact: true }).focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(popup.getByRole('tab', { name: 'Databases', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await page.keyboard.press('Enter');
+  await expect(mention.getByRole('button', { name: 'Done', exact: true })).toHaveCount(0);
+  await popup.getByRole('tab', { name: 'All', exact: true }).click();
   const search = page.getByRole('combobox', { name: 'Mention', exact: true });
   await search.fill('Quick');
   await expect(page.getByRole('option', { name: 'Quick notes' })).toBeVisible();
@@ -389,7 +403,7 @@ test('record drawer content supports typing, slash insertion and reopening', asy
   await page.keyboard.insertText('Notes for this record');
   await page.keyboard.press('Enter');
   await page.keyboard.type('/heading');
-  await page.locator('.bn-suggestion-menu-item').filter({ hasText: 'Heading 2' }).first().click();
+  await page.getByRole('option', { name: 'Heading 2', exact: true }).first().click();
   await page.keyboard.insertText('Next steps');
   await expect(editor.getByRole('heading', { level: 2 })).toHaveText('Next steps');
   const id = await page.evaluate(async () => {
@@ -529,13 +543,14 @@ test('embedded database view changes undo and redo without a query feedback loop
   await expect(page.locator('canvas').first()).toBeVisible();
   await page.getByRole('button', { name: 'View settings', exact: true }).last().click();
   const layout = page.getByRole('combobox', { name: 'Layout', exact: true });
-  await layout.selectOption('board');
+  await layout.click();
+  await page.getByRole('option', { name: 'Board', exact: true }).click();
   await expect(page.locator('canvas')).toHaveCount(0);
   await layout.press('ControlOrMeta+z');
-  await expect(layout).toHaveValue('table');
+  await expect(layout).toContainText('Table');
   await expect(page.locator('canvas').first()).toBeVisible();
   await layout.press('Control+y');
-  await expect(layout).toHaveValue('board');
+  await expect(layout).toContainText('Board');
   await page.keyboard.press('Escape');
   await page.evaluate(() => (window as any).databaseFixture.editor.flush());
   await expect

@@ -19,3 +19,26 @@ export function Identity({ identity }: { identity?: ConnectionIdentity }) {
     </>
   );
 }
+
+/** Identity names and provider details share one presentation, without duplicate values. */
+export function ConnectionInfo({ identity }: { identity?: ConnectionIdentity }) {
+  if (!identity) return null;
+  const seen = new Set([identity.name, identity.provider, `${identity.provider}/${identity.name}`]);
+  const details = identity.details.filter((detail) => {
+    if (seen.has(detail.value)) return false;
+    seen.add(detail.value);
+    return true;
+  });
+  return (
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-center gap-2 text-sm font-medium">
+        <Identity identity={identity} />
+      </div>
+      {details.map((detail) => (
+        <p key={detail.label} className="mt-1 text-xs break-words text-muted">
+          {detail.label} · {detail.value}
+        </p>
+      ))}
+    </div>
+  );
+}

@@ -50,3 +50,48 @@ export function LoadingIndicator({ label, className }: { label?: string; classNa
     </output>
   );
 }
+
+/** Mirrors the navigation landmarks without introducing focusable placeholders. */
+export function SidebarSkeleton() {
+  const t = useT();
+  const bar = 'rounded bg-ink/[0.07] dark:bg-ink/10';
+  return (
+    <output
+      aria-label={t('common.loading')}
+      aria-busy="true"
+      className="flex h-dvh min-h-0 flex-col gap-6 px-4 py-5 motion-safe:animate-pulse"
+    >
+      <div aria-hidden="true" className="flex items-center gap-2">
+        <span className={`${bar} size-6`} />
+        <span className={`${bar} h-4 w-28`} />
+        <span className={`${bar} ml-auto size-3`} />
+      </div>
+      <div aria-hidden="true" className="space-y-4">
+        {[96, 76].map((width) => (
+          <div key={width} className="flex items-center gap-3">
+            <span className={`${bar} size-4`} />
+            <span className={`${bar} h-3`} style={{ width }} />
+          </div>
+        ))}
+      </div>
+      <div aria-hidden="true" className="min-h-0 flex-1 space-y-4 overflow-hidden">
+        <span className={`${bar} mb-5 block h-2 w-12`} />
+        {[132, 108, 86, 116, 94, 124, 76].map((width, index) => (
+          <div
+            key={index}
+            className="flex h-6 items-center gap-2"
+            style={{ paddingLeft: [2, 18, 34, 18, 2, 18, 2][index] }}
+          >
+            <span className={`${bar} size-2 shrink-0`} />
+            <span className={`${bar} h-4 w-3 shrink-0`} />
+            <span className={`${bar} h-3`} style={{ width }} />
+          </div>
+        ))}
+      </div>
+      <div aria-hidden="true" className="flex items-center gap-3 border-t border-line pt-4">
+        <span className={`${bar} size-6 rounded-full`} />
+        <span className={`${bar} h-3 w-28`} />
+      </div>
+    </output>
+  );
+}
