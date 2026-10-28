@@ -1,5 +1,7 @@
 import {
   codeText,
+  githubMentionUrl,
+  mentionTitle,
   isMentionReference,
   plainText,
   titleOf,
@@ -27,13 +29,7 @@ export const markdownUrl = (url: string) =>
   url.replace(/[\s()<>]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
 export function referenceLabel(value: unknown, context: PageExportContext): string {
   if (!isMentionReference(value)) return context.unavailable;
-  const target = context.objects.get(value.id);
-  return target &&
-    !target.deleted &&
-    target.workspaceId === value.workspaceId &&
-    target.type === value.kind
-    ? titleOf(target)
-    : context.unavailable;
+  return mentionTitle(value, [...context.objects.values()]) ?? context.unavailable;
 }
 export function staticBlockLabel(block: Block, context: PageExportContext): string | undefined {
   if (block.type === 'databaseView') {
@@ -86,13 +82,15 @@ export function markdownBlocks(blocks: Block[], context: PageExportContext): str
       const target = isMentionReference(node.props)
         ? context.objects.get(node.props.id)
         : undefined;
-      const url =
-        target &&
-        !target.deleted &&
-        target.workspaceId === node.props.workspaceId &&
-        target.type === node.props.kind
-          ? context.pageUrl?.(target.id)
-          : undefined;
+      const url = isMentionReference(node.props)
+        ? (githubMentionUrl(node.props) ??
+          (target &&
+          !target.deleted &&
+          target.workspaceId === node.props.workspaceId &&
+          target.type === node.props.kind
+            ? context.pageUrl?.(target.id)
+            : undefined))
+        : undefined;
       return url ? `[${label}](${markdownUrl(url)})` : label;
     }
     if (node.type === 'link') {

@@ -1,5 +1,6 @@
 import type { DocumentCover, DocumentIcon } from '@tio/core';
 import { useT } from '@tio/i18n';
+import { LoadingIndicator } from '@tio/ui';
 import { Button, Popover } from '@tio/ui';
 import {
   Component,
@@ -129,9 +130,7 @@ export function MediaPicker({ kind, present, label, trigger, upload, onSelect }:
             className="max-h-[min(460px,65dvh)] min-h-0 overflow-y-auto"
           >
             <PanelBoundary key={tab} message={t('document.iconLoadFailed')}>
-              <Suspense
-                fallback={<output className="block p-4 text-muted">{t('status.loading')}</output>}
-              >
+              <Suspense fallback={<LoadingIndicator className="w-full p-4" />}>
                 {tab === 'emoji' ? (
                   <EmojiPicker onSelect={change} />
                 ) : tab === 'upload' || tab === 'link' ? (

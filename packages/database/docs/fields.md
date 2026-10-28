@@ -2,19 +2,19 @@
 
 字段定义保存在 `Field`，记录值按字段 ID 保存在 `TioObject.properties`。名称不是身份，字段移除后保留已有值。标题列类型显示为 ID，固定首列且不可隐藏、删除或修改类型，其他已知类型可在属性编辑器中修改；派生字段禁止直接写入。
 
-| 类型                         | 当前值与语义                                                                          |
-| ---------------------------- | ------------------------------------------------------------------------------------- |
-| title/text、number、checkbox | 字符串、有限数值、布尔值                                                              |
-| select/multiselect/status    | 稳定选项 ID；多选为数组；状态组为 todo/doing/done                                     |
-| date                         | `{start, end?, timeZone?}`，日期用 YYYY-MM-DD，时刻含偏移量                           |
-| files                        | 有序且不重复的 `asset:<id>` 数组，单文件上限 20 MiB                                   |
-| relation                     | 同空间指定数据库的记录 ID，默认数组，`multiple: false` 时为单值                       |
-| mention                      | 同空间页面或数据库引用，默认有序且不重复的数组；`multiple: false` 时为单个引用或 null |
-| url                          | HTTP/HTTPS 字符串，空字符串或 null 清空                                               |
-| formula/rollup               | 只读计算值，不作为记录缓存持久化                                                      |
-| createdTime/lastEditedTime   | 读取 createdAt/updatedAt 时间元数据                                                   |
+| 类型                         | 当前值与语义                                                                                              |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| title/text、number、checkbox | 字符串、有限数值、布尔值                                                                                  |
+| select/multiselect/status    | 稳定选项 ID；多选为数组；状态组为 todo/doing/done                                                         |
+| date                         | `{start, end?, timeZone?}`，日期用 YYYY-MM-DD，时刻含偏移量                                               |
+| files                        | 有序且不重复的 `asset:<id>` 数组，单文件上限 20 MiB                                                       |
+| relation                     | 同空间指定数据库的记录 ID，默认数组，`multiple: false` 时为单值                                           |
+| mention                      | 同空间页面、数据库、记录或 GitHub 人员引用，默认有序且不重复的数组；`multiple: false` 时为单个引用或 null |
+| url                          | HTTP/HTTPS 字符串，空字符串或 null 清空                                                                   |
+| formula/rollup               | 只读计算值，不作为记录缓存持久化                                                                          |
+| createdTime/lastEditedTime   | 读取 createdAt/updatedAt 时间元数据                                                                       |
 
-日期输入检查时区、DST 空洞和区间。日/月/年运算保留墙上时间，小时/分钟表示流逝时间。文件字节使用既有暂存与发布管道，移除属性引用不删除共享附件。关系忽略缺失/已删除记录参与计算，但保留引用以供展示。
+日期输入检查时区、DST 空洞和区间。日/月/年运算保留墙上时间，小时/分钟表示流逝时间。文件字节使用既有暂存与发布管道，移除属性引用不删除共享附件。关系忽略缺失/已删除记录参与计算，但保留引用以供展示。关联继续限定目标数据库并作为汇总来源；提及用于自由引用，不参与汇总。记录提及使用目标数据库的标题字段显示名称，补全同时展示所属数据库；GitHub 人员由宿主提供当前仓库协作者，已有提及离线显示用户名。
 
 ## 公式与汇总
 

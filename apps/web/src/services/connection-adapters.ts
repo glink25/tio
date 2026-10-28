@@ -19,6 +19,7 @@ import type { WorkspaceRuntime } from '@tio/workspace';
 
 import { githubBinding } from './github-binding';
 export interface ConnectionBinding {
+  mentionPeople?(workspaceId: string): Promise<import('@tio/core').MentionCandidate[]>;
   dispose?(): void;
   automation?(runtime: WorkspaceRuntime, workspaceId: string): AutomationProvider;
   identity: ConnectionIdentity;

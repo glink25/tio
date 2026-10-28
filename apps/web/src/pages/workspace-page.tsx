@@ -133,6 +133,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
       >
         {m.runtime ? (
           <EditorSurface
+            mentions={m.mentions}
             appSlice={appSlice}
             presentation={presentation}
             runtime={m.runtime}
@@ -198,6 +199,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
               </select>
             </div>
             <EditorSurface
+              mentions={m.mentions}
               appSlice={appSlice}
               presentation={presentation}
               runtime={m.runtime}

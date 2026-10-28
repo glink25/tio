@@ -1,5 +1,4 @@
 import { DomainError } from '@tio/core';
-import { navigationObject } from '@tio/core';
 import type { PageQuery, RecordQuery, RepositoryCapabilities } from '@tio/core';
 import {
   applyCommit,
@@ -48,11 +47,10 @@ export class LocalStore {
   };
   private queries = new ScanningQueries(this);
   async readMetadata(ids: string[]) {
-    const result = await this.readObjects(ids);
-    return {
-      ...result,
-      entries: result.entries.map((e) => ({ ...e, object: navigationObject(e.object) })),
-    };
+    return this.queries.metadata(ids);
+  }
+  queryMentions(query: import('@tio/core').MentionQuery) {
+    return this.queries.mentions(query);
   }
   queryNavigation(query: import('@tio/core').NavigationQuery) {
     return this.queries.navigation(query);

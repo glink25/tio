@@ -43,7 +43,6 @@ export function newPage(workspaceId: string, parentId: string | null = null): Ti
   return object('page', workspaceId, {
     title: '未命名',
     parentId,
-    order: Date.now(),
     blocks: [textBlock('')],
   });
 }
@@ -51,7 +50,6 @@ export function newDatabase(workspaceId: string, parentId: string | null = null)
   const db = object('database', workspaceId, {
     name: '新数据库',
     parentId,
-    order: Date.now(),
     fields: [
       { id: id('field'), name: '名称', type: 'title' },
       {
@@ -88,3 +86,5 @@ export {
 export { executeBasic, type BasicCommand } from './basic';
 
 export { executeCommand, type WorkspaceCommand } from './commands';
+
+export { navigationOrder, navigationTree } from './navigation';

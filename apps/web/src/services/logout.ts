@@ -3,7 +3,7 @@ function deleteDatabase(name: string) {
   return new Promise<void>((resolve, reject) => {
     const request = indexedDB.deleteDatabase(name);
     const timeout = setTimeout(
-      () => reject(new DomainError('close-tabs', 'Close other tio tabs and retry.')),
+      () => reject(new DomainError('close-tabs', 'Close other Tio tabs and retry.')),
       10000,
     );
     request.onsuccess = () => {

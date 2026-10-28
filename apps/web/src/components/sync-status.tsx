@@ -1,5 +1,5 @@
 import { t, errorMessage } from '@tio/i18n';
-import { Button, IconButton, Popover } from '@tio/ui';
+import { Button, IconButton, Popover, LoadingIndicator } from '@tio/ui';
 import { AlertCircle, Check, LoaderCircle, Cloud } from 'lucide-react';
 import { useState } from 'react';
 
@@ -38,7 +38,7 @@ export function SyncStatus({ model: m }: { model: WorkspaceController }) {
     >
       <div className="max-h-[min(28rem,70dvh)] space-y-3 overflow-y-auto break-words">
         <p className="text-sm" aria-live="polite">
-          {label}
+          {m.status.save === 'loading' ? <LoadingIndicator label={label} /> : label}
         </p>
         {errors.map((error) => (
           <p key={error} className="text-sm text-secondary">

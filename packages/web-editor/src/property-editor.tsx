@@ -25,7 +25,7 @@ import {
   SelectContent,
   SelectItem,
 } from '@tio/ui';
-import { optionPalette, useViewExtensions } from '@tio/views';
+import { FieldTypeIcon, optionPalette, useViewExtensions } from '@tio/views';
 import { Plus, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 const types = [
@@ -186,31 +186,27 @@ export function PropertyEditor({
       </label>
       <label className="block text-xs text-muted">
         {t('ui.type')}
-        <select
-          className="mt-1 w-full"
+        <Select
           disabled={
             saving ||
             (!!field && (field.type === 'title' || !types.some((type) => type === field.type)))
           }
-          aria-label={t(field ? 'database.fieldType' : 'database.newFieldType')}
           value={draft.type}
-          onChange={(e) =>
+          onValueChange={(type) =>
             patch({
-              type: e.target.value,
+              type,
               numberFormat: undefined,
               currency: undefined,
               targetDatabaseId: undefined,
               multiple: undefined,
               options:
                 ['select', 'multiSelect', 'status'].includes(draft.type) &&
-                ['select', 'multiSelect', 'status'].includes(e.target.value)
+                ['select', 'multiSelect', 'status'].includes(type)
                   ? draft.options?.map((option) => ({
                       ...option,
-                      ...(e.target.value === 'status'
-                        ? { group: option.group ?? ('todo' as const) }
-                        : {}),
+                      ...(type === 'status' ? { group: option.group ?? ('todo' as const) } : {}),
                     }))
-                  : e.target.value === 'status'
+                  : type === 'status'
                     ? (['todo', 'doing', 'done'] as const).map((group, i) => ({
                         id: id('option'),
                         label: t(`database.${group}`),
@@ -223,18 +219,43 @@ export function PropertyEditor({
             })
           }
         >
-          {Object.entries(fields ?? {}).map(([type, definition]) => (
-            <option key={type} value={type}>
-              {definition.label}
-            </option>
-          ))}
-          {draft.type === 'title' && <option value="title">{t('database.title')}</option>}
-          {types.map((type) => (
-            <option key={type} value={type}>
-              {t(`database.${type}` as TranslationKey)}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            className="mt-1 w-full"
+            aria-label={t(field ? 'database.fieldType' : 'database.newFieldType')}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(fields ?? {}).map(([type, definition]) => (
+              <SelectItem key={type} value={type} textValue={definition.label}>
+                <span className="flex items-center gap-2">
+                  <FieldTypeIcon type={type} />
+                  {definition.label}
+                </span>
+              </SelectItem>
+            ))}
+            {draft.type === 'title' && (
+              <SelectItem value="title" textValue={t('database.title')}>
+                <span className="flex items-center gap-2">
+                  <FieldTypeIcon type="title" />
+                  {t('database.title')}
+                </span>
+              </SelectItem>
+            )}
+            {types.map((type) => (
+              <SelectItem
+                key={type}
+                value={type}
+                textValue={t(`database.${type}` as TranslationKey)}
+              >
+                <span className="flex items-center gap-2">
+                  <FieldTypeIcon type={type} />
+                  {t(`database.${type}` as TranslationKey)}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </label>
       {['select', 'multiSelect', 'status'].includes(draft.type) && (
         <div>

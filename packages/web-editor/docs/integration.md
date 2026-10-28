@@ -31,6 +31,12 @@ await editor.dispose();
 - [领域与 UI 扩展](../../../docs/protocols/extensions.md)
 - [App Slice](app-slice.md)
 
+## 提及
+
+正文和数据库提及字段共用 `MentionService`，支持同空间页面、数据库、记录及宿主提供的 GitHub 人员。仓库提供独立 `queryMentions({text, after, limit})` 和批量 `readMetadata(ids)`；记录摘要标题从数据库标题字段派生，不读取目标正文到运行时缓存。
+
+宿主可传入 `mentions` 替换默认服务；React 接入可用 `createMentionService(runtime, workspaceId, navigate, people?)` 组合内容与人员来源。`people` 按需返回 `{reference, title, description?}[]`，由宿主负责连接和缓存。`query` 返回 `sourceErrors` 时展示来源级重试，其他来源候选仍可使用。GitHub 人员引用保存 `{workspaceId, kind: 'github-user', id, login}`，离线解析使用用户名快照；点击仅打开 GitHub 主页。
+
 ## 页面导出
 
 共享页面菜单提供 Markdown 和 PDF 导出，独立嵌入与 Web 宿主行为一致，只读模式仍可导出。导出读取当前会话的文档快照与 `readAsset`，不要求宿主提供编辑器实例或 DOM。转换模块动态加载；PDF 字体按需从 jsDelivr CDN 加载，使用固定 `Sans2.004` release 的官方 Noto Sans SC 字体，宿主不必再随构建产物部署 `.otf` 文件。首次使用 PDF 需要加载对应引擎与字体，首次导出依赖网络，离线首次导出不作保证。

@@ -1,5 +1,6 @@
 import { editable, id, type TioObject } from '@tio/core';
 import { useT } from '@tio/i18n';
+import { LoadingIndicator } from '@tio/ui';
 import { Button, EmptyNotice } from '@tio/ui';
 import { DatabaseView } from '@tio/views';
 import { ArrowUpRight, Database } from 'lucide-react';
@@ -228,7 +229,7 @@ export function DatabaseEmbed({
           )
         }
       />
-      {showQuerying && <output aria-live="polite">{t('database.loadingRecords')}</output>}
+      {showQuerying && <LoadingIndicator label={t('database.loadingRecords')} />}
       <div className="flex gap-2">
         {cursor && <Button onClick={() => setCursor(undefined)}>←</Button>}
         {next && (

@@ -55,6 +55,9 @@ export class WorkspaceServices {
   get identity() {
     return this.binding?.identity;
   }
+  mentionPeople(workspaceId: string) {
+    return this.binding?.mentionPeople?.(workspaceId) ?? Promise.resolve([]);
+  }
   get supportsSync() {
     return this.binding?.adapter.supportsSync ?? false;
   }

@@ -443,3 +443,13 @@
 .tio-editor .tio-code-preview output {
   display: block;
 }
+
+/* The mention popup owns its chrome; BlockNote's list is only the scroll container. */
+.tio-editor .tio-mention-menu .bn-suggestion-menu {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}

@@ -362,8 +362,8 @@ test('mention search appends pages and IME Enter does not select a candidate', a
   await openRecord(page);
   await page.evaluate(() => {
     const f = (window as any).databaseFixture;
-    const query = f.repository.queryNavigation.bind(f.repository);
-    f.repository.queryNavigation = (request: any) => query({ ...request, limit: 1 });
+    const query = f.repository.queryMentions.bind(f.repository);
+    f.repository.queryMentions = (request: any) => query({ ...request, limit: 1 });
   });
   const mention = page.getByRole('group', { name: 'Mention editor', exact: true });
   await mention.getByRole('button', { name: 'Mention', exact: true }).click();
@@ -501,8 +501,8 @@ test('slow query responses settle after undo and never publish stale search resu
     .poll(() => page.evaluate(() => (window as any).databaseFixture.queries.active))
     .toBeGreaterThan(0);
   await search.fill('no matching record');
-  await expect(page.getByText('Loading records…', { exact: true })).toBeVisible();
-  await expect(page.getByText('Loading records…', { exact: true })).toHaveCount(0, {
+  await expect(page.getByRole('status', { name: 'Loading records…', exact: true })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading records…', exact: true })).toHaveCount(0, {
     timeout: 5000,
   });
   await expect
@@ -604,7 +604,7 @@ test('ID type stays fixed and mention cardinality is configurable', async ({ pag
   await page.getByRole('button', { name: 'Name', exact: true }).click();
   const type = page.getByLabel('Property type', { exact: true });
   await expect(type).toBeDisabled();
-  await expect(type.locator('option:checked')).toHaveText('ID');
+  await expect(type).toHaveText('ID');
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.getByRole('button', { name: 'Mention', exact: true }).click();
   const multiple = page.getByRole('checkbox', { name: 'Allow multiple items', exact: true });
@@ -653,4 +653,19 @@ test('ID column remains first even when the saved view orders it last', async ({
   const bounds = await canvas.boundingBox();
   await page.mouse.dblclick(bounds!.x + 90, bounds!.y + 59);
   await expect(page.getByRole('group', { name: 'Name editor', exact: true })).toBeVisible();
+});
+
+test('selected row opens record details and the ID cell right edge edits normally', async ({
+  page,
+}) => {
+  await rowClick(page, 0);
+  await page.getByRole('button', { name: 'Open record', exact: true }).click();
+  const drawer = page.getByRole('dialog', { name: 'Record details', exact: true });
+  await expect(drawer).toBeVisible();
+  await drawer.getByRole('button', { name: 'Close record', exact: true }).click();
+  const canvas = page.locator('canvas').first();
+  const bounds = await canvas.boundingBox();
+  await page.mouse.dblclick(bounds!.x + 32 + 270 - 15, bounds!.y + 59);
+  await expect(page.getByRole('group', { name: 'Name editor', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Record details', exact: true })).toHaveCount(0);
 });

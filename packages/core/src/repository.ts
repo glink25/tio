@@ -1,5 +1,6 @@
 import type { AutomationProvider, MutationSource } from './automation';
 import type { TioObject } from './index';
+import type { MentionPage, MentionQuery } from './mentions';
 export interface WorkspaceEvent {
   version: number;
   commitId: string;
@@ -75,6 +76,7 @@ export interface WorkspaceRepository extends AssetStore {
   readSnapshot(): Promise<WorkspaceSnapshot>;
   storageCapabilities?: RepositoryCapabilities;
   readMetadata?(ids: string[]): Promise<WorkspaceSnapshot>;
+  queryMentions?(query: MentionQuery): Promise<MentionPage>;
   queryNavigation?(query: NavigationQuery): Promise<NavigationPage>;
   queryRecords?(query: RecordQuery): Promise<ObjectPage>;
   search?(query: SearchQuery): Promise<SearchPage>;
@@ -122,7 +124,6 @@ export interface PageQuery {
 }
 export interface NavigationQuery extends PageQuery {
   text?: string;
-  mentionsOnly?: boolean;
 }
 export interface NavigationPage {
   version: number;

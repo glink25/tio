@@ -1,5 +1,6 @@
 import {
   HostError,
+  isMentionReference,
   validAutomationState,
   type AutomationProvider,
   type AutomationRun,
@@ -212,6 +213,27 @@ export class BridgeRepository implements WorkspaceRepository {
     });
     return value;
   }
+  async queryMentions(
+    query: import('@tio/core').MentionQuery,
+  ): Promise<import('@tio/core').MentionPage> {
+    const page = await this.request('queryMentions', query);
+    if (
+      !page ||
+      !Array.isArray(page.items) ||
+      (page.next !== undefined && typeof page.next !== 'string') ||
+      page.items.some(
+        (item: any) =>
+          !item ||
+          !isMentionReference(item.reference) ||
+          item.reference.kind === 'github-user' ||
+          item.reference.workspaceId !== this.context.workspaceId ||
+          typeof item.title !== 'string' ||
+          (item.description !== undefined && typeof item.description !== 'string'),
+      )
+    )
+      throw new HostError('invalid');
+    return page;
+  }
   async queryNavigation(query: import('@tio/core').NavigationQuery): Promise<NavigationPage> {
     return this.page(await this.request('queryNavigation', query));
   }
@@ -398,6 +420,7 @@ export function serveHost(
               if (!repository.readObjects) throw new HostError('unsupported');
               result = await repository.readObjects(p.ids);
               break;
+            case 'queryMentions':
             case 'queryNavigation':
             case 'queryRecords':
             case 'search':

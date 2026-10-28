@@ -1,4 +1,5 @@
 import { useT, useTranslation } from '@tio/i18n';
+import { LoadingIndicator } from '@tio/ui';
 import { useTheme } from '@tio/ui';
 import { useEffect, useRef, useState } from 'react';
 
@@ -55,7 +56,7 @@ export default function EmojiPicker({ onSelect }: { onSelect: (icon: string) => 
     <>
       {status !== 'ready' && (
         <p role={status === 'error' ? 'alert' : 'status'} className="p-3 text-sm text-muted">
-          {t(status === 'error' ? 'document.iconLoadFailed' : 'status.loading')}
+          {status === 'error' ? t('document.iconLoadFailed') : <LoadingIndicator />}
         </p>
       )}
       <div ref={container} data-history="native" />

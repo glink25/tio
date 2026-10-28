@@ -40,7 +40,7 @@ export function Notifications() {
       className="tio-notifications"
       position="bottom-right"
       richColors
-      closeButton
+      closeButton={false}
       toastOptions={{ className: 'font-sans' }}
     />
   );

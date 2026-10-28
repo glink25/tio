@@ -14,6 +14,7 @@ import { useTheme, Popover, Button } from '@tio/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useDisplayValue } from './display-value';
+import { fieldIcon, fieldHeaderIcons } from './field-icons';
 import { FieldInput, optionPalette } from './field-input';
 import { FieldMenu } from './field-menu';
 import type { RowsProps } from './types';
@@ -152,7 +153,7 @@ export function GridView(props: RowsProps) {
       return {
         kind: GridCellKind.Text,
         data,
-        displayData: field.type === 'title' ? data + ' ↗' : data,
+        displayData: data,
         allowOverlay: false,
         readonly: true,
         themeOverride: isFieldError(value) ? { textDark: '#c4554d' } : undefined,
@@ -205,6 +206,15 @@ export function GridView(props: RowsProps) {
             <span className="px-1 font-medium whitespace-nowrap">
               {t('database.selectedRows', { count: selected.length })}
             </span>
+            {selected.length === 1 && (
+              <Button
+                type="button"
+                className="h-7 px-2 py-1 text-xs"
+                onClick={() => onOpen(selected[0])}
+              >
+                {t('database.openRecord')}
+              </Button>
+            )}
             <Button
               type="button"
               className="h-7 px-2 py-1 text-xs"
@@ -229,36 +239,15 @@ export function GridView(props: RowsProps) {
         <div ref={containerRef} className="w-full overflow-hidden">
           <DataEditor
             ref={gridRef}
+            headerIcons={fieldHeaderIcons}
             cellActivationBehavior="double-click"
             width="100%"
             height={Math.min(460, Math.max(160, rows.length * 42 + 40))}
             columns={[
               ...fields.map((f) => ({
                 id: f.id,
-                title:
-                  ((
-                    {
-                      title: 'Aa',
-                      text: '≡',
-                      number: '#',
-                      boolean: '☑',
-                      date: '▦',
-                      formula: 'ƒ',
-                      rollup: '∑',
-                      files: '↥',
-                      relation: '↗',
-                      url: '↗',
-                      email: '@',
-                      phone: '☎',
-                      createdTime: '◷',
-                      lastEditedTime: '◷',
-                      status: '◉',
-                      select: '⌄',
-                      multiSelect: '☷',
-                    } as Record<string, string>
-                  )[f.type] ?? '≡') +
-                  '  ' +
-                  f.name,
+                title: f.name,
+                icon: fieldIcon(f.type),
                 hasMenu: true,
                 width: view.columnWidths?.[f.id] ?? (f.type === 'title' ? 270 : 155),
               })),
@@ -326,14 +315,6 @@ export function GridView(props: RowsProps) {
               ctx.restore();
             }}
             onCellEdited={edit}
-            onCellClicked={([col, row], event) => {
-              if (
-                fields[col]?.type === 'title' &&
-                event.localEventX > event.bounds.width - 32 &&
-                rows[row]
-              )
-                onOpen(rows[row]);
-            }}
             onCellActivated={([col, row]) => {
               if (!rows[row] || !fields[col]) return;
               const bounds = gridRef.current?.getBounds(col, row);

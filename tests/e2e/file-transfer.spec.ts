@@ -199,7 +199,8 @@ test('changes a property type, clears invalid cells and restores both with undo'
   await page.getByRole('button', { name: 'View settings', exact: true }).last().click();
   await page.getByRole('button', { name: 'Properties', exact: true }).click();
   await page.getByRole('button', { name: 'Value', exact: true }).click();
-  await page.getByLabel('Property type').selectOption('number');
+  await page.getByRole('combobox', { name: 'Property type', exact: true }).click();
+  await page.getByRole('option', { name: 'Number', exact: true }).click();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await expect
     .poll(async () => (await snapshot(page)).find((o: any) => o.id === 'db').fields[1].type)

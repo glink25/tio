@@ -2,6 +2,7 @@ import { createCodeBlockSpec } from '@blocknote/core';
 import { createReactBlockSpec } from '@blocknote/react';
 import { codeText } from '@tio/core';
 import { useTranslation } from '@tio/i18n';
+import { LoadingIndicator } from '@tio/ui';
 import { lazy, Suspense, useState } from 'react';
 
 import { languages, languageId } from './languages';
@@ -101,7 +102,7 @@ export const CodeBlock = createReactBlockSpec(
                       : 'Preview could not load. Reopen the page to retry. Source remains editable.'
                   }
                 >
-                  <Suspense fallback={<output>{zh ? '正在加载…' : 'Loading…'}</output>}>
+                  <Suspense fallback={<LoadingIndicator />}>
                     <Preview source={codeText(block.content)} />
                   </Suspense>
                 </PreviewBoundary>

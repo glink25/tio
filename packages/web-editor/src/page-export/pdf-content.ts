@@ -1,4 +1,11 @@
-import { codeText, plainText, valueText, type Block } from '@tio/core';
+import {
+  githubMentionUrl,
+  isMentionReference,
+  codeText,
+  plainText,
+  valueText,
+  type Block,
+} from '@tio/core';
 import {
   exportUrl,
   referenceLabel,
@@ -12,7 +19,10 @@ export function pdfInline(value: unknown, context: PageExportContext): ContentTe
   if (Array.isArray(value)) return value.flatMap((item) => pdfInline(item, context));
   if (!value || typeof value !== 'object') return [];
   const node = value as Record<string, any>;
-  if (node.type === 'mention') return [{ text: referenceLabel(node.props, context) }];
+  if (node.type === 'mention') {
+    const url = isMentionReference(node.props) ? githubMentionUrl(node.props) : undefined;
+    return [{ text: referenceLabel(node.props, context), ...(url ? { link: url } : {}) }];
+  }
   if (node.type === 'tableCell') return pdfInline(node.content, context);
   if (node.type === 'link') {
     const url = exportUrl(node.href);

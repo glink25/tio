@@ -2,7 +2,7 @@
 
 本地优先的文档与数据库编辑器，可使用设备存储、本地文件夹或 GitHub 仓库。设备、文件夹和 PAT 模式无需应用服务端；GitHub App 登录使用可选的鉴权 Worker。
 
-[English](README.md) · [tio 之禅](zen.md)
+[English](README.md) · [Tio 之禅](zen.md)
 
 ## 启动
 

@@ -1,5 +1,10 @@
 import {
   mentionKey,
+  visibility,
+  recordTitle,
+  HostError,
+  githubMentionUrl,
+  type MentionCandidate,
   type MentionReference,
   type MentionResolution,
   type MentionService,
@@ -11,6 +16,7 @@ export function createMentionService(
   runtime: EditorSession,
   workspaceId: string,
   navigate: (id: string) => void,
+  people?: () => Promise<MentionCandidate[]>,
 ): MentionService {
   const listeners = new Set<() => void>();
   let unsubscribe: (() => void) | undefined;
@@ -32,8 +38,17 @@ export function createMentionService(
       state.version,
       state.status,
       state.objects
-        .filter((o) => ['page', 'database'].includes(o.type))
-        .map((o) => [o.id, o.title, o.name, o.deleted, runtime.can(o, 'read')]),
+        .filter((o) => ['page', 'database', 'record'].includes(o.type))
+        .map((o) => [
+          o.id,
+          o.title,
+          o.name,
+          o.properties,
+          o.fields,
+          o.deleted,
+          o.parentId,
+          runtime.can(o, 'read'),
+        ]),
     ]);
   };
   const inflight = new Map<string, Promise<MentionResolution>>();
@@ -59,22 +74,28 @@ export function createMentionService(
         snapshots.push(await runtime.mentionMetadata(ids.slice(i, i + 1000)));
       const entries = snapshots.flatMap((s) => s.entries),
         denied = new Set(snapshots.flatMap((s) => s.denied ?? []));
+      const visible = visibility([...entries.map((e) => e.object), ...runtime.snapshot()]);
       for (const item of batch) {
         const ref = item.reference;
-        const object = entries.find((e) => e.object.id === ref.id)?.object;
+        const object =
+          runtime.snapshot().find((o) => o.id === ref.id) ??
+          entries.find((e) => e.object.id === ref.id)?.object;
         const result: MentionResolution =
           ref.workspaceId !== workspaceId || denied.has(ref.id)
             ? { reference: ref, status: 'denied' }
             : !object || object.type !== ref.kind || object.workspaceId !== workspaceId
               ? { reference: ref, status: 'missing' }
-              : object.deleted
+              : object.deleted || !visible(object)
                 ? { reference: ref, status: 'deleted' }
                 : !runtime.can(object, 'read')
                   ? { reference: ref, status: 'denied' }
                   : {
                       reference: ref,
                       status: 'ready',
-                      title: object.title || object.name || 'Untitled',
+                      title:
+                        object.type === 'record'
+                          ? recordTitle(object, runtime.snapshot())
+                          : object.title || object.name || 'Untitled',
                     };
         item.resolve(result);
       }
@@ -84,26 +105,73 @@ export function createMentionService(
   };
   return {
     async query(text, after) {
-      const page = await runtime.mentionCandidates(text, after);
-      return {
-        items: page.items
-          .filter(
-            (o) =>
-              o.workspaceId === workspaceId &&
-              !o.deleted &&
-              ['page', 'database'].includes(o.type) &&
-              runtime.can(o, 'read'),
+      let cursor: { text: string; content?: string; contentDone?: boolean; person: number } = {
+        text,
+        person: 0,
+      };
+      if (after) {
+        try {
+          cursor = JSON.parse(after);
+          if (
+            cursor.text !== text ||
+            !Number.isSafeInteger(cursor.person) ||
+            cursor.person < 0 ||
+            (cursor.content !== undefined && typeof cursor.content !== 'string') ||
+            (cursor.contentDone !== undefined && typeof cursor.contentDone !== 'boolean')
           )
-          .map((o) => ({
-            reference: { workspaceId, kind: o.type as 'page' | 'database', id: o.id },
-            title: o.title || o.name || 'Untitled',
-          })),
-        next: page.next,
+            throw new Error();
+        } catch {
+          throw new HostError('invalid', 'Invalid mention cursor');
+        }
+      }
+      const [content, collaborators] = await Promise.allSettled([
+        cursor.contentDone
+          ? Promise.resolve({ items: [] as MentionCandidate[], next: undefined })
+          : runtime.mentionCandidates(text, cursor.content),
+        people ? people() : Promise.resolve([] as MentionCandidate[]),
+      ]);
+      const sourceErrors: ('content' | 'github')[] = [];
+      if (content.status === 'rejected') sourceErrors.push('content');
+      if (collaborators.status === 'rejected') sourceErrors.push('github');
+      const items =
+        content.status === 'fulfilled'
+          ? content.value.items.filter((item) => {
+              const known = runtime.snapshot().find((o) => o.id === item.reference.id);
+              return (
+                item.reference.workspaceId === workspaceId && (!known || runtime.can(known, 'read'))
+              );
+            })
+          : [];
+      const users =
+        collaborators.status === 'fulfilled'
+          ? collaborators.value.filter(
+              (item) =>
+                item.reference.workspaceId === workspaceId &&
+                item.title.toLocaleLowerCase().includes(text.replace(/^@/, '').toLocaleLowerCase()),
+            )
+          : [];
+      const selected = users.slice(cursor.person, cursor.person + 50);
+      const nextContent = content.status === 'fulfilled' ? content.value.next : undefined;
+      const person = cursor.person + selected.length;
+      return {
+        items: [...items, ...selected],
+        next:
+          nextContent || person < users.length
+            ? JSON.stringify({ text, content: nextContent, contentDone: !nextContent, person })
+            : undefined,
+        sourceErrors,
       };
     },
     resolve(references) {
       return Promise.all(
         references.map((reference) => {
+          if (reference.kind === 'github-user')
+            return Promise.resolve<MentionResolution>({
+              reference,
+              ...(reference.workspaceId === workspaceId
+                ? { status: 'ready', title: `@${reference.login}` }
+                : { status: 'denied' }),
+            });
           const known = runtime.state.getState().objects.find((o) => o.id === reference.id);
           if (reference.workspaceId !== workspaceId || (known && !runtime.can(known, 'read')))
             return Promise.resolve<MentionResolution>({ reference, status: 'denied' });
@@ -141,7 +209,7 @@ export function createMentionService(
             runtime.state
               .getState()
               .objects.filter(
-                (o) => ['page', 'database'].includes(o.type) && !runtime.can(o, 'read'),
+                (o) => ['page', 'database', 'record'].includes(o.type) && !runtime.can(o, 'read'),
               )
               .map((o) => o.id)
               .sort(),
@@ -174,7 +242,10 @@ export function createMentionService(
       };
     },
     navigate(ref) {
-      if (ref.workspaceId === workspaceId) navigate(ref.id);
+      if (ref.workspaceId !== workspaceId) return;
+      const url = githubMentionUrl(ref);
+      if (url) window.open(url, '_blank', 'noopener,noreferrer');
+      else navigate(ref.id);
     },
   };
 }

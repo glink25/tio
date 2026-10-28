@@ -1,5 +1,6 @@
 import { titleOf, valueText, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
+import { LoadingIndicator } from '@tio/ui';
 import {
   Button,
   Modal,
@@ -112,11 +113,7 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
             </Button>
           ))}
         </div>
-        {!complete && !error && (
-          <output className="text-xs text-muted">
-            {t('common.loading')} · {results.length}
-          </output>
-        )}
+        {!complete && !error && <LoadingIndicator />}
         {error && (
           <p role="alert">
             {error} <Button onClick={() => retry((v) => v + 1)}>{t('common.retry')}</Button>
@@ -125,7 +122,7 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
         <div className="grid gap-5 md:grid-cols-[1.3fr_1fr]">
           <CommandList className="min-h-64">
             <CommandEmpty className="p-8 text-center text-muted">
-              {complete ? t('ui.noResults') : t('common.loading')}
+              {complete ? t('ui.noResults') : <LoadingIndicator />}
             </CommandEmpty>
             {results.map((o) => (
               <CommandItem key={o.id} value={o.id} onSelect={() => m.navigate(o)}>

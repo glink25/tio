@@ -1,6 +1,11 @@
 import {
   HostError,
   navigationObject,
+  recordTitle,
+  mentionTitle,
+  type MentionQuery,
+  type MentionPage,
+  type MentionReference,
   visibility,
   type WorkspaceRepository,
   type PageQuery,
@@ -25,23 +30,95 @@ export function pageEntries(snapshot: WorkspaceSnapshot, query: PageQuery) {
 }
 /** Provider-side scanning implementation. Remote providers implement these queries directly. */
 export class ScanningQueries {
-  constructor(private repository: Pick<WorkspaceRepository, 'readSnapshot'>) {}
+  constructor(private repository: Pick<WorkspaceRepository, 'readSnapshot' | 'readObjects'>) {}
+  async metadata(ids: string[]) {
+    if (!this.repository.readObjects) throw new HostError('unsupported');
+    const result = await this.repository.readObjects(ids);
+    const databases = [
+      ...new Set(
+        result.entries.flatMap(({ object }) =>
+          object.type === 'record' && object.databaseId ? [object.databaseId] : [],
+        ),
+      ),
+    ];
+    const snapshot = databases.length
+      ? await this.repository.readObjects([...new Set([...ids, ...databases])])
+      : result;
+    const selected = new Set(ids);
+    return {
+      ...snapshot,
+      missing: snapshot.missing?.filter((id) => selected.has(id)),
+      denied: snapshot.denied?.filter((id) => selected.has(id)),
+      entries: snapshot.entries
+        .filter((e) => selected.has(e.object.id))
+        .map((e) => ({
+          ...e,
+          object: {
+            ...navigationObject(e.object),
+            ...(e.object.type === 'record'
+              ? {
+                  title: recordTitle(
+                    e.object,
+                    snapshot.entries.map((entry) => entry.object),
+                  ),
+                }
+              : {}),
+          },
+        })),
+    };
+  }
+
+  async mentions(query: MentionQuery): Promise<MentionPage> {
+    const snapshot = await this.repository.readSnapshot();
+    const objects = snapshot.entries.map((e) => e.object);
+    const visible = visibility(objects);
+    const page = pageEntries(
+      {
+        ...snapshot,
+        entries: snapshot.entries.filter(({ object }) => {
+          if (!['page', 'database', 'record'].includes(object.type) || !visible(object))
+            return false;
+          const reference = {
+            workspaceId: object.workspaceId,
+            kind: object.type,
+            id: object.id,
+          } as MentionReference;
+          return (mentionTitle(reference, objects) ?? '')
+            .toLocaleLowerCase()
+            .includes(query.text.toLocaleLowerCase());
+        }),
+      },
+      query,
+    );
+    return {
+      items: page.entries.map(({ object }) => {
+        const reference = {
+          workspaceId: object.workspaceId,
+          kind: object.type,
+          id: object.id,
+        } as MentionReference;
+        return {
+          reference,
+          title: mentionTitle(reference, objects)!,
+          ...(object.type === 'record'
+            ? { description: objects.find((o) => o.id === object.databaseId)?.name || 'Untitled' }
+            : {}),
+        };
+      }),
+      next: page.next,
+    };
+  }
   async scan(query: PageQuery) {
     return pageEntries(await this.repository.readSnapshot(), query);
   }
   async navigation(query: import('@tio/core').NavigationQuery) {
     const snapshot = await this.repository.readSnapshot();
-    const visible = visibility(snapshot.entries.map((e) => e.object));
     const page = pageEntries(
       {
         ...snapshot,
         entries: snapshot.entries.filter(
           (e) =>
-            (query.mentionsOnly
-              ? ['page', 'database']
-              : ['workspace', 'page', 'database', 'databaseView']
-            ).includes(e.object.type) &&
-            (!query.mentionsOnly || (!e.object.deleted && visible(e.object))) &&
+            ['workspace', 'page', 'database', 'databaseView'].includes(e.object.type) &&
             (!query.text ||
               (e.object.title || e.object.name || '')
                 .toLocaleLowerCase()

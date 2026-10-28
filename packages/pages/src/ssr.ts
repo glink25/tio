@@ -1,9 +1,10 @@
 import {
   codeText,
+  githubMentionUrl,
+  mentionTitle,
   valueText,
   isMentionReference,
   plainText,
-  titleOf,
   type Block,
   type TioObject,
 } from '@tio/core';
@@ -35,16 +36,18 @@ export function renderInline(value: unknown, context: RenderContext): string {
   const node = value as Record<string, unknown>;
   if (node.type === 'mention' && isMentionReference(node.props)) {
     const target = context.objects.get(node.props.id);
+    const label = mentionTitle(node.props, [...context.objects.values()]);
     const url =
-      target &&
+      githubMentionUrl(node.props) ??
+      (target &&
       !target.deleted &&
       target.workspaceId === node.props.workspaceId &&
       target.type === node.props.kind
         ? context.pageUrl(target.id)
-        : undefined;
+        : undefined);
     return url
-      ? `<a href="${escapeHtml(safeUrl(url))}">${escapeHtml(titleOf(target!))}</a>`
-      : '<span>[Unavailable reference]</span>';
+      ? `<a href="${escapeHtml(safeUrl(url))}">${escapeHtml(label ?? '[Unavailable reference]')}</a>`
+      : `<span>${escapeHtml(label ?? '[Unavailable reference]')}</span>`;
   }
   if (node.type === 'link') {
     const content = renderInline(node.content, context);

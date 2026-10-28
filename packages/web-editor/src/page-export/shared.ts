@@ -12,7 +12,10 @@ export interface PageExportInput {
 export async function prepareReferences(input: PageExportInput) {
   const ids = new Set(
     blockMentions(input.page.blocks ?? [])
-      .filter((reference) => reference.workspaceId === input.page.workspaceId)
+      .filter(
+        (reference) =>
+          reference.kind !== 'github-user' && reference.workspaceId === input.page.workspaceId,
+      )
       .map((reference) => reference.id),
   );
   const walk = (blocks: Block[]) =>
@@ -33,6 +36,20 @@ export async function prepareReferences(input: PageExportInput) {
   for (let offset = 0; offset < missing.length; offset += 1000) {
     input.objects.push(...(await input.readMetadata(missing.slice(offset, offset + 1000))));
   }
+  const parents = [
+    ...new Set(
+      input.objects
+        .filter(
+          (o) =>
+            o.type === 'record' &&
+            o.databaseId &&
+            !input.objects.some((parent) => parent.id === o.databaseId),
+        )
+        .map((o) => o.databaseId!),
+    ),
+  ];
+  for (let offset = 0; offset < parents.length; offset += 1000)
+    input.objects.push(...(await input.readMetadata(parents.slice(offset, offset + 1000))));
 }
 export function contextFor(
   input: PageExportInput,

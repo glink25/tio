@@ -1,6 +1,6 @@
 # 提供方读取与恢复
 
-`WorkspaceRepository` 提供异步 `readObjects`、`queryNavigation`、`queryRecords`、`search`、`scan` 和 `readMetadata`，桥接提供相同能力。导航与提及元数据不包含正文，不能作为编辑命令的基线。缺失、拒绝访问和传输失败分别表达；加载状态支持重试。
+`WorkspaceRepository` 提供异步 `readObjects`、`queryNavigation`、`queryMentions`、`queryRecords`、`search`、`scan` 和 `readMetadata`，桥接提供相同能力。导航与提及元数据不包含正文，不能作为编辑命令的基线。缺失、拒绝访问和传输失败分别表达；加载状态支持重试。
 
 先读取导航与当前正文，数据库嵌入独立请求结构、视图和记录页。当前正文固定保留，待提交命令阻止淘汰；干净且未固定的正文按 256 对象工作集目标淘汰。附件访问时读取。正文读取不推进变更游标；命令加载依赖后重放，不能覆盖现有乐观投影。
 
@@ -24,7 +24,7 @@
 
 ## 提及
 
-`queryNavigation` 支持先过滤后分页的 `text` / `mentionsOnly`；`readMetadata(ids)` 返回版本化条目以及独立的 missing/denied ID，不返回正文和记录属性。
+`queryNavigation` 支持按 `text` 过滤；`queryMentions({text, after, limit})` 独立查询可见页面、数据库和记录，按标题过滤后以稳定 ID 分页，返回 `{items: [{reference, title, description?}], next?}`，记录摘要附带所属数据库名称。GitHub 协作者由宿主连接提供，并通过共享 `MentionService` 合并，来源失败独立表达，不影响内容候选。`readMetadata(ids)` 返回版本化条目以及独立的 missing/denied ID，不返回正文和记录属性；记录摘要的 `title` 由数据库标题字段派生，不持久化为另一份记录标题。
 
 宿主提及服务合并读取，对后台通知采用 1 秒防抖、5 秒最长等待；初次解析、显式重试与已知权限变更立即处理。旧标题在刷新期间保留，已知拒绝则立即隐藏。失效目标不删除已存引用。扫描提供方不承诺与空间大小无关的读取成本。
 

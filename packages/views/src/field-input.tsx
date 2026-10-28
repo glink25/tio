@@ -12,6 +12,7 @@ import {
 import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
 import { useT, type TranslationKey } from '@tio/i18n';
+import { LoadingIndicator } from '@tio/ui';
 import { MentionLabel, MentionPicker, Button, useDraftHistory, Popover } from '@tio/ui';
 import { useState, useEffect, useRef } from 'react';
 
@@ -478,7 +479,11 @@ export function FieldInput(props: FieldInputProps) {
         ))}
         {upload ? (
           <label className="block text-xs text-muted">
-            {uploading ? t('database.uploading') : t('database.uploadFiles')}
+            {uploading ? (
+              <LoadingIndicator label={t('database.uploading')} />
+            ) : (
+              t('database.uploadFiles')
+            )}
             <input
               className="mt-2 block w-full text-xs"
               aria-label={t('database.uploadFiles')}

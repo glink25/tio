@@ -1,4 +1,3 @@
-import { navigationObject } from '@tio/core';
 import {
   applyCommit,
   assertAccess as checkAccess,
@@ -222,11 +221,10 @@ export class FileRepository implements WorkspaceRepository {
     });
   }
   async readMetadata(ids: string[]) {
-    const result = await this.readObjects(ids);
-    return {
-      ...result,
-      entries: result.entries.map((e) => ({ ...e, object: navigationObject(e.object) })),
-    };
+    return this.queries.metadata(ids);
+  }
+  queryMentions(query: import('@tio/core').MentionQuery) {
+    return this.queries.mentions(query);
   }
   queryNavigation(query: import('@tio/core').NavigationQuery) {
     return this.queries.navigation(query);

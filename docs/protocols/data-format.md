@@ -16,7 +16,7 @@
 
 图片 `url` 使用 `asset:<assetId>` 或 HTTP(S) 链接，不保存 Blob URL。图标与封面修改及定位保存经过统一命令并推进自身修改时间；定位拖动和取消仅影响临时 UI。上传图片沿用附件存储、备份及同步链路。Markdown/PDF 的阅读投影与静态站点模板不自动包含文档装饰。
 
-导航由 `parentId/order` 派生，不保存第二份权威子节点清单。删除父节点隐藏其导航子树。数据库嵌入通过 databaseId/viewId 引用；删除嵌入不删除数据库。
+新建页面和数据库默认排在同级最前；导航按 `order` 排序，同序按 ID 稳定排序。拖动排序与跨层移动通过统一运行时命令提交，支持撤销和重做。导航由 `parentId/order` 派生，不保存第二份权威子节点清单。删除父节点隐藏其导航子树。数据库嵌入通过 databaseId/viewId 引用；删除嵌入不删除数据库。
 
 ## 系统时间
 
@@ -32,7 +32,7 @@
 
 块包含 `id/type/props/content/children`。普通行内文本形如 `{type: 'text', text: '内容', styles: {bold: true}}`。表格使用当前 BlockNote 兼容结构。未知块、行内类型和样式通过只读不透明块原样往返；编辑已知属性不得丢弃未知属性。
 
-提及形如 `{type: 'mention', props: {workspaceId, kind: 'page' | 'database', id}}`，为无标题、无子内容的原子节点，可位于段落、嵌套块或表格单元格。提及字段默认保存有序、不重复的引用数组，空值为 `[]`；`multiple: false` 时保存单个引用或 null。目标删除后保留引用；不提供跨空间引用关系。
+提及形如 `{type: 'mention', props: {workspaceId, kind: 'page' | 'database' | 'record', id}}`，为无标题、无子内容的原子节点，可位于段落、嵌套块或表格单元格。提及字段默认保存有序、不重复的引用数组，空值为 `[]`；`multiple: false` 时保存单个引用或 null。记录标题从所属数据库的标题字段解析；记录不可见时不能被搜索或打开。GitHub 人员提及使用 `{workspaceId, kind: 'github-user', id, login}`，其中 `id` 为 GitHub 用户 ID 的十进制字符串，`login` 为用户名快照；身份比较不依赖用户名。已有人员提及可离线显示，点击打开 GitHub 主页，不发送通知。目标删除后保留引用；不提供跨空间引用关系。
 
 文本为字符串，数值必须有限，选项使用稳定 ID，关系使用记录 ID。日期采用 `{start, end?, timeZone?}`；公式和汇总已提供受限计算能力。字段、查询与派生值见[数据库字段](../../packages/database/docs/fields.md)。移除字段不会批量清空记录中的旧值。
 

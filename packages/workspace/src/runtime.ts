@@ -32,6 +32,7 @@ import { convertColumn } from '@tio/database/conversion';
 import { createStore } from 'zustand/vanilla';
 
 import { executeCommand, fieldOperations, type WorkspaceCommand } from './commands';
+import { projectNavigationMove } from './navigation';
 
 type HistoryStep = Extract<WorkspaceCommand, { type: 'restore' }>;
 interface HistoryEntry {
@@ -234,17 +235,32 @@ export class WorkspaceRuntime {
         this.navigation.set(entry.object.id, navigationObject(entry.object));
     }
   }
+  private commandObjects() {
+    return this.pending.reduce(
+      (state, command) =>
+        command.confirmed ? state : executeCommand(command.intent, state, undefined, this.domain),
+      [...this.baseline.values()].map((e) => e.object),
+    );
+  }
+  private projectWaiting(objects: TioObject[]) {
+    return this.waiting.reduce(
+      (state, { intent }) =>
+        intent.type === 'place' || intent.type === 'move'
+          ? projectNavigationMove(state, intent)
+          : state,
+      objects,
+    );
+  }
   private publish() {
     try {
-      const objects = this.pending.reduce(
-        (state, command) =>
-          command.confirmed ? state : executeCommand(command.intent, state, undefined, this.domain),
-        [...this.baseline.values()].map((e) => e.object),
-      );
+      const objects = this.commandObjects();
       const ids = new Set(objects.map((o) => o.id));
       this.store.setState({
         version: this.version,
-        objects: [...objects, ...[...this.navigation.values()].filter((o) => !ids.has(o.id))],
+        objects: this.projectWaiting([
+          ...objects,
+          ...[...this.navigation.values()].filter((o) => !ids.has(o.id)),
+        ]),
         loads: {
           ...this.store.getState().loads,
           ...Object.fromEntries(objects.map((o) => [o.id, 'ready' as const])),
@@ -390,8 +406,8 @@ export class WorkspaceRuntime {
   }
   async mentionCandidates(text: string, after?: string) {
     if (this.disposed) throw new HostError('closed');
-    if (!this.repository.queryNavigation) throw new HostError('unsupported');
-    return this.repository.queryNavigation({ text, after, limit: 50, mentionsOnly: true });
+    if (!this.repository.queryMentions) throw new HostError('unsupported');
+    return this.repository.queryMentions({ text, after, limit: 50 });
   }
   async mentionMetadata(ids: string[]) {
     if (this.disposed) throw new HostError('closed');
@@ -473,7 +489,11 @@ export class WorkspaceRuntime {
           const value = record.properties?.[field.id];
           if (field.type === 'mention')
             for (const ref of mentionReferences(value))
-              if (ref.workspaceId === database.workspaceId && !objects.has(ref.id))
+              if (
+                ref.kind !== 'github-user' &&
+                ref.workspaceId === database.workspaceId &&
+                !objects.has(ref.id)
+              )
                 mentions.add(ref.id);
         }
       const ids = [...mentions];
@@ -486,6 +506,24 @@ export class WorkspaceRuntime {
         for (const entry of metadata.entries)
           if (!metadata.denied?.includes(entry.object.id) && this.can(entry.object, 'read'))
             objects.set(entry.object.id, entry.object);
+        const parents = [
+          ...new Set(
+            metadata.entries.flatMap((e) =>
+              e.object.type === 'record' && e.object.databaseId && !objects.has(e.object.databaseId)
+                ? [e.object.databaseId]
+                : [],
+            ),
+          ),
+        ];
+        if (parents.length) {
+          const parentMetadata = await this.mentionMetadata(parents);
+          if (parentMetadata.version !== version) {
+            consistent = false;
+            break;
+          }
+          for (const entry of parentMetadata.entries)
+            if (this.can(entry.object, 'read')) objects.set(entry.object.id, entry.object);
+        }
       }
       if (!consistent || this.version !== version) continue;
       return {
@@ -568,9 +606,28 @@ export class WorkspaceRuntime {
   private dependencies(intent: WorkspaceCommand) {
     const ids: string[] = [];
     if ('id' in intent) ids.push(intent.id);
-    if (intent.type === 'move' && intent.parentId) ids.push(intent.parentId);
+    if ((intent.type === 'move' || intent.type === 'place') && intent.parentId)
+      ids.push(intent.parentId);
     if (intent.type === 'create' || intent.type === 'import') {
       if ('embed' in intent && intent.embed) ids.push(intent.embed.pageId);
+      if (intent.type === 'create') {
+        for (const object of intent.objects) {
+          if (object.parentId && !intent.objects.some((o) => o.id === object.parentId))
+            ids.push(object.parentId);
+          if (['page', 'database'].includes(object.type) && object.order === undefined)
+            ids.push(
+              ...this.snapshot()
+                .filter(
+                  (o) =>
+                    !o.deleted &&
+                    o.workspaceId === object.workspaceId &&
+                    ['page', 'database'].includes(o.type) &&
+                    (o.parentId ?? null) === (object.parentId ?? null),
+                )
+                .map((o) => o.id),
+            );
+        }
+      }
       for (const object of intent.objects)
         if (object.databaseId && !intent.objects.some((o) => o.id === object.databaseId))
           ids.push(object.databaseId);
@@ -578,7 +635,22 @@ export class WorkspaceRuntime {
     if (intent.type === 'checked' || intent.type === 'convertField')
       ids.push(...intent.expected.map((o) => o.id));
     if (intent.type === 'restore') ids.push(...intent.after.map((o) => o.id));
-    if (intent.type === 'move') {
+    if (intent.type === 'place') {
+      const source = this.snapshot().find((o) => o.id === intent.id);
+      ids.push(
+        ...this.snapshot()
+          .filter(
+            (o) =>
+              !o.deleted &&
+              o.workspaceId === source?.workspaceId &&
+              ['page', 'database'].includes(o.type) &&
+              (o.parentId ?? null) === intent.parentId,
+          )
+          .map((o) => o.id),
+      );
+      if (intent.beforeId) ids.push(intent.beforeId);
+    }
+    if (intent.type === 'move' || intent.type === 'place') {
       let parent = intent.parentId;
       const seen = new Set<string>();
       while (parent && !seen.has(parent)) {
@@ -645,6 +717,15 @@ export class WorkspaceRuntime {
     intent = { ...intent, timestamp: intent.timestamp ?? new Date().toISOString() };
     const dependencies = this.dependencies(intent);
     if (!prepared && (this.preparing || dependencies.some((id) => !this.baseline.has(id)))) {
+      if (intent.type === 'place' || intent.type === 'move') {
+        const before = this.snapshot();
+        const projected = projectNavigationMove(before, intent);
+        for (const object of projected) {
+          const old = before.find((o) => o.id === object.id)!;
+          if (old.parentId !== object.parentId || old.order !== object.order)
+            assertAccess(this.access, old, object);
+        }
+      }
       this.waiting.push({
         intent: structuredClone(intent),
         remember,
@@ -653,22 +734,12 @@ export class WorkspaceRuntime {
         historyOptions,
       });
       this.preparingCount = this.waiting.length;
-      this.store.setState({ pending: this.pending.length + this.preparingCount, status: 'saving' });
+      this.publish();
       this.prepareWaiting();
       return;
     }
 
-    const before = this.store
-      .getState()
-      .objects.filter(
-        (o) =>
-          this.baseline.has(o.id) ||
-          this.pending.some(
-            (p) =>
-              (p.intent.type === 'create' || p.intent.type === 'import') &&
-              p.intent.objects.some((n) => n.id === o.id),
-          ),
-      );
+    const before = this.commandObjects();
     if (historyOptions?.entry) {
       // Build the inverse only after required bodies have been loaded.
       const restored = [...historyOptions.entry.steps]
@@ -735,17 +806,8 @@ export class WorkspaceRuntime {
     const command = { intent: structuredClone(intent), assets, historyEntry, ...receipt };
     this.pending.push(command);
     for (const [id, blob] of assets) this.blobs.set(id, blob);
-    // Synchronous publication is the only UI write path; no component-level draft mirror.
-    this.store.setState({
-      objects: [
-        ...next,
-        ...[...this.navigation.values()].filter((o) => !next.some((n) => n.id === o.id)),
-      ],
-      pending: this.pending.length + this.preparingCount,
-      canUndo: this.history.length > 0,
-      canRedo: this.redos.length > 0,
-      status: this.store.getState().error ? 'error' : 'saving',
-    });
+    // Include navigation intents still loading dependencies in every publication.
+    this.publish();
     this.drain();
   }
   private prepareWaiting() {
@@ -1080,6 +1142,9 @@ export class WorkspaceRuntime {
       },
       true,
     );
+  }
+  place(id: string, parentId: string | null, beforeId: string | null) {
+    this.dispatch({ type: 'place', id, parentId, beforeId }, true);
   }
   move(id: string, parentId: string | null, order = Date.now()) {
     this.dispatch({ type: 'move', id, parentId, order }, true);

@@ -7,6 +7,8 @@ async function mount(page: Page) {
   await page.waitForFunction(() => !!(window as any).TioEditor);
   await page.evaluate(async (root) => {
     const { mountEditor } = (window as any).TioEditor;
+    const { createMentionService } = await import(root + '/packages/web-editor/src/mentions.ts');
+    const { WorkspaceRuntime } = await import(root + '/packages/workspace/src/index.ts');
     const { MemoryRepository } = await import(root + '/packages/provider-memory/src/index.ts');
     const { object } = await import(root + '/packages/core/src/index.ts');
     const text = (
@@ -57,6 +59,20 @@ async function mount(page: Page) {
             ]),
           ],
         }),
+        object('database', 'chrome', {
+          id: 'tasks',
+          name: 'Tasks',
+          fields: [
+            { id: 'title', name: 'Name', type: 'title' },
+            { id: 'refs', name: 'References', type: 'mention' },
+          ],
+        }),
+        object('record', 'chrome', {
+          id: 'task',
+          databaseId: 'tasks',
+          properties: { title: 'Ship editor', refs: [] },
+          blocks: [text('task-body', 'Record body')],
+        }),
         object('page', 'chrome', { id: 'target', title: 'Explicit target', blocks: [] }),
         object('page', 'chrome', {
           id: 'child',
@@ -73,7 +89,22 @@ async function mount(page: Page) {
     });
     document.body.innerHTML =
       '<button id="host">Host control</button><div id="one"></div><div id="two"></div>';
+    const mentionRuntime = await WorkspaceRuntime.open(repository);
+    const mentions = createMentionService(
+      mentionRuntime,
+      'chrome',
+      (id: string) => {
+        void one.open({ id });
+      },
+      async () => [
+        {
+          reference: { workspaceId: 'chrome', kind: 'github-user', id: '42', login: 'octocat' },
+          title: '@octocat',
+        },
+      ],
+    );
     const one = await mountEditor(document.getElementById('one')!, {
+      mentions,
       repository,
       workspaceId: 'chrome',
       target: { id: 'main' },
@@ -351,4 +382,57 @@ test('history shortcuts belong to the focused surface and support native history
   await page.evaluate(() => (window as any).chromeFixture.two.setPresentation({ readOnly: true }));
   await two.press('ControlOrMeta+z');
   await expect(two).toHaveValue('Second surface');
+});
+
+test('record and GitHub mentions insert, persist and open their targets; fields share the same candidates', async ({
+  page,
+}) => {
+  const block = page.locator('#one [data-id="select"] .bn-inline-content');
+  await selectText(page);
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.type(' @Ship');
+  await expect(page.locator('#one .bn-suggestion-menu')).toContainText('Ship editor');
+  await expect(page.locator('#one .bn-suggestion-menu')).toContainText('Tasks');
+  await page.keyboard.press('Enter');
+  await expect(block.getByRole('button', { name: 'Ship editor', exact: true })).toBeVisible();
+  await page.keyboard.type('@octo');
+  await expect(page.locator('#one .bn-suggestion-menu')).toContainText('@octocat');
+  await page.keyboard.press('Enter');
+  await expect(block.getByRole('button', { name: '@octocat', exact: true })).toBeVisible();
+  await page.evaluate(() => (window as any).chromeFixture.one.flush());
+  await page.evaluate(() => (window as any).chromeFixture.two.open({ id: 'main' }));
+  await expect(
+    page.locator('#two [data-id="select"]').getByRole('button', { name: '@octocat', exact: true }),
+  ).toBeVisible();
+  await page
+    .context()
+    .route('https://github.com/**', (route) => route.fulfill({ body: 'GitHub profile fixture' }));
+  const popup = page.waitForEvent('popup');
+  await block.getByRole('button', { name: '@octocat', exact: true }).click();
+  const profile = await popup;
+  await expect(profile).toHaveURL('https://github.com/octocat');
+  await profile.close();
+  await block.getByRole('button', { name: 'Ship editor', exact: true }).click();
+  await expect(page.locator('#one h1')).toHaveText('Ship editor');
+  await page.locator('#one').getByRole('button', { name: 'References', exact: true }).click();
+  await page
+    .locator('#one')
+    .getByRole('combobox', { name: 'References', exact: true })
+    .fill('octo');
+  await page.locator('#one').getByRole('option').filter({ hasText: '@octocat' }).click();
+  await page.keyboard.press('Escape');
+  await page
+    .locator('#one')
+    .getByRole('group', { name: 'References editor', exact: true })
+    .getByRole('button', { name: 'Done', exact: true })
+    .click();
+  await page.evaluate(() => (window as any).chromeFixture.one.flush());
+  const value = await page.evaluate(
+    async () =>
+      (await (window as any).chromeFixture.repository.readObjects(['task'])).entries[0].object
+        .properties.refs,
+  );
+  expect(value).toEqual([
+    { workspaceId: 'chrome', kind: 'github-user', id: '42', login: 'octocat' },
+  ]);
 });

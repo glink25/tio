@@ -76,6 +76,20 @@ export class GitHubAdapter implements ConnectionAdapter {
       };
     }
   }
+  async collaborators(workspaceId: string): Promise<import('@tio/core').MentionCandidate[]> {
+    const endpoint = this.endpoints.get(workspaceId);
+    if (!endpoint) throw new GitHubError(404, 'GitHub workspace is not bound');
+    const users = await this.client.pages<{ id: number; login: string }>(
+      `/repos/${endpoint.fullName.split('/').map(encodeURIComponent).join('/')}/collaborators?affiliation=all`,
+    );
+    return [...new Map(users.map((user) => [user.id, user])).values()]
+      .sort((a, b) => a.login.localeCompare(b.login))
+      .map((user) => ({
+        reference: { workspaceId, kind: 'github-user', id: String(user.id), login: user.login },
+        title: `@${user.login}`,
+        description: endpoint.fullName,
+      }));
+  }
   async repositories() {
     let repos: GitHubRepository[];
     if ((typeof this.mode === 'function' ? this.mode() : this.mode) === 'app') {

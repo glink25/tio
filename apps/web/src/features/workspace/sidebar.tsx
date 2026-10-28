@@ -25,16 +25,16 @@ import {
   Trash2,
   MoreHorizontal,
   Star,
-  ChevronRight,
   PanelLeftClose,
   FileText,
   Database,
   Pencil,
   Move,
 } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 import { Identity } from '../../components/identity';
+import { PageTree } from './page-tree';
 import type { WorkspaceController } from './use-workspace';
 
 export function WorkspaceSwitcher({
@@ -227,7 +227,16 @@ export function Sidebar({
           </IconButton>
         </div>
         <nav aria-label={t('ui.pages')}>
-          <PageTree model={m} pageActions={pageActions} />
+          <PageTree
+            model={m}
+            renderActions={(o) => (
+              <ObjectMenu
+                model={m}
+                object={o}
+                pageActions={o.id === m.current?.id ? pageActions : null}
+              />
+            )}
+          />
         </nav>
       </div>
       <div className="mt-3 border-t border-line pt-2">
@@ -273,93 +282,6 @@ export function Sidebar({
           <div className="h-[calc(100dvh-100px)]">{content}</div>
         </Modal>
       )}
-    </>
-  );
-}
-function PageTree({
-  model: m,
-  parent = null,
-  depth = 0,
-  pageActions,
-}: {
-  model: WorkspaceController;
-  parent?: string | null;
-  depth?: number;
-  pageActions?: ReactNode;
-}) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const children = m.nav
-    .filter((o) => (o.parentId ?? null) === parent)
-    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-  return (
-    <>
-      {children.map((o) => (
-        <div key={o.id}>
-          <div
-            className={cn(
-              'group flex min-h-9 items-center rounded-md hover:bg-surface-hover',
-              m.current?.id === o.id && 'bg-surface-hover',
-            )}
-            style={{ paddingLeft: 8 + depth * 14 }}
-            draggable
-            onDragStart={(e) =>
-              e.dataTransfer.setData(
-                'application/tio-page',
-                JSON.stringify({ id: o.id, workspaceId: o.workspaceId }),
-              )
-            }
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              try {
-                const source = JSON.parse(e.dataTransfer.getData('application/tio-page'));
-                if (source.workspaceId === o.workspaceId) m.movePage(source.id, o.id);
-              } catch {
-                /* external drop */
-              }
-            }}
-          >
-            <IconButton
-              label={t('page.expand')}
-              aria-expanded={!collapsed.has(o.id)}
-              className={cn('p-0.5', !m.nav.some((c) => c.parentId === o.id) && 'invisible')}
-              onClick={() =>
-                setCollapsed((previous) => {
-                  const next = new Set(previous);
-                  if (next.has(o.id)) next.delete(o.id);
-                  else next.add(o.id);
-                  return next;
-                })
-              }
-            >
-              <ChevronRight size={13} className={collapsed.has(o.id) ? '' : 'rotate-90'} />
-            </IconButton>
-            <button
-              className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left text-sm text-secondary"
-              onClick={() => m.navigate(o)}
-            >
-              <ObjectIcon type={o.type} icon={o.icon} size={16} resolve={m.resolveMedia} />
-              <span className="truncate">{titleOf(o)}</span>
-            </button>
-            <div className="flex shrink-0 opacity-100 group-focus-within:opacity-100 md:opacity-0 md:group-hover:opacity-100">
-              {o.type === 'page' && (
-                <IconButton label={t('page.child')} className="p-1" onClick={() => m.addPage(o.id)}>
-                  <Plus size={14} />
-                </IconButton>
-              )}
-              <ObjectMenu
-                model={m}
-                object={o}
-                pageActions={o.id === m.current?.id ? pageActions : null}
-              />
-            </div>
-          </div>
-          {!collapsed.has(o.id) && depth < 100 && (
-            <PageTree model={m} parent={o.id} depth={depth + 1} pageActions={pageActions} />
-          )}
-        </div>
-      ))}
     </>
   );
 }

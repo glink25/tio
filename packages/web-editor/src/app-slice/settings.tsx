@@ -1,5 +1,6 @@
 import type { Block, TioObject } from '@tio/core';
 import { useTranslation } from '@tio/i18n';
+import { LoadingSkeleton } from '@tio/ui';
 import { Button, Drawer, Modal } from '@tio/ui';
 import { lazy, Suspense, useEffect, useState } from 'react';
 
@@ -215,11 +216,7 @@ export default function AppSliceSettings({
                   )}
                 </div>
                 <div hidden={mode !== 'edit'}>
-                  <Suspense
-                    fallback={
-                      <p className="p-4 text-muted">{tr('正在加载编辑器…', 'Loading editor…')}</p>
-                    }
-                  >
+                  <Suspense fallback={<LoadingSkeleton layout="inline" />}>
                     <HtmlEditor value={draft} onChange={setDraft} readOnly={!canEdit} />
                   </Suspense>
                 </div>

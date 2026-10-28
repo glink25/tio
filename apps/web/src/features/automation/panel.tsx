@@ -7,6 +7,7 @@ import {
   type AutomationRun,
 } from '@tio/core';
 import { useT, errorMessage } from '@tio/i18n';
+import { LoadingSkeleton } from '@tio/ui';
 import { Button, IconButton, Modal, MentionContext, cn } from '@tio/ui';
 import { RecordQueryContext } from '@tio/views';
 import { createMentionService } from '@tio/web-editor';
@@ -331,7 +332,7 @@ export default function AutomationDialog({
             </div>
           )}
           {loading ? (
-            <div className="p-12 text-center text-muted">{t('automation.loading')}</div>
+            <LoadingSkeleton layout="inline" />
           ) : loadError ? (
             <div role="alert" className="space-y-4 p-12 text-center">
               <p>{loadError}</p>

@@ -149,3 +149,20 @@ describe('mention field cardinality', () => {
     }
   });
 });
+
+it('supports record and GitHub references with stable user identity in mention fields', () => {
+  const record: MentionReference = { workspaceId: 'w', kind: 'record', id: 'row' };
+  const user: MentionReference = {
+    workspaceId: 'w',
+    kind: 'github-user',
+    id: '42',
+    login: 'octocat',
+  };
+  expect(() => validateValue(field, [record, user])).not.toThrow();
+  expect(() => validateValue(field, [user, { ...user, login: 'renamed' }])).toThrow();
+  expect(() => validateValue(field, [{ ...user, login: 'javascript:alert(1)' }])).toThrow();
+  expect(displayValue([user], field, objects, 'en')).toBe('@octocat');
+  expect(() =>
+    validateFieldReference(field, [{ ...user, workspaceId: 'foreign' }], row, objects),
+  ).toThrow();
+});

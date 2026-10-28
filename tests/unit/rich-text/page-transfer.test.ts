@@ -138,3 +138,35 @@ it('loads missing reference metadata without enumerating content or crossing spa
   await prepareReferences(input);
   expect(batches).toHaveLength(1);
 });
+
+it('exports record titles and GitHub profile references without requiring a people lookup', () => {
+  const db = object('database', 'w', {
+    id: 'db',
+    name: 'Tasks',
+    fields: [{ id: 'title', name: 'Title', type: 'title' }],
+  });
+  const row = object('record', 'w', {
+    id: 'row',
+    databaseId: db.id,
+    properties: { title: 'Ship editor' },
+    blocks: [],
+  });
+  const exported = { ...context, objects: new Map([db, row].map((o) => [o.id, o])) };
+  const content = [
+    { type: 'mention', props: { workspaceId: 'w', kind: 'record', id: 'row' } },
+    {
+      type: 'mention',
+      props: { workspaceId: 'w', kind: 'github-user', id: '42', login: 'octocat' },
+    },
+  ];
+  const result = pageMarkdown(
+    object('page', 'w', { title: 'Refs', blocks: [block('paragraph', content)] }),
+    exported,
+  );
+  expect(result).toContain('Ship editor');
+  expect(result).toContain('https://github.com/octocat');
+  expect(pdfInline(content, exported)).toEqual([
+    { text: 'Ship editor' },
+    { text: '@octocat', link: 'https://github.com/octocat' },
+  ]);
+});

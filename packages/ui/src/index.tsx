@@ -295,7 +295,7 @@ export function EmptyNotice({ children }: { children: ReactNode }) {
 }
 
 export { useTheme, ThemeSwitcher, ThemeContext } from './theme';
-export { LoadingSkeleton, readingLayout } from './skeleton';
+export { LoadingSkeleton, LoadingIndicator, readingLayout } from './skeleton';
 
 export {
   Menu,
@@ -340,4 +340,4 @@ export function useOverlayBack(close: () => void, enabled = true) {
   }, [enabled]);
 }
 
-export { ReferencePicker, type ReferenceOption } from './reference-picker';
+export { ReferencePicker, ReferenceIcon, type ReferenceOption } from './reference-picker';

@@ -212,10 +212,20 @@ export function fromEditor(
 function normalizeInlineContent(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeInlineContent);
   if (!record(value)) return value;
+  let node = value;
+  if (
+    node.type === 'mention' &&
+    record(node.props) &&
+    node.props.kind !== 'github-user' &&
+    node.props.login === ''
+  ) {
+    const { login: _login, ...props } = node.props;
+    node = { ...node, props };
+  }
   return Object.fromEntries(
-    Object.entries(value)
+    Object.entries(node)
       .filter(
-        ([key, item]) => !(value.type === 'mention' && key === 'content' && item === undefined),
+        ([key, item]) => !(node.type === 'mention' && key === 'content' && item === undefined),
       )
       .map(([key, item]) => [
         key,

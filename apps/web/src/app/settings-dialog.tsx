@@ -1,4 +1,5 @@
 import { t } from '@tio/i18n';
+import { LoadingSkeleton } from '@tio/ui';
 import { Button, Modal, ThemeSwitcher, LanguageSwitcher, cn, useOverlayBack } from '@tio/ui';
 import { lazy, Suspense, useState, useRef, useEffect } from 'react';
 const AutomationDialog = lazy(() => import('../features/automation/panel'));
@@ -34,7 +35,7 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
             title={t('automation.center')}
             close={() => setAutomationOpen(false)}
           >
-            <p className="p-8">{t('automation.loading')}</p>
+            <LoadingSkeleton layout="inline" />
           </Modal>
         }
       >

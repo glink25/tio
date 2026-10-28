@@ -6,6 +6,8 @@ import { t, i18n, errorMessage } from '@tio/i18n';
 import { exportZip, exportMarkdownZip, importZip } from '@tio/serialization';
 import type { SyncSnapshot } from '@tio/sync';
 import { toast } from '@tio/ui';
+import { createMentionService } from '@tio/web-editor';
+import { navigationTree } from '@tio/workspace';
 import {
   starterWorkspace,
   newPage,
@@ -478,13 +480,58 @@ export function useWorkspace() {
       reportError(e);
     }
   }
+  const mentionCallbacks = useRef({ navigate, reportError });
+  mentionCallbacks.current = { navigate, reportError };
+  const mentionWorkspaceId = session?.workspaceId;
+  const mentions = useMemo(
+    () =>
+      runtime && mentionWorkspaceId
+        ? createMentionService(
+            runtime,
+            mentionWorkspaceId,
+            (id) => {
+              void runtime
+                .loadTarget(id)
+                .then(() => {
+                  if (runtimeRef.current !== runtime) return;
+                  const target = runtime.snapshot().find((o) => o.id === id);
+                  if (target) mentionCallbacks.current.navigate(target);
+                })
+                .catch((error) => mentionCallbacks.current.reportError(error));
+            },
+            () => services.mentionPeople(mentionWorkspaceId),
+          )
+        : undefined,
+    [runtime, mentionWorkspaceId, services],
+  );
   const isVisible = visibility(objects);
   const current = selected
     ? objects.find((o) => o.id === selected && isVisible(o))
     : (objects.find((o) => o.type === 'page' && isVisible(o)) ??
       objects.find((o) => o.type === 'database' && isVisible(o)));
   const workspace = objects.find((o) => o.type === 'workspace');
-  const nav = objects.filter((o) => ['page', 'database'].includes(o.type) && isVisible(o));
+  const nav = objects.filter(
+    (o) => ['page', 'database'].includes(o.type) && isVisible(o) && runtime?.can(o, 'read'),
+  );
+  useEffect(() => {
+    if (!runtime || !session || openingWorkspace) return;
+    const selectedObject = objects.find((o) => o.id === selected);
+    if (previewId && objects.some((o) => o.id === previewId && !isVisible(o))) setPreviewId(null);
+    if (!selectedObject || isVisible(selectedObject)) return;
+    const next = navigationTree(nav)[0];
+    if (next) navigate(next, true);
+    else {
+      setSelected('');
+      setPreviewId(null);
+      writeRoute(session.workspaceId, '', true);
+      const nextSession = { ...sessionRef.current!, selectedId: '' };
+      sessionRef.current = nextSession;
+      setSession(nextSession);
+      void services.saveSession(nextSession).catch(reportError);
+    }
+    // Selection repair follows deletion and external visibility changes.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [objects, selected, previewId, runtime, openingWorkspace]);
   function favorite(o: TioObject) {
     const s = {
       ...session!,
@@ -499,6 +546,8 @@ export function useWorkspace() {
 
   const movePage = (source: string, parent: string | null, order?: number) =>
     command((runtime) => runtime.move(source, parent, order));
+  const placePage = (source: string, parent: string | null, beforeId: string | null) =>
+    command((runtime) => runtime.place(source, parent, beforeId));
   function renameWorkspace(name: string) {
     if (!workspace || !name.trim()) return;
     patch(workspace, { name: name.trim() });
@@ -582,6 +631,7 @@ export function useWorkspace() {
     current,
     workspace,
     nav,
+    mentions,
     moveTarget,
     issues,
     setError,
@@ -603,6 +653,7 @@ export function useWorkspace() {
     importFile,
     favorite,
     movePage,
+    placePage,
   };
 }
 export type WorkspaceController = ReturnType<typeof useWorkspace>;

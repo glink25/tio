@@ -103,9 +103,14 @@ export function githubBinding(connection: Connection): ConnectionBinding {
       return asset;
     }
   }
+  const collaborators = new Map<
+    string,
+    { token: string; value: Promise<import('@tio/core').MentionCandidate[]> }
+  >();
   const replicas = new Map<string, Replica>();
   return {
     dispose: () => {
+      collaborators.clear();
       disposed = true;
     },
     identity: {
@@ -118,6 +123,20 @@ export function githubBinding(connection: Connection): ConnectionBinding {
       details: [],
     },
     adapter,
+    mentionPeople(workspaceId) {
+      const auth = credentials();
+      if (disposed || auth?.userId !== userId)
+        return Promise.reject(new GitHubError(401, 'GitHub account does not match this workspace'));
+      const key = `${workspaceId}/${endpoints.get(workspaceId)?.repositoryId}`;
+      const existing = collaborators.get(key);
+      if (existing?.token === auth.accessToken) return existing.value;
+      const value = adapter.collaborators(workspaceId).catch((error) => {
+        if (collaborators.get(key)?.value === value) collaborators.delete(key);
+        throw error;
+      });
+      collaborators.set(key, { token: auth.accessToken, value });
+      return value;
+    },
     automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
     repository: (workspaceId, instanceId) => {
       const store = new Replica(instanceId, workspaceId);

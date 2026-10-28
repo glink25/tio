@@ -85,12 +85,26 @@ const MentionInline = createReactInlineContentSpec(
     type: 'mention',
     propSchema: {
       workspaceId: { default: '' },
-      kind: { default: 'page', values: ['page', 'database'] as const },
+      kind: { default: 'page', values: ['page', 'database', 'record', 'github-user'] as const },
       id: { default: '' },
+      login: { default: '' },
     },
     content: 'none',
   },
-  { render: ({ inlineContent }) => <MentionLabel reference={inlineContent.props} /> },
+  {
+    render: ({ inlineContent }) => {
+      const { login, ...reference } = inlineContent.props;
+      return (
+        <MentionLabel
+          reference={
+            reference.kind === 'github-user'
+              ? { ...reference, kind: 'github-user', login }
+              : { ...reference, kind: reference.kind }
+          }
+        />
+      );
+    },
+  },
 );
 const OpaqueBlock = createReactBlockSpec(
   {

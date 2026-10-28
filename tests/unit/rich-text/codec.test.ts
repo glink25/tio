@@ -147,3 +147,23 @@ it('accepts explicitly typed optional props such as numbered list start without 
     )[0].type,
   ).toBe('unsupported');
 });
+
+it('roundtrips record and user mentions and removes editor-only default usernames on content references', () => {
+  const configured = { ...schema, inlineContentSchema: { mention: {} } };
+  const content = [
+    { type: 'mention', props: { workspaceId: 'w', kind: 'record', id: 'row' } },
+    {
+      type: 'mention',
+      props: { workspaceId: 'w', kind: 'github-user', id: '42', login: 'octocat' },
+    },
+  ];
+  const blocks = [{ ...textBlock(''), content }, table(content)];
+  expect(fromEditor(toEditor(blocks, configured), blocks)).toEqual(blocks);
+  const editor = [
+    {
+      ...textBlock(''),
+      content: [{ ...content[0], props: { ...content[0].props, login: '' }, content: undefined }],
+    },
+  ];
+  expect((fromEditor(editor, [])[0].content as object[])[0]).toEqual(content[0]);
+});

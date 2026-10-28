@@ -8,15 +8,27 @@ import {
 import { useTranslation } from '@tio/i18n';
 import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 
-import { ReferencePicker } from './reference-picker';
+import { ReferencePicker, ReferenceIcon } from './reference-picker';
+import { LoadingIndicator } from './skeleton';
 
 export const MentionContext = createContext<MentionService | undefined>(undefined);
-export function MentionLabel({ reference }: { reference: MentionReference }) {
+export function MentionLabel({
+  reference,
+  showIcon = true,
+}: {
+  reference: MentionReference;
+  showIcon?: boolean;
+}) {
   const service = useContext(MentionContext);
   const { i18n } = useTranslation();
   const zh = i18n.language === 'zh';
   const { workspaceId, kind, id } = reference;
-  const stableReference = useMemo(() => ({ workspaceId, kind, id }), [workspaceId, kind, id]);
+  const login = reference.kind === 'github-user' ? reference.login : undefined;
+  const stableReference = useMemo<MentionReference>(
+    () =>
+      kind === 'github-user' ? { workspaceId, kind, id, login: login! } : { workspaceId, kind, id },
+    [workspaceId, kind, id, login],
+  );
   const [resolved, setResolved] = useState<{
     service: MentionService | undefined;
     reference: MentionReference;
@@ -77,13 +89,11 @@ export function MentionLabel({ reference }: { reference: MentionReference }) {
     result?.status === 'ready'
       ? result.title
       : !result
-        ? zh
-          ? '加载中…'
-          : 'Loading…'
+        ? ''
         : result.status === 'deleted'
           ? zh
-            ? '已删除文档'
-            : 'Deleted document'
+            ? '提及目标已删除'
+            : 'Deleted reference'
           : result.status === 'denied'
             ? zh
               ? '无访问权限'
@@ -93,8 +103,8 @@ export function MentionLabel({ reference }: { reference: MentionReference }) {
                 ? '读取失败，点击重试'
                 : 'Failed to load; retry'
               : zh
-                ? '文档不存在'
-                : 'Document unavailable';
+                ? '提及目标不可用'
+                : 'Reference unavailable';
   return (
     <button
       type="button"
@@ -102,7 +112,7 @@ export function MentionLabel({ reference }: { reference: MentionReference }) {
       title={failed ? (zh ? '刷新失败，点击重试' : 'Refresh failed; click to retry') : undefined}
       data-refresh-error={failed || undefined}
       style={failed ? { textDecorationStyle: 'wavy' } : undefined}
-      className={`inline rounded px-1 underline ${result?.status === 'ready' ? '' : 'text-muted'}`}
+      className={`inline-flex max-w-full items-center gap-1 rounded px-1 align-baseline underline ${result?.status === 'ready' ? '' : 'text-muted'}`}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -110,10 +120,11 @@ export function MentionLabel({ reference }: { reference: MentionReference }) {
         else if (result?.status === 'ready') service?.navigate(reference);
         else if (result?.status === 'error') setRetry((n) => n + 1);
         else if (result?.status === 'deleted')
-          window.alert(zh ? '源文档已被删除' : 'The source document has been deleted');
+          window.alert(zh ? '提及目标已被删除' : 'The referenced target has been deleted');
       }}
     >
-      {title}
+      {showIcon && <ReferenceIcon kind={reference.kind} />}
+      {result ? title : <LoadingIndicator />}
     </button>
   );
 }
@@ -140,6 +151,7 @@ export function MentionPicker({
   const [next, setNext] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [sourceErrors, setSourceErrors] = useState<string[]>([]);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     if (!active) return;
@@ -165,6 +177,7 @@ export function MentionPicker({
               ]
             : page.items,
         );
+        setSourceErrors(page.sourceErrors ?? []);
         setNext(page.next);
         setLoading(false);
       },
@@ -183,17 +196,40 @@ export function MentionPicker({
     <ReferencePicker
       label={label ?? (zh ? '搜索提及目标' : 'Search mention targets')}
       inline={inline}
+      warning={
+        sourceErrors.length ? (
+          <button
+            type="button"
+            className="p-2 text-xs text-muted"
+            onClick={() => {
+              setAfter(undefined);
+              setRetry((n) => n + 1);
+            }}
+          >
+            {zh
+              ? `${sourceErrors.includes('github') ? 'GitHub 协作者' : '提及目标'}读取失败，点击重试`
+              : `Failed to load ${sourceErrors.includes('github') ? 'GitHub collaborators' : 'references'}; retry`}
+          </button>
+        ) : undefined
+      }
       selected={mentionReferences(value).map((ref) => ({
         id: mentionKey(ref),
         kind: ref.kind,
         text: zh ? '提及' : 'Mention',
-        label: <MentionLabel reference={ref} />,
+        label: <MentionLabel reference={ref} showIcon={false} />,
       }))}
       options={items.map((item) => ({
         id: mentionKey(item.reference),
         kind: item.reference.kind,
         text: item.title,
-        label: item.title,
+        label: (
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate">{item.title}</span>
+            {item.description && (
+              <span className="truncate text-xs text-muted">{item.description}</span>
+            )}
+          </span>
+        ),
       }))}
       query={query}
       onQuery={(text) => {

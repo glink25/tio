@@ -15,6 +15,8 @@ import {
 } from '@tio/core';
 import { compileFormula } from '@tio/database';
 import { merge, type MergeResult } from '@tio/merge';
+
+import { projectNavigationMove } from './navigation';
 const defaults = (): Domain => createDomain();
 const editable = (o: TioObject, domain: Domain) => domain.objects.supports(o) && !o.deleted;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -186,7 +188,12 @@ export const moveObject =
       if (visited.has(parent)) throw new DomainError('move-cycle', '不能移动到自身或子页面');
       visited.add(parent);
       const target = objects.find((o) => o.id === parent);
-      if (!target || !editable(target, domain) || !['page', 'database'].includes(target.type))
+      if (
+        !target ||
+        target.workspaceId !== objects.find((o) => o.id === id)?.workspaceId ||
+        !editable(target, domain) ||
+        !['page', 'database'].includes(target.type)
+      )
         throw new Error('Parent unavailable');
       parent = target.parentId ?? null;
     }
@@ -231,6 +238,7 @@ export type WorkspaceCommand = {
   | { type: 'blocks'; id: string; next: Block[]; previous: Block[] }
   | { type: 'cell'; id: string; fieldId: string; value: unknown }
   | { type: 'fields'; id: string; operations: FieldOperation[] }
+  | { type: 'place'; id: string; parentId: string | null; beforeId: string | null }
   | { type: 'move'; id: string; parentId: string | null; order: number }
   | { type: 'restore'; before: TioObject[]; after: TioObject[] }
 );
@@ -281,7 +289,24 @@ function executeIntent(
       return patchObject(command.id, command.changes, domain)(objects);
     case 'import':
     case 'create': {
-      const next = createObjects(command.objects, domain)(objects);
+      const placed: TioObject[] = [];
+      for (const item of command.objects) {
+        const siblings = [...objects, ...placed].filter(
+          (o) =>
+            !o.deleted &&
+            o.workspaceId === item.workspaceId &&
+            ['page', 'database'].includes(o.type) &&
+            (o.parentId ?? null) === (item.parentId ?? null),
+        );
+        placed.push(
+          command.type === 'create' &&
+            ['page', 'database'].includes(item.type) &&
+            item.order === undefined
+            ? { ...item, order: Math.min(0, ...siblings.map((o) => o.order ?? 0)) - 1 }
+            : item,
+        );
+      }
+      const next = createObjects(placed, domain)(objects);
       for (const item of command.objects) {
         if (item.type === 'record') {
           const db = next.find(
@@ -316,6 +341,16 @@ function executeIntent(
       return editCell(command.id, command.fieldId, command.value, domain)(objects);
     case 'fields':
       return changeFields(command.id, command.operations, domain)(objects);
+    case 'place': {
+      const projected = projectNavigationMove(objects, command);
+      let next = objects;
+      for (const object of projected) {
+        const old = objects.find((o) => o.id === object.id)!;
+        if (old.order === object.order && old.parentId === object.parentId) continue;
+        next = moveObject(object.id, object.parentId ?? null, object.order ?? 0, domain)(next);
+      }
+      return next;
+    }
     case 'move':
       return moveObject(command.id, command.parentId, command.order, domain)(objects);
     case 'restore':

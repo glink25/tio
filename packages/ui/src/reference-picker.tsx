@@ -1,18 +1,35 @@
 import { useT } from '@tio/i18n';
-import { ArrowUpRight, Check, ChevronDown, Database, FileText, Search, X } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  Database,
+  FileText,
+  Search,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 import { Button } from './index';
 import { Command, CommandInput, CommandItem, CommandList, Popover } from './overlays';
+import { LoadingIndicator } from './skeleton';
 
 export interface ReferenceOption {
   id: string;
   label: ReactNode;
   text: string;
-  kind?: 'page' | 'database' | 'record';
+  kind?: 'page' | 'database' | 'record' | 'github-user';
 }
-function ReferenceIcon({ kind }: { kind?: ReferenceOption['kind'] }) {
-  const Icon = kind === 'database' ? Database : kind === 'record' ? ArrowUpRight : FileText;
+export function ReferenceIcon({ kind }: { kind?: ReferenceOption['kind'] }) {
+  const Icon =
+    kind === 'database'
+      ? Database
+      : kind === 'record'
+        ? ArrowUpRight
+        : kind === 'github-user'
+          ? UserRound
+          : FileText;
   return <Icon size={14} className="shrink-0 text-muted" aria-hidden />;
 }
 /** Presentation only: adapters own querying and stable reference identities. */
@@ -30,7 +47,9 @@ export function ReferencePicker({
   more,
   inline = false,
   onActiveChange,
+  warning,
 }: {
+  warning?: ReactNode;
   label: string;
   selected: ReferenceOption[];
   options: ReferenceOption[];
@@ -79,6 +98,7 @@ export function ReferencePicker({
   const content = (
     <div className="space-y-2">
       {inline && tokens}
+      {warning}
       <Command
         shouldFilter={false}
         onKeyDownCapture={(event) => {
@@ -107,7 +127,7 @@ export function ReferencePicker({
         </div>
         <CommandList aria-label={label} className="max-h-60 overflow-y-auto py-1">
           {loading ? (
-            <output className="block p-3 text-xs text-muted">{t('common.loading')}</output>
+            <LoadingIndicator className="w-full p-3" />
           ) : error ? (
             <div role="alert" className="p-2 text-xs text-muted">
               {t('database.referenceLoadFailed')}

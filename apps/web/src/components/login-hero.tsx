@@ -80,7 +80,7 @@ export function LoginHero() {
     >
       <header className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <span className="login-wordmark">tio</span>
+          <span className="login-wordmark">Tio</span>
           <a
             className="login-repository inline-flex size-9 items-center justify-center rounded-md [&>svg]:size-5"
             href="https://github.com/glink25/tio"

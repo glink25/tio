@@ -68,7 +68,7 @@ export function requestPayload(method: string | undefined, p: any) {
   )
     throw new HostError('invalid');
   if (
-    ['queryNavigation', 'queryRecords', 'search', 'scan'].includes(method ?? '') &&
+    ['queryMentions', 'queryNavigation', 'queryRecords', 'search', 'scan'].includes(method ?? '') &&
     (!integer(p.limit) ||
       p.limit < 1 ||
       p.limit > 1000 ||
@@ -95,11 +95,12 @@ export function requestPayload(method: string | undefined, p: any) {
   )
     throw new HostError('invalid');
   if (
-    method === 'queryNavigation' &&
-    ((p.text !== undefined && typeof p.text !== 'string') ||
-      (p.mentionsOnly !== undefined && typeof p.mentionsOnly !== 'boolean'))
+    ['queryNavigation', 'queryMentions'].includes(method ?? '') &&
+    p.text !== undefined &&
+    typeof p.text !== 'string'
   )
     throw new HostError('invalid');
+  if (method === 'queryMentions' && typeof p.text !== 'string') throw new HostError('invalid');
   if (method === 'readChanges' && !integer(p.since)) throw new HostError('invalid');
   if (method === 'acknowledgeCommits' && (typeof p.clientId !== 'string' || !integer(p.sequence)))
     throw new HostError('invalid');

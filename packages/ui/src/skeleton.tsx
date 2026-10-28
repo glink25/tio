@@ -1,4 +1,5 @@
 import { useT } from '@tio/i18n';
+import { LoaderCircle } from 'lucide-react';
 
 import { cn } from './index';
 export const readingLayout =
@@ -29,6 +30,23 @@ export function LoadingSkeleton({
           )}
         />
       ))}
+    </output>
+  );
+}
+
+export function LoadingIndicator({ label, className }: { label?: string; className?: string }) {
+  const t = useT();
+  return (
+    <output
+      aria-label={label ?? t('status.loading')}
+      aria-busy="true"
+      className={cn('inline-flex items-center justify-center p-2 text-muted', className)}
+    >
+      <LoaderCircle
+        aria-hidden="true"
+        size={18}
+        className="animate-spin motion-reduce:animate-none"
+      />
     </output>
   );
 }

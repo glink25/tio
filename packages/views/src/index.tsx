@@ -1,5 +1,6 @@
 import { queryRecords } from '@tio/database';
 import { useT, useTranslation } from '@tio/i18n';
+import { LoadingSkeleton } from '@tio/ui';
 import { Button, useMobile } from '@tio/ui';
 import { Plus } from 'lucide-react';
 import { useState, lazy, Suspense } from 'react';
@@ -11,6 +12,7 @@ import { MobileView } from './mobile-view';
 import { QueryToolbar } from './query-toolbar';
 import type { ViewProps } from './types';
 const GridView = lazy(() => import('./grid-view').then((m) => ({ default: m.GridView })));
+export { FieldTypeIcon } from './field-icons';
 export { FieldInput, FieldValue, optionPalette } from './field-input';
 export { useFieldEvaluator } from './display-value';
 export function DatabaseView(props: ViewProps) {
@@ -86,9 +88,7 @@ export function DatabaseView(props: ViewProps) {
       ) : mobile && !mobileTable ? (
         <MobileView {...childProps} />
       ) : (
-        <Suspense
-          fallback={<div className="p-8 text-xs text-muted">{t('database.loadingRecords')}</div>}
-        >
+        <Suspense fallback={<LoadingSkeleton layout="inline" />}>
           <GridView {...childProps} />
         </Suspense>
       )}

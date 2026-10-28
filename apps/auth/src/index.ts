@@ -130,7 +130,7 @@ async function hasAppInstallation(accessToken: string, env: Env): Promise<boolea
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: 'application/vnd.github+json',
-      'User-Agent': `${env.GITHUB_APP_SLUG} (tio Auth Worker)`,
+      'User-Agent': `${env.GITHUB_APP_SLUG} (Tio Auth Worker)`,
     },
   });
   if (!response.ok) {
