@@ -61,25 +61,14 @@
 [cmdk-input] {
   width: 100%;
 }
-.tio-dialog:has(.page-preview) {
-  padding: 0;
-}
 .tio-dialog:has(.page-preview) > .tio-dialog-body {
   padding: 0;
 }
 .tio-dialog:has(.page-preview) > .tio-dialog-header {
-  position: absolute;
-  right: 16px;
-  top: 12px;
-  z-index: 1;
-  margin: 0;
-}
-.tio-dialog:has(.page-preview) > .tio-dialog-header h2 {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--color-line);
+  padding: 6px 12px;
 }
 @media (max-width: 767px) {
   .tio-button {
@@ -291,6 +280,14 @@ a[href] {
   }
   .tio-dialog:not([data-placement='center']) > .tio-dialog-footer {
     margin-bottom: max(0px, calc(var(--tio-viewport-obscured) - env(safe-area-inset-bottom, 0px)));
+  }
+  .tio-dialog[data-wide='true']:has(.page-preview) {
+    top: calc(var(--tio-viewport-top) + 12px + env(safe-area-inset-top, 0px));
+    height: calc(
+      var(--tio-layout-height) - var(--tio-viewport-top) - 12px - env(safe-area-inset-top, 0px)
+    );
+    border-radius: 12px 12px 0 0;
+    padding-top: 0;
   }
   :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='range']):not(
       [type='file']

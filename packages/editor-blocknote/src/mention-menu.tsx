@@ -87,7 +87,10 @@ export function MentionMenu() {
   );
   return service ? (
     <SuggestionMenuController
-      floatingUIOptions={floatingMotion}
+      floatingUIOptions={{
+        ...floatingMotion,
+        elementProps: { className: 'tio-suggestion-floating' },
+      }}
       triggerCharacter="@"
       getItems={getItems}
       suggestionMenuComponent={Menu}

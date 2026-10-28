@@ -369,7 +369,10 @@ export function EditorContent({
               </>
             ))}
           <SuggestionMenuController
-            floatingUIOptions={floatingMotion}
+            floatingUIOptions={{
+              ...floatingMotion,
+              elementProps: { className: 'tio-suggestion-floating' },
+            }}
             triggerCharacter="/"
             suggestionMenuComponent={SlashMenu}
             getItems={async (query) =>

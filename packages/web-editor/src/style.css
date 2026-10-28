@@ -493,14 +493,35 @@
     [data-slot='popover-content'],
     [data-slot='dropdown-menu-content'],
     [data-slot='select-content'],
-    [data-slot='dropdown-menu-sub-content'],
-    .bn-suggestion-menu
+    [data-slot='dropdown-menu-sub-content']
   ) {
   pointer-events: auto;
   max-width: min(360px, calc(var(--bn-vv-width, 100vw) - 16px));
   max-height: min(var(--available-height, 100dvh), calc(var(--bn-vv-height, 100dvh) - 80px));
   overflow-y: auto;
   overscroll-behavior-y: contain;
+}
+/* Floating UI limits the outer height; only the actual options list scrolls. */
+.tio-editor .tio-suggestion-floating {
+  flex-direction: column;
+  min-height: 0;
+  pointer-events: auto;
+}
+.tio-editor .tio-suggestion-floating > .bn-suggestion-menu {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: inherit;
+  max-width: min(360px, calc(var(--bn-vv-width, 100vw) - 16px));
+  overflow: hidden;
+}
+.tio-editor .tio-suggestion-floating [cmdk-root] {
+  flex: 1;
+  min-height: 0;
+  max-height: inherit;
+}
+.tio-editor .tio-suggestion-floating [cmdk-list] {
+  touch-action: pan-y pinch-zoom;
 }
 .tio-editor .tio-mobile-editor-toolbar {
   position: fixed;
@@ -573,9 +594,6 @@
   }
   .tio-editor .bn-editor {
     padding-bottom: 80px;
-  }
-  .tio-editor .bn-suggestion-menu {
-    max-height: calc(var(--bn-vv-height, 100dvh) - 80px);
   }
 }
 .tio-editor .tio-mobile-more .grid button {

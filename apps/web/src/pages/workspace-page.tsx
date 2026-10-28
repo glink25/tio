@@ -205,9 +205,12 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
       </div>
       <OverlayPresence>
         {preview && m.runtime && (
-          <Modal wide title={t('ui.preview')} close={() => m.setPreviewId(null)}>
-            <div className="page-preview min-h-[85dvh] md:min-h-[78dvh]">
-              <div className="flex min-h-14 items-center gap-2 border-b border-line px-4 pr-14 text-sm">
+          <Modal
+            wide
+            title={t('ui.preview')}
+            close={() => m.setPreviewId(null)}
+            header={
+              <div className="flex min-w-0 flex-1 items-center gap-2 text-sm">
                 <IconButton
                   label={t('ui.expand')}
                   onClick={() => m.navigate(preview)}
@@ -218,7 +221,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
                 <span className="shrink-0 text-muted">{t('ui.addTo')}</span>
                 <SelectInput
                   aria-label={t('ui.location')}
-                  className="max-w-64 min-w-0 !border-0 !bg-transparent"
+                  className="w-0 max-w-64 min-w-0 flex-1 truncate !border-0 !bg-transparent"
                   value={preview.parentId ?? ''}
                   onValueChange={(value) => m.movePage(preview.id, value || null)}
                 >
@@ -232,6 +235,9 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
                     ))}
                 </SelectInput>
               </div>
+            }
+          >
+            <div className="page-preview md:min-h-[78dvh]">
               <EditorSurface
                 mentions={m.mentions}
                 appSlice={appSlice}
