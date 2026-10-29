@@ -4,6 +4,7 @@ import {
   navigationObject,
   mentionReferences,
   type ObjectPage,
+  type ObjectQuery,
   type RecordQuery,
   type SearchQuery,
   type SearchPage,
@@ -103,6 +104,17 @@ export class WorkspaceRuntime {
       this.commitListeners.delete(listener);
     };
   }
+  async queryObjectPage(query: ObjectQuery): Promise<ObjectPage> {
+    if (!this.repository.queryObjects) throw new HostError('unsupported');
+    const page = await this.repository.queryObjects(query);
+    return {
+      ...page,
+      entries: page.entries.flatMap((entry) => {
+        const object = readableObject(this.access, entry.object);
+        return object ? [{ ...entry, object }] : [];
+      }),
+    };
+  }
   async queryObjects(scope: { type: string } | { databaseId: string }) {
     if (!this.repository.queryObjects) throw new HostError('unsupported');
     const objects: TioObject[] = [];
@@ -135,6 +147,45 @@ export class WorkspaceRuntime {
                   : []
             ).map((object) => object.id);
       return affected.some((id) => ids.includes(id));
+    });
+  }
+  /** External operations share this session's input guards and undo history. */
+  externalWrite(
+    expected: TioObject[],
+    changes: TioObject[],
+    authorize: () => void,
+    expectedWorkspaceVersion?: number,
+  ) {
+    const ids = new Set([...expected, ...changes].map((o) => o.id));
+    const guard = () => {
+      authorize();
+      if (this.disposed || this.closing) throw new HostError('closed');
+      if (!this.store.getState().writable) throw new HostError('permission');
+      if ([...this.history, ...this.redos].some((entry) => entry.draft))
+        throw new HostError('conflict');
+      const overlaps = (intent: WorkspaceCommand) => {
+        const affected =
+          'id' in intent
+            ? [intent.id]
+            : intent.type === 'create' || intent.type === 'import'
+              ? intent.objects.map((o) => o.id)
+              : intent.type === 'checked' || intent.type === 'convertField'
+                ? [...intent.expected, ...intent.changes].map((o) => o.id)
+                : intent.type === 'restore'
+                  ? intent.after.map((o) => o.id)
+                  : [];
+        return affected.some((id) => ids.has(id));
+      };
+      if (
+        this.pending.some((c) => c.guard !== guard && overlaps(c.intent)) ||
+        this.waiting.some((c) => c.receipt?.guard !== guard && overlaps(c.intent))
+      )
+        throw new HostError('conflict');
+    };
+    return this.checked(expected, changes, guard, {
+      source: { kind: 'ai' },
+      remember: true,
+      workspaceVersion: expectedWorkspaceVersion,
     });
   }
   automationWrite(
@@ -836,6 +887,12 @@ export class WorkspaceRuntime {
             this.waiting.shift();
             this.preparingCount = this.waiting.length;
           } catch (error) {
+            if (command.intent.source?.kind === 'ai') {
+              this.waiting.shift();
+              this.preparingCount = this.waiting.length;
+              command.receipt?.reject?.(error);
+              continue;
+            }
             this.fail(error);
             break;
           }
@@ -892,13 +949,19 @@ export class WorkspaceRuntime {
             if (command.request?.sequence)
               await this.repository.acknowledgeCommits?.(this.clientId, command.request.sequence);
           } catch (error) {
-            const rejectedAutomation =
-              command.intent.source?.kind === 'automation' &&
+            const rejectedBackground =
+              ['automation', 'ai'].includes(command.intent.source?.kind ?? '') &&
               error instanceof HostError &&
-              ['permission', 'invalid', 'unsupported', 'closed'].includes(error.code);
+              [
+                'permission',
+                'invalid',
+                'unsupported',
+                'closed',
+                ...(command.intent.source?.kind === 'ai' ? ['conflict'] : []),
+              ].includes(error.code);
             if (
               (['checked', 'convertField'].includes(command.intent.type) && !command.request) ||
-              rejectedAutomation
+              rejectedBackground
             ) {
               this.pending.shift();
               if (command.historyEntry) this.removeHistoryStep(command.historyEntry);
@@ -946,6 +1009,11 @@ export class WorkspaceRuntime {
           ),
         );
         this.version = snapshot.version;
+        if (
+          command.intent.workspaceVersion !== undefined &&
+          command.intent.workspaceVersion !== snapshot.version
+        )
+          throw new HostError('conflict');
         command.guard?.();
         const confirmed = [...this.baseline.values()].map((entry) => entry.object);
         const recovery: unknown[] = [];
@@ -996,6 +1064,7 @@ export class WorkspaceRuntime {
           ),
         );
       }
+      if (command.intent.source?.kind === 'ai') command.guard?.();
       const result = await this.repository.commit(command.request);
       if (result.status === 'committed') {
         // Consume change events separately: a recovered receipt may carry a newer workspace version.
@@ -1057,13 +1126,19 @@ export class WorkspaceRuntime {
     expected: TioObject[],
     changes: TioObject[],
     guard: () => void,
-    options: { source?: MutationSource; remember?: boolean } = {},
+    options: { source?: MutationSource; remember?: boolean; workspaceVersion?: number } = {},
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
         guard();
         this.dispatch(
-          { type: 'checked', expected, changes, source: options.source },
+          {
+            type: 'checked',
+            expected,
+            changes,
+            source: options.source,
+            workspaceVersion: options.workspaceVersion,
+          },
           options.remember ?? true,
           new Map(),
           {
@@ -1265,10 +1340,11 @@ export class WorkspaceRuntime {
     this.disposed = true;
     this.automation?.dispose();
     for (const command of this.pending) {
-      if (command.intent.source?.kind === 'automation') command.reject?.(new HostError('closed'));
+      if (['automation', 'ai'].includes(command.intent.source?.kind ?? ''))
+        command.reject?.(new HostError('closed'));
     }
     for (const command of this.waiting) {
-      if (command.intent.source?.kind === 'automation')
+      if (['automation', 'ai'].includes(command.intent.source?.kind ?? ''))
         command.receipt?.reject?.(new HostError('closed'));
     }
     this.commitListeners.clear();

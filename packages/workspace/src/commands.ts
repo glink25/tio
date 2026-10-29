@@ -226,6 +226,8 @@ export function inverse(
 /** Serializable editing intents; closures are implementation details of the executor only. */
 export type WorkspaceCommand = {
   timestamp?: string;
+  /** Optional predicate/query baseline checked against the authoritative repository snapshot. */
+  workspaceVersion?: number;
   source?: import('@tio/core').MutationSource;
 } & (
   | { type: 'checked'; expected: TioObject[]; changes: TioObject[] }

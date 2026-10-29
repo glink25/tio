@@ -1,4 +1,35 @@
 export const en = {
+  'agent.aiSettings': 'AI settings',
+  'agent.connection': 'Agent connection',
+  'agent.connectTitle': 'Connect an external Agent',
+  'agent.connectDescription':
+    'Copy this page address and instructions, then paste them into Codex or another Agent with browser access.',
+  'agent.connectButton': 'Connect Agent to Tio',
+  'agent.promptCopied': 'Agent instructions copied',
+  'agent.promptCopyFailed':
+    'Could not copy the instructions. Check clipboard permission and try again.',
+  'agent.connectionPrompt':
+    'First use your browser to visit {{url}}. This is Tio, a local-first document and database editor. Reuse the existing Tio tab and workspace in the same browser when available; opening the same URL in a different browser does not transfer local data.\n\nUse the page-provided Site tools: discover operations with tio_operations, then call tio_context to obtain the current workspace and sessionId. Wait for my authorization if Tio shows a permission dialog. Read the target objects and their versions before editing. Use tio_read and tio_write to complete my subsequent task, preserving existing content that I did not ask to change. Each write needs a stable requestId; if a call times out or returns pending, query tio_result with that ID before retrying.\n\nOperate through Tio tools and report confirmed results. If the browser cannot discover Site tools or access the original workspace, explain the blocker instead of assuming that the workspace is empty or that edits succeeded.',
+
+  'agent.permissionTitle': 'External AI tools',
+  'agent.requestRead': 'Allow external AI tools to read “{{workspace}}”?',
+  'agent.requestEdit': 'Allow external AI tools to read and edit “{{workspace}}”?',
+  'agent.alsoEdit': 'Also allow editing',
+  'agent.remember': 'Do not ask again',
+  'agent.editDescription':
+    'Editing includes deleting content, enabling automations and changing code in already authorized App Slices.',
+  'agent.localDescription':
+    'Permissions apply to this workspace in this browser only. Manage or revoke them in Settings.',
+  'agent.storageError': 'Could not save permissions. Retry or allow without remembering.',
+  'agent.deny': 'Deny',
+  'agent.allow': 'Allow',
+  'agent.settings': 'External AI access',
+  'agent.noGrants': 'No remembered permissions.',
+  'agent.read': 'Read',
+  'agent.edit': 'Read and edit',
+  'agent.revoke': 'Revoke',
+  'agent.clearAll': 'Revoke all permissions',
+
   'picker.all': 'All',
   'picker.github-user': 'People',
   'picker.page': 'Pages',
@@ -629,6 +660,34 @@ export const en = {
   'errors.reload': 'Reload',
 } as const;
 export const zh: Record<keyof typeof en, string> = {
+  'agent.aiSettings': 'AI 设置',
+  'agent.connection': 'Agent 接入',
+  'agent.connectTitle': '连接外部 Agent',
+  'agent.connectDescription':
+    '复制当前页面地址与操作指引，粘贴给具备浏览器访问能力的 Codex 等 Agent。',
+  'agent.connectButton': '让 Agent 接入 Tio',
+  'agent.promptCopied': '已复制 Agent 接入提示词',
+  'agent.promptCopyFailed': '无法复制提示词，请检查剪贴板权限后重试。',
+  'agent.connectionPrompt':
+    '先使用浏览器访问 {{url}}。这是 Tio，一个本地优先的文档与数据库编辑器。优先复用已经打开的 Tio 页面和同一浏览器中的工作空间；在其他浏览器打开相同网址不会自动带入本地数据。\n\n请使用网页提供的 Site tools：先调用 tio_operations 发现操作能力，再调用 tio_context 获取当前工作空间和 sessionId。若 Tio 弹出权限确认，请等待我授权。编辑前先读取目标对象及其版本，通过 tio_read、tio_write 完成我接下来提出的任务，保留我未要求修改的内容。每次写入使用稳定的 requestId；调用超时或返回 pending 时，先用同一个 ID 调用 tio_result 查询结果，再决定是否重试。\n\n通过 Tio 工具操作并报告已确认的结果。如果浏览器无法发现 Site tools，或无法访问原来的工作空间，请说明阻碍，不要据此认定空间为空或修改已经成功。',
+
+  'agent.permissionTitle': '外部 AI 工具',
+  'agent.requestRead': '是否允许外部 AI 工具读取“{{workspace}}”？',
+  'agent.requestEdit': '是否允许外部 AI 工具读取和编辑“{{workspace}}”？',
+  'agent.alsoEdit': '同时允许编辑',
+  'agent.remember': '下次不再询问',
+  'agent.editDescription': '编辑包括删除内容、启用自动化，以及修改已经授权运行的 App Slice 代码。',
+  'agent.localDescription': '权限仅作用于此浏览器中的当前工作空间，可在设置中调整或撤销。',
+  'agent.storageError': '无法保存权限。请重试，或取消勾选“下次不再询问”。',
+  'agent.deny': '拒绝',
+  'agent.allow': '允许',
+  'agent.settings': '外部 AI 访问',
+  'agent.noGrants': '尚无已记住的授权。',
+  'agent.read': '读取',
+  'agent.edit': '读取和编辑',
+  'agent.revoke': '撤销',
+  'agent.clearAll': '撤销全部授权',
+
   'picker.all': '全部',
   'picker.github-user': '人员',
   'picker.page': '页面',

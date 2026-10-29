@@ -9,6 +9,7 @@ const pure = [
   'merge',
   'sync',
   'workspace',
+  'operations',
   'host-protocol',
 ];
 const forbidden =
@@ -28,7 +29,15 @@ for (const name of readdirSync('packages')) {
 }
 console.log('Package boundaries verified.');
 
-for (const name of ['core', 'automation', 'workspace', 'sync', 'host-protocol', 'serialization']) {
+for (const name of [
+  'core',
+  'automation',
+  'operations',
+  'workspace',
+  'sync',
+  'host-protocol',
+  'serialization',
+]) {
   for (const file of sourceFiles(join('packages', name, 'src'))) {
     const source = readFileSync(file, 'utf8');
     if (/\b(document|window|navigator|indexedDB|localStorage)\s*[.]/.test(source))

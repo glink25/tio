@@ -9,6 +9,9 @@ import { usePresentation } from '../services/browser-presentation';
 import { ConnectionDialogs } from './connection-dialogs';
 import { GitHubDialog } from './github-dialog';
 import { WorkspaceActionDialog } from './workspace-action-dialog';
+const SiteToolsHost = lazy(() =>
+  import('../features/site-tools/host').then((m) => ({ default: m.SiteToolsHost })),
+);
 const WorkspacePage = lazy(() =>
   import('../pages/workspace-page').then((m) => ({ default: m.WorkspacePage })),
 );
@@ -49,6 +52,11 @@ export function App() {
   return (
     <ThemeContext.Provider value={presentation.theme}>
       <Notifications />
+      {'modelContext' in document && (
+        <Suspense fallback={null}>
+          <SiteToolsHost model={model} />
+        </Suspense>
+      )}
       <ConnectionDialogs model={model} />
       <OverlayPresence>
         {model.workspaceAction && <WorkspaceActionDialog model={model} />}

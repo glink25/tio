@@ -23,6 +23,7 @@
     "@tio/editor-blocknote": "workspace:*",
     "@tio/host-protocol": "workspace:*",
     "@tio/i18n": "workspace:*",
+    "@tio/operations": "workspace:*",
     "@tio/serialization": "workspace:*",
     "@tio/ui": "workspace:*",
     "@tio/views": "workspace:*",

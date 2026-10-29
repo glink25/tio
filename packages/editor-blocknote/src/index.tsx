@@ -19,7 +19,12 @@ import { BlockNoteView } from '@blocknote/shadcn';
 
 import { paste, ClipboardMetadata, clipboardOriginals } from './clipboard';
 import { CodeBlock } from './code-block';
-import { toEditor, fromEditor, type BlockContentCodec } from './codec';
+import {
+  toEditor,
+  fromEditor,
+  validateOperationBlocks as validateBlocksForSchema,
+  type BlockContentCodec,
+} from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
 import { EditorInteraction, isolateInteractionNodeView } from './interaction';
 import { MentionMenu, SlashMenu } from './mention-menu';
@@ -475,4 +480,31 @@ export function EditorContent({
 export function Editor(props: EditorProps) {
   const { i18n } = useTranslation();
   return <EditorContent key={i18n.language} {...props} />;
+}
+
+export function validateOperationBlocks(before: Block[], after: Block[]) {
+  validateBlocksForSchema(before, after, defaultEditorSchema);
+}
+
+/** Serializable metadata only; no editor instance or DOM is needed for discovery. */
+export function operationContentSchema() {
+  return {
+    blocks: Object.fromEntries(
+      Object.entries(defaultEditorSchema.blockSchema)
+        .filter(([name]) => name !== 'unsupported')
+        .map(([name, spec]) => [name, { content: spec.content, props: spec.propSchema }]),
+    ),
+    styles: Object.fromEntries(
+      Object.entries(defaultEditorSchema.styleSchema).map(([name, spec]) => [
+        name,
+        { propSchema: spec.propSchema },
+      ]),
+    ),
+    inlineTypes: Object.keys(defaultEditorSchema.inlineContentSchema),
+    textExample: { type: 'text', text: 'Text', styles: {} },
+    mentionExample: {
+      type: 'mention',
+      props: { workspaceId: 'current_workspace', kind: 'page', id: 'page_id' },
+    },
+  };
 }

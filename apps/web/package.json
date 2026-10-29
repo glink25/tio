@@ -24,6 +24,7 @@
     "@tio/i18n": "workspace:*",
     "@tio/local-store": "workspace:*",
     "@tio/merge": "workspace:*",
+    "@tio/operations": "workspace:*",
     "@tio/provider-github": "workspace:*",
     "@tio/provider-local-folder": "workspace:*",
     "@tio/provider-memory": "workspace:*",

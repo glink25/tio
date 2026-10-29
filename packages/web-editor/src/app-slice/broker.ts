@@ -3,20 +3,26 @@ import {
   mentionReferences,
   mentionKey,
   id,
-  object,
   readableObject,
   validate,
   validateValue,
   type Block,
-  type Field,
   type TioObject,
 } from '@tio/core';
+import {
+  flatten,
+  updateBlock,
+  changeFields,
+  changeRecord,
+  changeView,
+  createDatabase,
+  removeViewField,
+} from '@tio/operations/mutations';
 import type { EditorSession } from '@tio/workspace';
 
 import { AppSliceError, type AppSlicePermission } from './types';
 
-export const flatten = (blocks: Block[]): Block[] =>
-  blocks.flatMap((b) => [b, ...flatten(b.children)]);
+export { flatten };
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const fail = (code: string): never => {
   throw new AppSliceError(code);
@@ -399,15 +405,11 @@ export class AppSliceBroker {
           if (!flatten(blocks).some((b) => b.id === p.id)) fail('RESOURCE_REMOVED');
           if (pageMethod === 'page.updateBlock')
             only(p.changes, ['props', 'content', 'type', 'children']);
-          const edit = (items: Block[]): Block[] =>
-            items.flatMap((b) =>
-              b.id === p.id
-                ? pageMethod === 'page.removeBlock'
-                  ? []
-                  : [{ ...b, ...p.changes, id: b.id }]
-                : [{ ...b, children: edit(b.children) }],
-            );
-          next.blocks = edit(blocks);
+          next.blocks = updateBlock(
+            blocks,
+            p.id,
+            pageMethod === 'page.removeBlock' ? undefined : p.changes,
+          );
         } else return fail('INVALID_INPUT');
         this.validateBlocks(page.blocks ?? [], next.blocks ?? []);
       }
@@ -421,19 +423,12 @@ export class AppSliceBroker {
     if (method === 'databases.create') {
       this.writable();
       only(p, ['name', 'fields']);
-      const db = object('database', this.options.workspaceId, {
-        name: p.name,
-        parentId: this.page().id,
-        fields: p.fields ?? [{ id: id('field'), name: 'Name', type: 'title' }],
-      });
-      const view = object('databaseView', db.workspaceId, {
-        databaseId: db.id,
-        name: 'All',
-        layout: 'table',
-        visibleFieldIds: db.fields?.map((f) => f.id) ?? [],
-        filters: [],
-        sorts: [],
-      });
+      const { database: db, view } = createDatabase(
+        this.options.workspaceId,
+        p.name,
+        p.fields,
+        this.page().id,
+      );
       const page = this.page();
       const next = {
         ...page,
@@ -514,14 +509,7 @@ export class AppSliceBroker {
           this.validateMentions(mentionReferences(value), mentionReferences(previous));
         }
       }
-      const next = old
-        ? {
-            ...old,
-            ...(method === 'records.delete'
-              ? { deleted: true }
-              : { properties: { ...old.properties, ...values } }),
-          }
-        : object('record', db.workspaceId, { databaseId: db.id, properties: values, blocks: [] });
+      const next = changeRecord(db.workspaceId, db.id, values, old, method === 'records.delete');
       await this.commit([db, ...(old ? [old] : [])], [next]);
       return method === 'records.delete'
         ? null
@@ -529,19 +517,18 @@ export class AppSliceBroker {
     }
     if (method.startsWith('fields.')) {
       this.checkVersion(db, p.version);
-      const fields = db.fields ?? [];
-      let nextFields: Field[];
-      if (method === 'fields.create')
-        nextFields = [...fields, { ...p.field, id: p.field?.id ?? id('field') }];
-      else {
-        if (!fields.some((f) => f.id === p.id)) fail('RESOURCE_REMOVED');
-        if (method === 'fields.delete') nextFields = fields.filter((f) => f.id !== p.id);
-        else if (method === 'fields.update')
-          nextFields = fields.map((f) => (f.id === p.id ? { ...f, ...p.changes, id: f.id } : f));
-        else return fail('INVALID_INPUT');
-      }
+      const nextFields = changeFields(db, method, p);
       const next = { ...db, fields: nextFields };
-      await this.commit([db], [next]);
+      const affected =
+        method === 'fields.delete'
+          ? views
+              .map((view) => ({ before: view, after: removeViewField(view, p.id) }))
+              .filter((pair) => !same(pair.before, pair.after))
+          : [];
+      await this.commit(
+        [db, ...affected.map((pair) => pair.before)],
+        [next, ...affected.map((pair) => pair.after)],
+      );
       return this.output(this.objects().find((o) => o.id === next.id) ?? next);
     }
     if (method.startsWith('views.')) {
@@ -562,17 +549,7 @@ export class AppSliceBroker {
         'columnWidths',
         'groupBy',
       ]);
-      const next = old
-        ? { ...old, ...changes, ...(method === 'views.delete' ? { deleted: true } : {}) }
-        : object('databaseView', db.workspaceId, {
-            name: 'View',
-            layout: 'table',
-            visibleFieldIds: db.fields?.map((f) => f.id) ?? [],
-            filters: [],
-            sorts: [],
-            ...changes,
-            databaseId: db.id,
-          });
+      const next = changeView(db, changes, old, method === 'views.delete');
       await this.commit([db, ...(old ? [old] : [])], [next]);
       return method === 'views.delete' ? null : this.output(next);
     }

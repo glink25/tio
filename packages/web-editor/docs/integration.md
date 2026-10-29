@@ -50,3 +50,9 @@ React 接入的 `EditorSurface` 可通过 `renderEmptyState()` 定制无当前�
 当前格式备份恢复应调用 `runtime.import(objects, assets)` 保留系统时间；普通创建与复制调用 `runtime.create`，由命令层生成新时间。文档信息由共享编辑器只读展示，宿主不维护独立时间字段。
 
 列表型选择共用 `@tio/ui` 的 `OptionsPanel`，异步候选通过 `usePagedOptions` 触底追加。`MentionService.query(text, after?, kind?)` 按类型在分页前筛选，`kinds` 声明可用分类；游标仅适用于原查询与类型。失败保留已加载候选并通过宿主通知通道提示，重新打开或改变查询后重新读取，不提供分页或重试按钮。
+
+## 外部操作与当前会话
+
+宿主可将当前 WorkspaceRuntime 绑定到 `@tio/operations`，通过授权后的 SDK/工具调用无界面业务操作。不要另开 runtime 或直接代理原始仓库写入来绕过用户未确认输入。共享操作层不依赖 UI；原生接入需提供相同的内容校验和会话生命周期管理。WebMCP 注册、授权弹窗和浏览器本地权限属于 Web 宿主。
+
+App Slice broker 复用操作层的纯修改函数，但继续执行自身页面引用范围与受保护对象限制；外部 agent 的空间编辑权限不会赋予 App Slice 新的执行授权。详见[操作服务](../../operations/README.md)和[Web 使用说明](../../../docs/development/site-tools.md)。

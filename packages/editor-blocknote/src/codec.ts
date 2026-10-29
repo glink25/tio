@@ -233,3 +233,36 @@ function normalizeInlineContent(value: unknown): unknown {
       ]),
   );
 }
+
+/** Validate changed known blocks without normalizing or rewriting opaque content. */
+export function validateOperationBlocks(
+  before: Block[],
+  after: Block[],
+  schema: ContentSchema,
+  codecs: Record<string, BlockContentCodec> = {},
+) {
+  const originals = new Map<string, Block>();
+  const visit = (items: Block[]) => {
+    for (const b of items) {
+      originals.set(b.id, b);
+      visit(b.children);
+    }
+  };
+  visit(before);
+  const check = (items: Block[]) => {
+    for (const block of items) {
+      const old = originals.get(block.id);
+      const own = (b: Block) => {
+        const { children: _children, ...value } = b;
+        return JSON.stringify(value);
+      };
+      if (!old || own(block) !== own(old)) {
+        const converted = toEditor([{ ...block, children: [] }], schema, codecs)[0];
+        if (converted.type === 'unsupported')
+          throw new Error('Unsupported or invalid block content: ' + block.id);
+      }
+      check(block.children);
+    }
+  };
+  check(after);
+}

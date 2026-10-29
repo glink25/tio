@@ -7,19 +7,21 @@ import {
   SettingsRow,
   SettingsAction,
 } from '@tio/ui';
-import { Palette, HardDrive, ArrowRightLeft } from 'lucide-react';
+import { Palette, HardDrive, ArrowRightLeft, Sparkles } from 'lucide-react';
 import { useId } from 'react';
 
 import { ConnectionInfo } from '../components/identity';
+import { AgentPermissionSettings } from '../features/site-tools/permission-ui';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { usePresentation, setPresentation } from '../services/browser-presentation';
-const sections = ['general', 'storage', 'transfer'] as const;
-const icons = { general: Palette, storage: HardDrive, transfer: ArrowRightLeft };
+const sections = ['general', 'ai', 'storage', 'transfer'] as const;
+const icons = { general: Palette, ai: Sparkles, storage: HardDrive, transfer: ArrowRightLeft };
 export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
   const id = useId();
   const presentation = usePresentation();
   const actions = m.session ? m.workspaceActions(m.session) : {};
-  const label = (key: (typeof sections)[number]) => t(`ui.${key}`);
+  const label = (key: (typeof sections)[number]) =>
+    key === 'ai' ? t('agent.aiSettings') : t(`ui.${key}`);
   return (
     <Modal wide title={t('ui.settings')} close={() => m.setSettingsOpen(false)}>
       <div className="tio-settings flex min-h-0 gap-8">
@@ -78,6 +80,10 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
                 />
               </SettingsRow>
             </SettingsGroup>
+          </section>
+          <section id={`${id}-ai`} className="scroll-mt-4 space-y-4">
+            <h2 className="text-lg font-semibold">{label('ai')}</h2>
+            <AgentPermissionSettings />
           </section>
           <section id={`${id}-storage`} className="scroll-mt-4 space-y-4">
             <h2 className="text-lg font-semibold">{label('storage')}</h2>

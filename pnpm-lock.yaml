@@ -243,6 +243,9 @@ importers:
       '@tio/merge':
         specifier: workspace:*
         version: link:../../packages/merge
+      '@tio/operations':
+        specifier: workspace:*
+        version: link:../../packages/operations
       '@tio/provider-github':
         specifier: workspace:*
         version: link:../../packages/provider-github
@@ -460,6 +463,21 @@ importers:
         specifier: 3.2.1
         version: 3.2.1
 
+  packages/operations:
+    dependencies:
+      '@tio/automation':
+        specifier: workspace:*
+        version: link:../automation
+      '@tio/core':
+        specifier: workspace:*
+        version: link:../core
+      '@tio/workspace':
+        specifier: workspace:*
+        version: link:../workspace
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
   packages/pages:
     dependencies:
       esbuild:
@@ -660,6 +678,9 @@ importers:
       '@tio/i18n':
         specifier: workspace:*
         version: link:../i18n
+      '@tio/operations':
+        specifier: workspace:*
+        version: link:../operations
       '@tio/serialization':
         specifier: workspace:*
         version: link:../serialization
@@ -766,6 +787,9 @@ importers:
       '@tio/merge':
         specifier: workspace:*
         version: link:../packages/merge
+      '@tio/operations':
+        specifier: workspace:*
+        version: link:../packages/operations
       '@tio/provider-github':
         specifier: workspace:*
         version: link:../packages/provider-github

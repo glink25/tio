@@ -1,4 +1,4 @@
-import { object, textBlock } from '@tio/core';
+import { HostError, object, textBlock } from '@tio/core';
 import { MemoryRepository } from '@tio/provider-memory';
 import { WorkspaceRuntime } from '@tio/workspace';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -269,4 +269,179 @@ it('reloads evicted bodies before undo and preserves external fields', async () 
     icon: 'external',
     opaque: { preserved: true },
   });
+});
+
+// Core risk: a second public entry must preserve the same undo/input boundary and opaque data.
+it('shares external operations with live undo history and rejects stale versions and drafts', async () => {
+  const { WorkspaceOperations } = await import('@tio/operations');
+  const { runtime, repository } = await setup();
+  const service = new WorkspaceOperations({ runtime, workspaceId: 'w' });
+  const check = () => {};
+  const read = await service.invoke('objects.get', { id: 'p' }, undefined, check);
+  expect(read.status).toBe('completed');
+  const version = (read as { value: { version: string } }).value.version;
+  const input = { id: 'p', version, changes: { title: 'AI edit' } };
+  const first = await service.invoke('pages.update', input, 'same-request', check);
+  expect(first.status).toBe('completed');
+  expect(await service.invoke('pages.update', input, 'same-request', check)).toEqual(first);
+  expect(
+    await service.invoke(
+      'pages.update',
+      { ...input, changes: { title: 'other' } },
+      'same-request',
+      check,
+    ),
+  ).toMatchObject({ status: 'failed', error: { code: 'invalid' } });
+  expect((await repository.readObjects(['p'])).entries[0].object).toMatchObject({
+    title: 'AI edit',
+    opaque: { preserved: true },
+  });
+  runtime.undo();
+  await runtime.flush();
+  expect(title(runtime)).toBe('Original');
+  runtime.redo();
+  await runtime.flush();
+  expect(title(runtime)).toBe('AI edit');
+  expect(await service.invoke('pages.update', input, 'stale', check)).toMatchObject({
+    status: 'failed',
+    error: { code: 'conflict' },
+  });
+  const fresh = await service.invoke('objects.get', { id: 'p' }, undefined, check);
+  const draft = Symbol('input');
+  runtime.recordDraft(draft, 'before', 'unfinished', () => {});
+  expect(
+    await service.invoke(
+      'pages.update',
+      { ...input, version: (fresh as { value: { version: string } }).value.version },
+      'draft',
+      check,
+    ),
+  ).toMatchObject({ status: 'failed', error: { code: 'conflict' } });
+  runtime.discardDraft(draft);
+  service.dispose();
+});
+
+it('keeps uncertain external writes on the original request', async () => {
+  const { WorkspaceOperations } = await import('@tio/operations');
+  const { runtime, repository } = await setup();
+  const service = new WorkspaceOperations({ runtime, workspaceId: 'w' });
+  const check = () => {};
+  const savedCommit = repository.commit.bind(repository);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const commit = vi.spyOn(repository, 'commit').mockImplementation(async (request) => {
+    await gate;
+    return savedCommit(request);
+  });
+  vi.useFakeTimers();
+  try {
+    const pending = service.invoke(
+      'pages.create',
+      { title: 'One page', blocks: [] },
+      'creation',
+      check,
+    );
+    await vi.advanceTimersByTimeAsync(12001);
+    expect(await pending).toEqual({ status: 'pending', requestId: 'creation' });
+    expect(await service.result('creation', check)).toEqual({
+      status: 'pending',
+      requestId: 'creation',
+    });
+    release();
+    await runtime.flush();
+    expect(
+      await service.invoke('pages.create', { title: 'One page', blocks: [] }, 'creation', check),
+    ).toMatchObject({ status: 'completed' });
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(
+      (await repository.readSnapshot()).entries.filter((e) => e.object.title === 'One page'),
+    ).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+    service.dispose();
+  }
+});
+
+// The existing editor tests do not exercise host authorization changing during an external async request.
+it('rechecks external authorization before writing and isolates workspace identities', async () => {
+  const { WorkspaceOperations } = await import('@tio/operations');
+  const { runtime, repository } = await setup();
+  const service = new WorkspaceOperations({ runtime, workspaceId: 'w' });
+  let permitted = true;
+  const check = () => {
+    if (!permitted) throw new HostError('permission');
+  };
+  const read = await service.invoke('objects.get', { id: 'p' }, undefined, check);
+  const original = repository.readChanges.bind(repository);
+  vi.spyOn(repository, 'readChanges').mockImplementation(async (since) => {
+    const result = await original(since);
+    permitted = false;
+    return result;
+  });
+  expect(
+    await service.invoke(
+      'pages.update',
+      {
+        id: 'p',
+        version: (read as { value: { version: string } }).value.version,
+        changes: { title: 'Forbidden' },
+      },
+      'revoked',
+      check,
+    ),
+  ).toMatchObject({ status: 'failed', error: { code: 'permission' } });
+  expect((await repository.readObjects(['p'])).entries[0].object.title).toBe('Original');
+  const other = new WorkspaceOperations({ runtime, workspaceId: 'other' });
+  expect(await other.invoke('objects.get', { id: 'p' }, undefined, () => {})).toMatchObject({
+    status: 'failed',
+  });
+  other.dispose();
+  service.dispose();
+});
+
+// Query-wide field validation needs a repository baseline, including the just-confirmed prior write.
+it('checks schema query baselines without rejecting consecutive confirmed operations', async () => {
+  const { WorkspaceOperations } = await import('@tio/operations');
+  const { runtime, repository } = await setup();
+  const service = new WorkspaceOperations({ runtime, workspaceId: 'w' });
+  const check = () => {};
+  const db = (await service.invoke('objects.get', { id: 'db' }, undefined, check)) as {
+    value: { version: string };
+  };
+  const added = await service.invoke(
+    'fields.create',
+    { id: 'db', version: db.value.version, field: { id: 'extra', name: 'Extra', type: 'number' } },
+    'add-field',
+    check,
+  );
+  expect(added.status).toBe('completed');
+  const version = (added as { value: { objects: { version: string }[] } }).value.objects[0].version;
+  expect(
+    await service.invoke(
+      'fields.update',
+      { id: 'db', version, fieldId: 'extra', changes: { name: 'Renamed' } },
+      'rename-field',
+      check,
+    ),
+  ).toMatchObject({ status: 'completed' });
+  await runtime.flush();
+  const snapshot = await repository.readSnapshot();
+  await repository.commit({
+    id: 'other-write',
+    expectedVersion: snapshot.version,
+    changes: [object('page', 'w', { title: 'Concurrent', blocks: [] })],
+    assetIds: [],
+  });
+  await expect(
+    runtime.externalWrite(
+      [],
+      [object('page', 'w', { title: 'Stale validation', blocks: [] })],
+      check,
+      snapshot.version,
+    ),
+  ).rejects.toMatchObject({ code: 'conflict' });
+  expect(runtime.state.getState().error).toBeNull();
+  service.dispose();
 });

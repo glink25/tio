@@ -161,3 +161,30 @@ it('roundtrips record and user mentions and removes editor-only default username
   ];
   expect((fromEditor(editor, [])[0].content as object[])[0]).toEqual(content[0]);
 });
+
+// Agent writes use the same schema without mounting an editor; existing codec round trips did not validate this entry.
+it('validates changed known blocks while retaining untouched opaque content', async () => {
+  const { validateOperationBlocks } = await import('../../../packages/editor-blocknote/src/codec');
+  const opaque: Block = {
+    id: 'opaque',
+    type: 'future',
+    props: { future: true },
+    content: { future: ['raw'] },
+    children: [],
+  };
+  const paragraph = textBlock('before');
+  const after = [
+    opaque,
+    { ...paragraph, content: [{ type: 'text', text: 'after', styles: { bold: true } }] },
+  ];
+  expect(() => validateOperationBlocks([opaque, paragraph], after, schema)).not.toThrow();
+  expect(after[0]).toEqual(opaque);
+  expect(() =>
+    validateOperationBlocks(
+      [paragraph],
+      [{ ...paragraph, content: [{ type: 'text', text: 'bad', styles: { bold: 'invalid' } }] }],
+      schema,
+    ),
+  ).toThrow();
+  expect(() => validateOperationBlocks([], [opaque], schema)).toThrow();
+});
