@@ -171,7 +171,7 @@ export function PropertyEditor({
         {t('database.fieldName')}
         <input
           required
-          className="mt-1 w-full"
+          className="mt-1 w-full text-ink"
           aria-label={t('database.fieldName')}
           value={draft.name}
           onChange={(e) => patch({ name: e.target.value })}
@@ -181,7 +181,7 @@ export function PropertyEditor({
         {t('ui.type')}
         <ChoiceSelect
           label={t(field ? 'database.fieldType' : 'database.newFieldType')}
-          className="mt-1 w-full"
+          className="mt-1 w-full text-ink"
           disabled={
             saving ||
             (!!field && (field.type === 'title' || !types.some((type) => type === field.type)))
@@ -243,23 +243,43 @@ export function PropertyEditor({
         <div>
           <p className="mb-2 text-xs text-muted">{t('ui.options')}</p>
           {draft.options?.map((option) => (
-            <div key={option.id} className="mb-2 flex flex-wrap gap-2">
-              <input
-                className="min-w-0 flex-1"
-                aria-label={t('database.optionName')}
-                value={option.label}
-                onChange={(e) =>
-                  patch({
-                    options: draft.options!.map((o) =>
-                      o.id === option.id ? { ...o, label: e.target.value } : o,
-                    ),
-                  })
-                }
-              />
+            <div
+              key={option.id}
+              className="mb-3 grid grid-cols-[minmax(0,1fr)_44px_44px] items-end gap-2 border-b border-line pb-3"
+            >
+              <label className="block min-w-0 text-xs text-muted">
+                {t('database.optionDisplayName')}
+                <input
+                  className="mt-1 h-11 w-full text-ink"
+                  aria-label={t('database.optionDisplayName')}
+                  value={option.label}
+                  onChange={(e) =>
+                    patch({
+                      options: draft.options!.map((o) =>
+                        o.id === option.id ? { ...o, label: e.target.value } : o,
+                      ),
+                    })
+                  }
+                />
+              </label>
               <ChoiceSelect
                 value={option.color ?? 'gray'}
                 label={t('database.color')}
-                className="w-32 shrink-0"
+                trigger={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-11 w-11 p-0"
+                    aria-label={`${t('database.color')}: ${t(`database.color.${(option.color ?? 'gray') as (typeof fieldColors)[number]}`)}`}
+                    title={t('database.color')}
+                  >
+                    <span
+                      aria-hidden
+                      className="size-4 rounded-full border border-ink/15"
+                      style={{ backgroundColor: optionPalette[option.color ?? 'gray'] }}
+                    />
+                  </Button>
+                }
                 onValueChange={(color) =>
                   patch({
                     options: draft.options!.map((o) => (o.id === option.id ? { ...o, color } : o)),
@@ -272,40 +292,45 @@ export function PropertyEditor({
                   icon: (
                     <span
                       aria-hidden
-                      className="size-3 shrink-0 rounded-sm"
+                      className="size-3 shrink-0 rounded-full border border-ink/15"
                       style={{ backgroundColor: optionPalette[color] }}
                     />
                   ),
                 }))}
               />
-              {draft.type === 'status' && (
-                <SelectInput
-                  aria-label={t('database.group')}
-                  value={option.group ?? 'todo'}
-                  onValueChange={(value) =>
-                    patch({
-                      options: draft.options!.map((o) =>
-                        o.id === option.id
-                          ? { ...o, group: value as 'todo' | 'doing' | 'done' }
-                          : o,
-                      ),
-                    })
-                  }
-                >
-                  {(['todo', 'doing', 'done'] as const).map((group) => (
-                    <option key={group} value={group}>
-                      {t(`database.${group}`)}
-                    </option>
-                  ))}
-                </SelectInput>
-              )}
               <IconButton
                 label={t('ui.remove')}
                 type="button"
+                className="h-11 w-11 p-0"
                 onClick={() => patch({ options: draft.options!.filter((o) => o.id !== option.id) })}
               >
                 <X size={14} />
               </IconButton>
+              {draft.type === 'status' && (
+                <label className="col-span-full block min-w-0 text-xs text-muted">
+                  {t('database.group')}
+                  <SelectInput
+                    className="mt-1 w-full text-ink"
+                    aria-label={t('database.group')}
+                    value={option.group ?? 'todo'}
+                    onValueChange={(value) =>
+                      patch({
+                        options: draft.options!.map((o) =>
+                          o.id === option.id
+                            ? { ...o, group: value as 'todo' | 'doing' | 'done' }
+                            : o,
+                        ),
+                      })
+                    }
+                  >
+                    {(['todo', 'doing', 'done'] as const).map((group) => (
+                      <option key={group} value={group}>
+                        {t(`database.${group}`)}
+                      </option>
+                    ))}
+                  </SelectInput>
+                </label>
+              )}
             </div>
           ))}
           <Button
@@ -335,7 +360,7 @@ export function PropertyEditor({
             {t('database.target')}
             <SelectInput
               required
-              className="mt-1 w-full"
+              className="mt-1 w-full text-ink"
               aria-label={t('database.target')}
               value={draft.targetDatabaseId ?? ''}
               onValueChange={(value) => patch({ targetDatabaseId: value })}
@@ -370,7 +395,7 @@ export function PropertyEditor({
           <label className="block text-xs text-muted">
             {t('database.numberFormat')}
             <SelectInput
-              className="mt-1 w-full"
+              className="mt-1 w-full text-ink"
               value={draft.numberFormat ?? 'number'}
               onValueChange={(value) => patch({ numberFormat: value as Field['numberFormat'] })}
             >
@@ -385,7 +410,7 @@ export function PropertyEditor({
             <label className="block text-xs text-muted">
               {t('database.currency')}
               <SelectInput
-                className="mt-1 w-full"
+                className="mt-1 w-full text-ink"
                 value={draft.currency ?? 'CNY'}
                 onValueChange={(value) => patch({ currency: value })}
               >
@@ -453,7 +478,7 @@ export function PropertyEditor({
           <label className="block text-xs text-muted">
             {t('database.preview')}
             <SelectInput
-              className="mt-1 w-full"
+              className="mt-1 w-full text-ink"
               value={previewId || records[0]?.id || ''}
               onValueChange={(value) => setPreviewId(value)}
             >
@@ -481,7 +506,7 @@ export function PropertyEditor({
             {t('database.chooseRelation')}
             <SelectInput
               required
-              className="mt-1 w-full"
+              className="mt-1 w-full text-ink"
               value={draft.rollup?.relationFieldId ?? ''}
               onValueChange={(value) =>
                 patch({
@@ -505,7 +530,7 @@ export function PropertyEditor({
             {t('database.chooseRollupField')}
             <SelectInput
               required
-              className="mt-1 w-full"
+              className="mt-1 w-full text-ink"
               value={draft.rollup?.targetFieldId ?? ''}
               onValueChange={(value) =>
                 patch({
@@ -529,7 +554,7 @@ export function PropertyEditor({
             {t('database.aggregation')}
             <SelectInput
               required
-              className="mt-1 w-full"
+              className="mt-1 w-full text-ink"
               value={draft.rollup?.operation ?? 'values'}
               onValueChange={(value) =>
                 patch({

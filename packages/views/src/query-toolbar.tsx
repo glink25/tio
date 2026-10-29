@@ -322,15 +322,16 @@ export function QueryToolbar(p: RowsProps) {
               <label className="block text-xs text-muted">
                 {t('ui.viewName')}
                 <input
-                  className="mt-1 w-full"
+                  className="mt-1 w-full text-ink"
                   aria-label={t('ui.viewName')}
                   value={view.name ?? ''}
                   onChange={(e) => onView({ name: e.target.value })}
                 />
               </label>
-              <label className="flex items-center justify-between">
+              <label className="block min-w-0 text-xs text-muted">
                 {t('ui.layout')}
                 <SelectInput
+                  className="mt-1 w-full text-ink"
                   aria-label={t('ui.layout')}
                   value={view.layout ?? 'table'}
                   onValueChange={(value) => onView({ layout: value })}
@@ -345,10 +346,10 @@ export function QueryToolbar(p: RowsProps) {
                 </SelectInput>
               </label>
               {view.layout === 'board' && (
-                <label className="block">
+                <label className="block min-w-0 text-xs text-muted">
                   {t('ui.group')}
                   <SelectInput
-                    className="mt-1 w-full"
+                    className="mt-1 w-full text-ink"
                     aria-label={t('database.group')}
                     value={view.groupBy ?? ''}
                     onValueChange={(value) => onView({ groupBy: value })}
@@ -396,8 +397,9 @@ export function QueryToolbar(p: RowsProps) {
                   </label>
                 ))}
               </div>
-              <Button className="w-full justify-start border-t border-line" onClick={onFields}>
-                {t('database.fields')}
+              <Button variant="outline" className="w-full justify-start" onClick={onFields}>
+                <SlidersHorizontal size={16} />
+                {t('database.fieldSettings')}
               </Button>
             </fieldset>
           </Popover>

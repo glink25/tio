@@ -614,3 +614,29 @@
   background: var(--popover);
   box-shadow: 0 4px 20px #00000014;
 }
+
+/* Titles retain the native caret and selection without form-control focus chrome. */
+.tio-editor .tio-page-title:is(:focus, :focus-visible) {
+  outline: none;
+  box-shadow: none;
+}
+@media (max-width: 767px) {
+  .tio-editor .tio-cover-actions {
+    right: 12px;
+    bottom: 12px;
+    gap: 0;
+    padding: 0;
+  }
+  .tio-editor .tio-cover-actions > .tio-button {
+    position: relative;
+    min-height: 32px;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 24px;
+  }
+  .tio-editor .tio-cover-actions > .tio-button::after {
+    content: '';
+    position: absolute;
+    inset: -6px 0;
+  }
+}

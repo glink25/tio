@@ -33,6 +33,7 @@ export interface OptionsPanelProps {
   query?: string;
   onQuery?: (query: string) => void;
   search?: boolean;
+  autoFocusSearch?: boolean;
   remote?: boolean;
   loading?: boolean;
   more?: () => void;
@@ -52,6 +53,7 @@ export function OptionsPanel({
   query,
   onQuery,
   search = true,
+  autoFocusSearch = true,
   remote = false,
   loading,
   more,
@@ -101,10 +103,10 @@ export function OptionsPanel({
   }, [more, loading]);
   useEffect(() => {
     if (!externalInput) {
-      if (search) input.current?.focus();
-      else command.current?.focus();
+      if (search && autoFocusSearch) input.current?.focus();
+      else command.current?.focus({ preventScroll: true });
     }
-  }, [search, externalInput]);
+  }, [search, autoFocusSearch, externalInput]);
   useEffect(() => {
     list.current?.scrollTo({ top: 0 });
   }, [text, tab]);
@@ -134,7 +136,7 @@ export function OptionsPanel({
   return (
     <Command
       ref={command}
-      tabIndex={search || externalInput ? undefined : 0}
+      tabIndex={externalInput || (search && autoFocusSearch) ? undefined : 0}
       value={highlight}
       onValueChange={(id) => {
         setHighlight(id);

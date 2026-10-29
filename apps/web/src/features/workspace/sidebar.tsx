@@ -63,6 +63,7 @@ export function WorkspaceSwitcher({
     >
       <OptionsPanel
         label={t('ui.spaces')}
+        autoFocusSearch={false}
         selected={m.session ? [m.session.id] : []}
         options={m.sessions.map((session) => ({
           id: session.id,

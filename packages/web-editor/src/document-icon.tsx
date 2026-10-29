@@ -16,7 +16,12 @@ export function DocumentIcon({ object, editable, patch, upload, resolve }: Docum
   if (!object.icon) return null;
   const icon = <ObjectIcon type={object.type} icon={object.icon} size={64} resolve={resolve} />;
   return (
-    <div className={cn('h-16 text-muted', object.cover ? 'relative mb-2 -translate-y-8' : 'mb-10')}>
+    <div
+      className={cn(
+        'pointer-events-none h-16 text-muted',
+        object.cover ? 'relative mb-2 -translate-y-8' : 'mb-10',
+      )}
+    >
       {editable ? (
         <MediaPicker
           kind="icon"
@@ -25,7 +30,10 @@ export function DocumentIcon({ object, editable, patch, upload, resolve }: Docum
           upload={upload}
           onSelect={(value) => patch({ icon: value as IconValue })}
           trigger={
-            <Button className="rounded-md p-0" aria-label={t('document.changeIcon')}>
+            <Button
+              className="pointer-events-auto rounded-md p-0"
+              aria-label={t('document.changeIcon')}
+            >
               {icon}
             </Button>
           }
