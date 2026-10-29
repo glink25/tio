@@ -62,3 +62,13 @@ React 接入的 `EditorSurface` 可通过 `renderEmptyState()` 定制无当前�
 宿主可将当前 WorkspaceRuntime 绑定到 `@tio/operations`，通过授权后的 SDK/工具调用无界面业务操作。不要另开 runtime 或直接代理原始仓库写入来绕过用户未确认输入。共享操作层不依赖 UI；原生接入需提供相同的内容校验和会话生命周期管理。WebMCP 注册、授权弹窗和浏览器本地权限属于 Web 宿主。
 
 App Slice broker 复用操作层的纯修改函数，但继续执行自身页面引用范围与受保护对象限制；外部 agent 的空间编辑权限不会赋予 App Slice 新的执行授权。详见[操作服务](../../operations/README.md)和[Web 使用说明](../../../docs/development/site-tools.md)。
+
+## 内容链接与引用页脚
+
+`EditorTarget` 支持可选 ContentAnchor 和 requestId。重复导航到同一位置时递增 requestId；编辑器等待内容就绪，滚动并高亮块/字段，不获取编辑焦点。不存在的位置提示失效，不修改正文。
+
+`contentLinks` 由宿主提供：`create(ContentTarget)` 生成可复制 URL，`accepts(url)` 同步确认是否为当前应用/空间的内容链接，`parse(url)` 异步解析并校验可访问目标。块把手和移动工具栏使用复制入口；代码与纯文本粘贴不转换。异步解析期间若正文发生变化，不替换已插入的 URL，避免覆盖后续输入。
+
+`onOpenGraph(id)` 请求宿主打开关系图；编辑器只负责页脚内容和临时 UI，App Mode 在导航菜单保留该入口。未实现 repository.relations 时展示不支持状态。mountEditor 和直接 EditorSurface 均可接入这些选项。
+
+Web 宿主 URL：`#/w/<workspaceId>/p/<id>?block=<blockId>` 或 `?field=<fieldId>`；全空间图为 `#/w/<workspaceId>/graph?focus=<id>`。URL 不承载凭据，也不建立跨空间内容关系。

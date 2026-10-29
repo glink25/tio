@@ -2,6 +2,7 @@ import type { AutomationProvider, MutationSource } from './automation';
 import { DomainError } from './diagnostics';
 import type { TioObject } from './index';
 import type { MentionPage, MentionQuery } from './mentions';
+import type { RelationsProvider, SearchHit } from './references';
 export interface WorkspaceEvent {
   version: number;
   commitId: string;
@@ -81,6 +82,7 @@ export interface ObjectPage extends WorkspaceSnapshot {
 export interface WorkspaceRepository extends AssetStore {
   readonly attachmentPolicy: AssetPolicy;
   automation?: AutomationProvider;
+  relations?: RelationsProvider;
   queryObjects?(query: ObjectQuery): Promise<ObjectPage>;
   /** Explicit full traversal, reserved for export and providers which scan locally. */
   readSnapshot(): Promise<WorkspaceSnapshot>;
@@ -152,7 +154,7 @@ export interface SearchQuery extends PageQuery {
 }
 export interface SearchPage {
   version: number;
-  items: TioObject[];
+  items: SearchHit[];
   next?: string;
   complete: boolean;
   scanned: number;

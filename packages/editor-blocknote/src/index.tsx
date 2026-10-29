@@ -20,6 +20,7 @@ import { BlockNoteView } from '@blocknote/shadcn';
 
 import { paste, ClipboardMetadata, clipboardOriginals } from './clipboard';
 import { CodeBlock } from './code-block';
+import { encodeMentionAnchors } from './codec';
 import {
   toEditor,
   fromEditor,
@@ -27,6 +28,7 @@ import {
   type BlockContentCodec,
 } from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
+import { ContentLinksContext } from './content-links';
 import { EditorFilePanel, EditorFormattingToolbar } from './file-panel';
 import { insertTransferredFiles } from './file-transfer';
 import { EditorInteraction, isolateInteractionNodeView } from './interaction';
@@ -113,18 +115,23 @@ const MentionInline = createReactInlineContentSpec(
       kind: { default: 'page', values: ['page', 'database', 'record', 'github-user'] as const },
       id: { default: '' },
       login: { default: '' },
+      anchor: { default: '' },
     },
     content: 'none',
   },
   {
     render: ({ inlineContent }) => {
-      const { login, ...reference } = inlineContent.props;
+      const { login, anchor, ...reference } = inlineContent.props;
       return (
         <MentionLabel
           reference={
             reference.kind === 'github-user'
               ? { ...reference, kind: 'github-user', login }
-              : { ...reference, kind: reference.kind }
+              : {
+                  ...reference,
+                  kind: reference.kind,
+                  ...(anchor ? { anchor: JSON.parse(anchor) } : {}),
+                }
           }
         />
       );
@@ -225,6 +232,7 @@ export function EditorContent({
   renderDatabase,
   renderAppSlice,
 }: EditorProps) {
+  const contentLinks = useContext(ContentLinksContext);
   const attachmentPolicy = useAssetPolicy();
   const notify = useNotify();
   const active = useRef(true);
@@ -285,6 +293,42 @@ export function EditorContent({
           )
         )
           return true;
+        const text = context.event.clipboardData?.getData('text/plain').trim();
+        const view = context.editor.prosemirrorView;
+        const selection = context.editor.prosemirrorState.selection;
+        let inCode = !!selection.$from.parent.type.spec.code;
+        for (let depth = selection.$from.depth; depth > 0; depth--)
+          if (selection.$from.node(depth).type.name === 'codeBlock') inCode = true;
+        if (
+          text &&
+          contentLinks.parseContentLink &&
+          contentLinks.acceptsContentLink?.(text) &&
+          !inCode &&
+          !(view as unknown as { input: { shiftKey: boolean } }).input.shiftKey &&
+          /^https?:\/\//.test(text)
+        ) {
+          // Insert text immediately; only replace that exact range if it is still unchanged.
+          const from = selection.from;
+          context.editor.pasteText(text);
+          const to = from + text.length;
+          const pastedDocument = view.state.doc;
+          void contentLinks
+            .parseContentLink(text)
+            .then((target) => {
+              if (
+                !target ||
+                !active.current ||
+                !view.state.doc.eq(pastedDocument) ||
+                view.state.doc.textBetween(from, Math.min(to, view.state.doc.content.size)) !== text
+              )
+                return;
+              const props = encodeMentionAnchors({ type: 'mention', props: target }).props;
+              const node = view.state.schema.nodes.mention?.create(props);
+              if (node) view.dispatch(view.state.tr.replaceWith(from, to, node));
+            })
+            .catch(() => {});
+          return true;
+        }
         return paste(context);
       } finally {
         history?.breakGroup();
@@ -553,3 +597,5 @@ export function operationContentSchema() {
     },
   };
 }
+
+export { ContentLinksContext } from './content-links';

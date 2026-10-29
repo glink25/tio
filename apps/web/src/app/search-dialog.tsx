@@ -1,4 +1,4 @@
-import { titleOf, valueText, type TioObject } from '@tio/core';
+import type { SearchHit } from '@tio/core';
 import { t } from '@tio/i18n';
 import { OptionsPanel, usePagedOptions } from '@tio/ui';
 import { Modal, ObjectIcon } from '@tio/ui';
@@ -6,15 +6,6 @@ import { useState } from 'react';
 import { useStore } from 'zustand';
 
 import type { WorkspaceController } from '../features/workspace/use-workspace';
-function excerpt(o: TioObject) {
-  return (
-    JSON.stringify(o.blocks ?? [])
-      .match(/"text":"([^"]*)"/g)
-      ?.map((s) => s.slice(8, -1))
-      .join(' ')
-      .slice(0, 320) ?? ''
-  );
-}
 export function SearchDialog({ model: m }: { model: WorkspaceController }) {
   const version = useStore(m.runtime!.state, (state) => state.version);
   const [type, setType] = useState('all');
@@ -23,31 +14,14 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
     active: true,
     source: m.runtime,
     queryKey: JSON.stringify([m.query, type, version]),
-    key: (object: TioObject) => object.id,
+    key: (object: SearchHit) => object.id,
     load: (after) => m.runtime!.search({ text: m.query, type, after, limit: 50 }),
   });
   const results = page.items;
   const item = results.find((o) => o.id === selected) ?? results[0];
-  const name = (o: TioObject) =>
-    o.type === 'record'
-      ? valueText(
-          o.properties?.[
-            m.objects.find((d) => d.id === o.databaseId)?.fields?.find((f) => f.type === 'title')
-              ?.id ?? ''
-          ] ?? t('common.untitled'),
-        )
-      : titleOf(o);
-  const path = (o: TioObject) => {
-    const names: string[] = [];
-    const seen = new Set<string>();
-    let parent = m.objects.find((p) => p.id === (o.parentId ?? o.databaseId));
-    while (parent && !seen.has(parent.id)) {
-      seen.add(parent.id);
-      names.unshift(titleOf(parent));
-      parent = m.objects.find((p) => p.id === parent?.parentId);
-    }
-    return names.join(' / ');
-  };
+  const name = (hit: SearchHit) => hit.title;
+  const path = (hit: SearchHit) => hit.path;
+  const excerpt = (hit: SearchHit) => hit.excerpt;
   return (
     <Modal
       mobilePlacement="center"
@@ -74,7 +48,7 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
           options={results.map((o) => ({
             id: o.id,
             text: name(o),
-            icon: <ObjectIcon type={o.type} />,
+            icon: <ObjectIcon type={o.target.kind} />,
             label: (
               <span className="block min-w-0">
                 <span className="block truncate font-medium">{name(o)}</span>
@@ -85,7 +59,7 @@ export function SearchDialog({ model: m }: { model: WorkspaceController }) {
           }))}
           onSelect={(id) => {
             const object = results.find((o) => o.id === id);
-            if (object) m.navigate(object);
+            if (object) void m.navigateTarget(object.target);
           }}
         />
         <aside className="hidden min-w-0 rounded-lg border border-line bg-surface p-6 md:block">

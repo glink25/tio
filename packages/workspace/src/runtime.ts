@@ -456,6 +456,9 @@ export class WorkspaceRuntime {
     }
     this.publish();
   }
+  get relations() {
+    return this.repository.relations;
+  }
   async mentionCandidates(
     text: string,
     after?: string,
@@ -1368,6 +1371,7 @@ export class WorkspaceRuntime {
 /** Shared editor-facing contract for Web composition and independent embedding. */
 export type EditorSession = Pick<
   WorkspaceRuntime,
+  | 'relations'
   | 'mentionCandidates'
   | 'mentionMetadata'
   | 'ensure'

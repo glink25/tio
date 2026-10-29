@@ -1,9 +1,9 @@
 import { visibility, valueText, type Block, type TioObject } from './index';
+import { isContentTarget, type ContentTarget } from './targets';
 
-export type MentionReference = {
-  workspaceId: string;
-  id: string;
-} & ({ kind: 'page' | 'database' | 'record' } | { kind: 'github-user'; login: string });
+export type MentionReference =
+  | ContentTarget
+  | { workspaceId: string; id: string; kind: 'github-user'; login: string };
 export interface MentionCandidate {
   reference: MentionReference;
   title: string;
@@ -47,13 +47,24 @@ export function isMentionReference(value: unknown): value is MentionReference {
       (/^[0-9]+$/.test(v.id) &&
         typeof v.login === 'string' &&
         /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$/.test(v.login))) &&
+    (v.kind === 'github-user' || isContentTarget(v)) &&
     Object.keys(v).every((k) =>
-      ['workspaceId', 'kind', 'id', ...(v.kind === 'github-user' ? ['login'] : [])].includes(k),
+      [
+        'workspaceId',
+        'kind',
+        'id',
+        ...(v.kind === 'github-user' ? ['login'] : ['anchor']),
+      ].includes(k),
     )
   );
 }
 export const mentionKey = (ref: MentionReference) =>
-  JSON.stringify([ref.workspaceId, ref.kind, ref.id]);
+  JSON.stringify([
+    ref.workspaceId,
+    ref.kind,
+    ref.id,
+    ref.kind === 'github-user' ? null : (ref.anchor ?? null),
+  ]);
 /** Read references from a scalar or array value; validation remains the field registry's job. */
 export function mentionReferences(value: unknown): MentionReference[] {
   return (Array.isArray(value) ? value : [value]).filter(isMentionReference);
@@ -67,6 +78,11 @@ export function contentMentions(content: unknown): MentionReference[] {
     if (!isMentionReference(node.props)) throw new Error('Invalid mention');
     return [node.props];
   }
+  if (
+    node.type &&
+    (typeof node.type !== 'string' || !['link', 'tableContent', 'tableCell'].includes(node.type))
+  )
+    return [];
   return ['content', 'rows', 'cells'].flatMap((key) => contentMentions(node[key]));
 }
 export function blockMentions(blocks: Block[]): MentionReference[] {

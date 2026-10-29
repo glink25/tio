@@ -19,6 +19,7 @@ import {
   type WorkspaceSnapshot,
   type ObjectQuery,
 } from '@tio/core';
+import { ScanningRelations } from '@tio/database/relations';
 import { ScanningQueries } from '@tio/database/repository';
 /** Reference host implementation. Only this host owns durable state in embedding tests. */
 export class MemoryRepository implements WorkspaceRepository {
@@ -30,6 +31,14 @@ export class MemoryRepository implements WorkspaceRepository {
     prefetch: 'none',
   };
   private queries = new ScanningQueries(this);
+  private relationQueries?: ScanningRelations;
+  get relations() {
+    return (this.relationQueries ??= new ScanningRelations(this, () => this.relationsReady()));
+  }
+  protected relationsReady() {
+    return true;
+  }
+
   async readMetadata(ids: string[]) {
     return this.queries.metadata(ids);
   }

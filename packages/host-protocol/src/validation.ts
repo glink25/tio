@@ -68,7 +68,16 @@ export function requestPayload(method: string | undefined, p: any) {
   )
     throw new HostError('invalid');
   if (
-    ['queryMentions', 'queryNavigation', 'queryRecords', 'search', 'scan'].includes(method ?? '') &&
+    [
+      'queryReferences',
+      'queryReferenceOccurrences',
+      'queryGraph',
+      'queryMentions',
+      'queryNavigation',
+      'queryRecords',
+      'search',
+      'scan',
+    ].includes(method ?? '') &&
     (!integer(p.limit) ||
       p.limit < 1 ||
       p.limit > 1000 ||
@@ -105,6 +114,11 @@ export function requestPayload(method: string | undefined, p: any) {
     p.kind !== undefined &&
     !['page', 'database', 'record'].includes(p.kind)
   )
+    throw new HostError('invalid');
+  const contentId = (v: unknown) => typeof v === 'string' && /^[A-Za-z0-9_-]+$/.test(v);
+  if (method === 'queryReferences' && (!contentId(p.id) || !['in', 'out'].includes(p.direction)))
+    throw new HostError('invalid');
+  if (method === 'queryReferenceOccurrences' && (!contentId(p.sourceId) || !contentId(p.targetId)))
     throw new HostError('invalid');
   if (method === 'queryMentions' && typeof p.text !== 'string') throw new HostError('invalid');
   if (method === 'readChanges' && !integer(p.since)) throw new HostError('invalid');

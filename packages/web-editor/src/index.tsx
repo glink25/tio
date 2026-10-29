@@ -97,6 +97,8 @@ function Ready({ children, onReady }: { children: ReactNode; onReady?: () => voi
   return children;
 }
 export interface EditorOptions {
+  contentLinks?: EditorSurfaceProps['contentLinks'];
+  onOpenGraph?: EditorSurfaceProps['onOpenGraph'];
   mentions?: import('@tio/core').MentionService;
   appSlice?: AppSliceOptions;
   domain?: Domain;
@@ -145,6 +147,8 @@ export async function mountEditor(
     root.render(
       <Ready onReady={options.onReady}>
         <EditorSurface
+          contentLinks={options.contentLinks}
+          onOpenGraph={options.onOpenGraph}
           mentions={options.mentions}
           appSlice={options.appSlice}
           views={options.views}
@@ -168,7 +172,7 @@ export async function mountEditor(
       assertOpen();
       await runtime.flush();
       assertOpen();
-      target = next;
+      target = { ...next, requestId: (target.requestId ?? 0) + 1 };
       render();
     },
     setPresentation(next) {

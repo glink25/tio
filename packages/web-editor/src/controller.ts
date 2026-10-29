@@ -24,9 +24,17 @@ import { memoryPermissions, type AppSliceOptions } from './app-slice/types';
 import { createMentionService } from './mentions';
 export interface EditorTarget {
   id: string;
+  anchor?: import('@tio/core').ContentAnchor;
+  requestId?: number;
   mode?: 'page' | 'preview';
 }
 export interface EditorSurfaceProps {
+  contentLinks?: {
+    accepts: (url: string) => boolean;
+    create: (target: import('@tio/core').ContentTarget) => string;
+    parse: (url: string) => Promise<import('@tio/core').ContentTarget | undefined>;
+  };
+  onOpenGraph?: (id: string) => void;
   mentions?: import('@tio/core').MentionService;
   appSlice?: AppSliceOptions;
   views?: ViewExtensions;
@@ -53,7 +61,9 @@ export function useEditorController(props: EditorSurfaceProps) {
   const mentions = useMemo(
     () =>
       props.mentions ??
-      createMentionService(runtime, workspaceId, (id) => navigateRef.current({ id })),
+      createMentionService(runtime, workspaceId, (id, anchor) =>
+        navigateRef.current({ id, anchor }),
+      ),
     [props.mentions, runtime, workspaceId],
   );
   const appSliceStore = useMemo(() => {
@@ -249,6 +259,8 @@ export function useEditorController(props: EditorSurfaceProps) {
   };
   return {
     mentions,
+    contentLinks: props.contentLinks,
+    onOpenGraph: props.onOpenGraph,
     appSlice,
     hostReadOnly: !!props.readOnly,
     runtime,

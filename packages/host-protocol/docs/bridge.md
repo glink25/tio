@@ -22,3 +22,9 @@
 重新连接仍保留未确定提交的身份，先读取当前权威状态再重试。权限拒绝与连接授权失效分开表达；重新授权必须恢复原身份和端点。生产原生通道需自行实现可信绑定与租约，不能把 loopback 当作已交付的原生安全实现。
 
 接入示例见[编辑器接入](../../web-editor/docs/integration.md)。
+
+### 引用查询与搜索位置
+
+hello 在提供方声明 relations 时包含 `tio.relations@1` 能力。桥接转发 queryReferences、queryReferenceOccurrences、queryGraph，并校验分页、版本、状态、数量、ContentTarget 空间及锚点形态。通过 extensionChanged `{name: 'tio.relations', version: 1, reason: 'content' | 'ready' | 'access'}` 传播失效，异步索引完成无需伪造正文提交。
+
+search 返回轻量 SearchHit，包含稳定命中 ID、ContentTarget、title/path/excerpt，不返回完整 TioObject。关系和搜索结果都须在宿主权限过滤之后返回，跨空间目标被桥接拒绝。

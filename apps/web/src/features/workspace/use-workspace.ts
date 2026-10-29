@@ -1,5 +1,6 @@
 import { chooseFolder } from '@tio/adapter-local-folder';
 import { AssetResolver } from '@tio/assets/browser';
+import { isContentTarget, type ContentAnchor, type ContentTarget } from '@tio/core';
 import { id, visibility, editable, ConnectionAccessError, type TioObject } from '@tio/core';
 import type { WorkspaceSession, Connection } from '@tio/core';
 import { t, i18n, errorMessage } from '@tio/i18n';
@@ -26,6 +27,7 @@ import {
   loginGitHub,
 } from '../../services/github-auth';
 import { logoutCoordinator } from '../../services/logout';
+import { contentUrl } from '../../services/navigation';
 import { readRoute, writeRoute } from '../../services/navigation';
 import { WorkspaceServices } from '../../services/workspace-services';
 import { statusModel } from './status';
@@ -47,6 +49,11 @@ export function useWorkspace() {
   const [session, setSession] = useState<WorkspaceSession | null>(null);
   const [sessions, setSessions] = useState<WorkspaceSession[]>([]);
   const [selected, setSelected] = useState('');
+  const [graph, setGraph] = useState(false);
+  const [locationTarget, setLocationTarget] = useState<{
+    anchor?: ContentAnchor;
+    requestId: number;
+  }>({ requestId: 0 });
   const [syncStatus, setSyncStatus] = useState<SyncSnapshot>({ phase: 'idle' });
   const [syncing, setSyncing] = useState(false);
   const syncRequest = useRef<Promise<void> | null>(null);
@@ -239,7 +246,19 @@ export function useWorkspace() {
       sessionRef.current = activeSession;
       await services.saveSession(activeSession);
       setSelected(target ?? '');
-      writeRoute(s.workspaceId, target ?? '', fromHistory || initial);
+      const routed = route?.workspaceId === s.workspaceId;
+      setGraph(!!(routed && route.graph));
+      setLocationTarget((v) => ({
+        anchor: routed ? route.anchor : undefined,
+        requestId: v.requestId + 1,
+      }));
+      writeRoute(
+        s.workspaceId,
+        target ?? '',
+        fromHistory || initial,
+        routed ? route.anchor : undefined,
+        !!(routed && route.graph),
+      );
       setPreviewId(null);
       try {
         const pref = JSON.parse(localStorage.getItem('tio.sidebar.' + s.workspaceId) ?? '{}');
@@ -276,14 +295,28 @@ export function useWorkspace() {
         const next = sessions.find((item) => item.workspaceId === route.workspaceId);
         if (next) void activate(next, true);
       } else {
-        const target = runtimeRef.current
-          ?.snapshot()
-          .find((item) => item.id === route.id && item.workspaceId === route.workspaceId);
-        if (target && target.id !== currentSession?.selectedId) navigate(target, true);
+        const runtime = runtimeRef.current;
+        if (!runtime) return;
+        setGraph(route.graph);
+        setSelected(route.id);
+        setLocationTarget((v) => ({ anchor: route.anchor, requestId: v.requestId + 1 }));
+        const requestedHash = location.hash;
+        void runtime
+          .loadTarget(route.id)
+          .then(() => {
+            if (runtimeRef.current !== runtime || location.hash !== requestedHash) return;
+            const target = runtime.snapshot().find((o) => o.id === route.id);
+            if (target) navigate(target, true, route.anchor, route.graph);
+          })
+          .catch(reportError);
       }
     };
     window.addEventListener('popstate', pop);
-    return () => window.removeEventListener('popstate', pop);
+    window.addEventListener('hashchange', pop);
+    return () => {
+      window.removeEventListener('popstate', pop);
+      window.removeEventListener('hashchange', pop);
+    };
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions]);
   useEffect(() => {
@@ -291,7 +324,7 @@ export function useWorkspace() {
       window.scrollTo(0, scrollPositions.current.get(`${session?.workspaceId}/${selected}`) ?? 0),
     );
     return () => cancelAnimationFrame(frame);
-  }, [selected, session?.workspaceId]);
+  }, [selected, session?.workspaceId, graph]);
   function resizeSidebar(width: number) {
     const next = Math.min(400, Math.max(220, width));
     setSidebarWidth(next);
@@ -336,13 +369,21 @@ export function useWorkspace() {
     if (editable(target)) command((runtime) => runtime.patch(target.id, changes, remember));
   }
 
-  function navigate(o: TioObject, fromHistory = false) {
+  function navigate(
+    o: Pick<TioObject, 'id' | 'workspaceId'>,
+    fromHistory = false,
+    anchor?: ContentAnchor,
+    showGraph = false,
+  ) {
     if (o.workspaceId !== sessionRef.current?.workspaceId) return;
-    scrollPositions.current.set(
-      `${sessionRef.current?.workspaceId}/${sessionRef.current?.selectedId}`,
-      window.scrollY,
-    );
-    if (!fromHistory) writeRoute(o.workspaceId, o.id);
+    if (!graph && !fromHistory)
+      scrollPositions.current.set(
+        `${sessionRef.current?.workspaceId}/${sessionRef.current?.selectedId}`,
+        window.scrollY,
+      );
+    if (!fromHistory) writeRoute(o.workspaceId, o.id, false, anchor, showGraph);
+    setGraph(showGraph);
+    setLocationTarget((v) => ({ anchor, requestId: v.requestId + 1 }));
     setPreviewId(null);
     setSelected(o.id);
     setSidebar(false);
@@ -355,6 +396,85 @@ export function useWorkspace() {
       void services.saveSession(next).catch((e) => reportError(e));
     }
   }
+  async function navigateTarget(target: { id: string; anchor?: ContentAnchor }) {
+    const active = runtimeRef.current;
+    if (!active) return;
+    try {
+      await active.loadTarget(target.id);
+      if (runtimeRef.current !== active) return;
+      const object = active.snapshot().find((o) => o.id === target.id);
+      if (object) navigate(object, false, target.anchor);
+      else
+        navigate(
+          { id: target.id, workspaceId: sessionRef.current!.workspaceId },
+          false,
+          target.anchor,
+        );
+    } catch (error) {
+      reportError(error);
+    }
+  }
+  async function openGraph(id: string) {
+    const active = runtimeRef.current;
+    if (!active) return;
+    try {
+      await active.flush();
+      if (runtimeRef.current !== active) return;
+      scrollPositions.current.set(
+        `${sessionRef.current?.workspaceId}/${sessionRef.current?.selectedId}`,
+        window.scrollY,
+      );
+      setGraph(true);
+      setSelected(id);
+      setPreviewId(null);
+      writeRoute(sessionRef.current!.workspaceId, id, false, undefined, true);
+    } catch (error) {
+      reportError(error);
+    }
+  }
+  const contentLinks = {
+    create: contentUrl,
+    accepts(text: string) {
+      try {
+        const url = new URL(text);
+        const route = readRoute(url.hash);
+        return (
+          url.origin === location.origin &&
+          url.pathname === location.pathname &&
+          !!route &&
+          !route.graph &&
+          route.workspaceId === sessionRef.current?.workspaceId
+        );
+      } catch {
+        return false;
+      }
+    },
+    async parse(text: string): Promise<ContentTarget | undefined> {
+      const active = runtimeRef.current;
+      if (!active) return;
+      const url = new URL(text);
+      if (url.origin !== location.origin || url.pathname !== location.pathname) return;
+      const route = readRoute(url.hash);
+      if (!route || route.graph || route.workspaceId !== sessionRef.current?.workspaceId) return;
+      const metadata = await active.mentionMetadata([route.id]);
+      if (runtimeRef.current !== active) return;
+      const object = metadata.entries.find((e) => e.object.id === route.id)?.object;
+      if (
+        !object ||
+        object.deleted ||
+        !active.can(object, 'read') ||
+        !['page', 'database', 'record'].includes(object.type)
+      )
+        return;
+      const target = {
+        workspaceId: route.workspaceId,
+        id: route.id,
+        kind: object.type as ContentTarget['kind'],
+        anchor: route.anchor,
+      };
+      return isContentTarget(target) ? target : undefined;
+    },
+  };
   async function loadSpaces() {
     setLoading(true);
     setLoadError('');
@@ -552,13 +672,13 @@ export function useWorkspace() {
         ? createMentionService(
             runtime,
             mentionWorkspaceId,
-            (id) => {
+            (id, anchor) => {
               void runtime
                 .loadTarget(id)
                 .then(() => {
                   if (runtimeRef.current !== runtime) return;
                   const target = runtime.snapshot().find((o) => o.id === id);
-                  if (target) mentionCallbacks.current.navigate(target);
+                  if (target) mentionCallbacks.current.navigate(target, false, anchor);
                 })
                 .catch((error) => mentionCallbacks.current.reportError(error));
             },
@@ -650,6 +770,11 @@ export function useWorkspace() {
     return request;
   }
   return {
+    graph,
+    locationTarget,
+    navigateTarget,
+    openGraph,
+    contentLinks,
     hasReplicaSync: services.hasReplicaSync,
     manualSync:
       services.hasReplicaSync && (workspace ? workspace.manualSync === true : services.manualSync),

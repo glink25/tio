@@ -128,7 +128,7 @@ export function toEditor(
         type: 'unsupported',
         props: { raw: JSON.stringify(block), label: block.type },
       };
-    let content = codec ? codec.toEditor(block) : block.content;
+    let content = codec ? codec.toEditor(block) : encodeMentionAnchors(block.content);
     if (
       !codec &&
       record(content) &&
@@ -213,6 +213,10 @@ function normalizeInlineContent(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(normalizeInlineContent);
   if (!record(value)) return value;
   let node = value;
+  if (node.type === 'mention' && record(node.props) && typeof node.props.anchor === 'string') {
+    const { anchor, ...props } = node.props;
+    node = { ...node, props: { ...props, ...(anchor ? { anchor: JSON.parse(anchor) } : {}) } };
+  }
   if (
     node.type === 'mention' &&
     record(node.props) &&
@@ -265,4 +269,23 @@ export function validateOperationBlocks(
     }
   };
   check(after);
+}
+
+export function encodeMentionAnchors(value: unknown): any {
+  if (Array.isArray(value)) return value.map(encodeMentionAnchors);
+  if (!record(value)) return value;
+  if (value.type === 'mention' && record(value.props))
+    return {
+      ...value,
+      props: {
+        ...value.props,
+        anchor: value.props.anchor ? JSON.stringify(value.props.anchor) : '',
+      },
+    };
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [
+      key,
+      ['content', 'rows', 'cells'].includes(key) ? encodeMentionAnchors(item) : item,
+    ]),
+  );
 }

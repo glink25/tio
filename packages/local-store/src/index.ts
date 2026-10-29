@@ -21,6 +21,7 @@ import {
   type ObjectPage,
   type TioObject,
 } from '@tio/core';
+import { ScanningRelations } from '@tio/database/relations';
 import { ScanningQueries } from '@tio/database/repository';
 import type { IDBPDatabase, IDBPObjectStore } from 'idb';
 
@@ -48,6 +49,14 @@ export class LocalStore {
     prefetch: 'none',
   };
   private queries = new ScanningQueries(this);
+  private relationQueries?: ScanningRelations;
+  get relations() {
+    return (this.relationQueries ??= new ScanningRelations(this, () => this.relationsReady()));
+  }
+  protected relationsReady() {
+    return true;
+  }
+
   async readMetadata(ids: string[]) {
     return this.queries.metadata(ids);
   }
@@ -474,6 +483,7 @@ export class LocalStore {
     await tx.done;
   }
   close() {
+    this.relationQueries?.close();
     void this.db.then((db) => db.close());
     this.channel?.close();
     this.listeners.clear();

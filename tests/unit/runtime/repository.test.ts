@@ -288,3 +288,89 @@ it('enforces provider attachment limits before runtime edits and across the host
     repository.close();
   }
 });
+
+// Relationship queries introduce a new provider read boundary: existing object-read tests do
+// not cover derived counts, occurrence excerpts or graph edges leaking denied content.
+it('relationship queries preserve workspace and access boundaries across the bridge', async () => {
+  const { textBlock } = await import('@tio/core');
+  const denied = new Set(['secret']);
+  const policy = {
+    version: '1',
+    allows: (resource: { id: string }, operation: string) =>
+      operation !== 'read' || !denied.has(resource.id),
+  };
+  const repository = new MemoryRepository(policy);
+  const mention = {
+    type: 'mention',
+    props: { workspaceId: 'w', kind: 'page', id: 'b', anchor: { type: 'block', blockId: 'body' } },
+  };
+  const a = object('page', 'w', {
+    id: 'a',
+    title: 'A',
+    blocks: [
+      {
+        ...textBlock(''),
+        id: 'source',
+        content: [
+          mention,
+          mention,
+          { type: 'mention', props: { workspaceId: 'other', kind: 'page', id: 'b' } },
+        ],
+      },
+    ],
+  });
+  const b = object('page', 'w', {
+    id: 'b',
+    title: 'B',
+    blocks: [{ ...textBlock('target'), id: 'body' }],
+  });
+  const secret = object('page', 'w', { id: 'secret', title: 'Do not expose', blocks: a.blocks });
+  await repository.commit({
+    id: 'seed',
+    expectedVersion: 0,
+    changes: [a, b, secret],
+    assetIds: [],
+  });
+  const transport = createLoopback();
+  const context = { sessionId: 'relationships', workspaceId: 'w' };
+  const stop = serveHost(transport.host, context, repository);
+  const bridge = new BridgeRepository(transport.client, context);
+  await bridge.connect();
+  try {
+    const incoming = await bridge.relations!.queryReferences({
+      id: 'b',
+      direction: 'in',
+      limit: 50,
+    });
+    expect(incoming.total).toBe(1);
+    expect(incoming.items).toMatchObject([{ node: { target: { id: 'a' } }, count: 2 }]);
+    const occurrences = await bridge.relations!.queryReferenceOccurrences({
+      sourceId: 'a',
+      targetId: 'b',
+      limit: 20,
+    });
+    expect(occurrences.items).toHaveLength(2);
+    expect(occurrences.items[0].source.anchor).toEqual({ type: 'block', blockId: 'source' });
+    const graph = await bridge.relations!.queryGraph({ limit: 1000 });
+    expect(graph.items.filter((i) => i.type === 'edge')).toEqual([
+      { type: 'edge', edge: { source: 'a', target: 'b', count: 2 } },
+    ]);
+    expect(JSON.stringify(graph)).not.toContain('secret');
+    const paged = await bridge.relations!.queryGraph({ limit: 1 });
+    denied.add('a');
+    repository.relations.invalidate('access');
+    await expect(
+      bridge.relations!.queryGraph({ limit: 1, after: paged.next }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    expect(
+      (await bridge.relations!.queryReferences({ id: 'b', direction: 'in', limit: 50 })).total,
+    ).toBe(0);
+    await expect(
+      bridge.relations!.queryReferenceOccurrences({ sourceId: 'a', targetId: 'b', limit: 20 }),
+    ).rejects.toMatchObject({ code: 'permission' });
+  } finally {
+    bridge.dispose();
+    stop();
+    repository.relations.close();
+  }
+});

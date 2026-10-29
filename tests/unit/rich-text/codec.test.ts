@@ -69,7 +69,15 @@ it('a registered block codec controls its own mapping without modifying the buil
   expect(toEditor([block], schema)[0].type).toBe('unsupported');
 });
 it('roundtrips atomic mentions in paragraphs, nested lists and table cells', () => {
-  const mention = { type: 'mention', props: { workspaceId: 'w', kind: 'database', id: 'db' } };
+  const mention = {
+    type: 'mention',
+    props: {
+      workspaceId: 'w',
+      kind: 'page',
+      id: 'page',
+      anchor: { type: 'block', blockId: 'target' },
+    },
+  };
   const configured = { ...schema, inlineContentSchema: { mention: {} } };
   const blocks = [
     { ...textBlock(''), content: [mention], children: [{ ...textBlock(''), content: [mention] }] },

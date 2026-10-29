@@ -71,3 +71,14 @@ JSON ZIP 是可恢复备份。当前 Web 导入新建空间 ID，重写对象的
 ## 自动化规则
 
 `automation` 是独立的 v1 内建对象，支持统一命令、系统时间、软删除、同步与 JSON 备份。规则引用限定当前空间，字段与动作使用稳定 ID；运行记录与链路预算属于 provider 运行状态，不写入业务 JSON。配置与执行语义见[自动化](../architecture/automation.md)。
+
+## 内容位置与引用关系
+
+内容目标统一为 `{workspaceId, kind: 'page' | 'database' | 'record', id, anchor?}`。
+`anchor` 为 `{type: 'block', blockId}`（页面或记录正文）或 `{type: 'field', fieldId}`（记录属性）。
+内容提及可以携带同样的 anchor；ID 不随标题或位置变化。GitHub 人员提及不接受 anchor。
+块链接粘贴为原子提及，普通文本、代码及跨空间链接不转换。失效位置保留引用，并在打开所属文档后提示。
+
+反向引用和全空间图均是 provider 派生数据，不写入业务 JSON、备份或同步。
+引用来源包括页面/记录的已知正文内容容器及当前有效 mention 字段；不包含父子层级、数据库归属、relation、数据库嵌入、人员、外部 URL 或不透明载荷。
+同一来源到目标的多次提及聚合为一条有向边，保留出现次数和来源位置；自引用可在列表查看，图谱不绘制自环。

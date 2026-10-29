@@ -1,4 +1,6 @@
-import { visibility, type TioObject } from '@tio/core';
+import { type TioObject } from '@tio/core';
+
+import { searchHits } from './content-index';
 /** The worker only receives permission-filtered provider projections. */
 self.onmessage = (
   event: MessageEvent<{
@@ -10,14 +12,6 @@ self.onmessage = (
   }>,
 ) => {
   const { id, objects, navigation, text, type } = event.data;
-  const visible = visibility([...navigation, ...objects]);
-  const query = text.toLocaleLowerCase();
-  const items = objects.filter(
-    (o) =>
-      visible(o) &&
-      ['page', 'database', 'record'].includes(o.type) &&
-      (!type || type === 'all' || o.type === type) &&
-      JSON.stringify([o.title, o.name, o.properties, o.blocks]).toLocaleLowerCase().includes(query),
-  );
+  const items = searchHits(objects, navigation, text, type);
   self.postMessage({ id, items });
 };

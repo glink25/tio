@@ -18,6 +18,7 @@ import {
   type WorkspaceRepository,
   type WorkspaceSnapshot,
 } from '@tio/core';
+import { ScanningRelations } from '@tio/database/relations';
 import { ScanningQueries, pageEntries } from '@tio/database/repository';
 import { canonical } from '@tio/serialization';
 
@@ -66,6 +67,14 @@ export class FileRepository implements WorkspaceRepository {
     prefetch: 'none',
   };
   private queries = new ScanningQueries(this);
+  private relationQueries?: ScanningRelations;
+  get relations() {
+    return (this.relationQueries ??= new ScanningRelations(this, () => this.relationsReady()));
+  }
+  protected relationsReady() {
+    return true;
+  }
+
   private staged = new Map<string, AssetData>();
   private listeners = new Set<(event: WorkspaceEvent) => void>();
   private queue: Promise<unknown> = Promise.resolve();
@@ -356,6 +365,7 @@ export class FileRepository implements WorkspaceRepository {
     this.staged.delete(id);
   }
   close() {
+    this.relationQueries?.close();
     this.closed = true;
     this.listeners.clear();
     this.staged.clear();

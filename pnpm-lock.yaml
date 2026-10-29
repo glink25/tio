@@ -276,6 +276,12 @@ importers:
       '@tio/workspace':
         specifier: workspace:*
         version: link:../../packages/workspace
+      cytoscape:
+        specifier: ^3.34.4
+        version: 3.34.4
+      cytoscape-fcose:
+        specifier: ^2.2.0
+        version: 2.2.0(cytoscape@3.34.4)
       lucide-react:
         specifier: 1.61.0
         version: 1.61.0(@types/react@18.3.31)(react@18.3.1)

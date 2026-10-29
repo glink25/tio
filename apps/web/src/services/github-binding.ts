@@ -85,8 +85,14 @@ export function githubBinding(connection: Connection): ConnectionBinding {
       this.storageCapabilities.prefetch = 'all';
       this.completeKey = `tio.github.complete.${this.instanceId}`;
     }
+    protected override relationsReady() {
+      return this.complete;
+    }
     markComplete() {
-      if (!disposed) localStorage.setItem(this.completeKey, 'true');
+      if (!disposed) {
+        localStorage.setItem(this.completeKey, 'true');
+        this.relations.invalidate('ready');
+      }
     }
     get complete() {
       return localStorage.getItem(this.completeKey) === 'true';

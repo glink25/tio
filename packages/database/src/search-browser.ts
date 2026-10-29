@@ -3,6 +3,7 @@ import {
   type WorkspaceRepository,
   type SearchQuery,
   type SearchPage,
+  type SearchHit,
   type TioObject,
 } from '@tio/core';
 /** Provider I/O is asynchronous; text extraction and matching never run on the UI thread. */
@@ -12,14 +13,14 @@ export class WorkerSearch {
   private sequence = 0;
   private pending = new Map<
     number,
-    { resolve: (items: TioObject[]) => void; reject: (error: Error) => void }
+    { resolve: (items: SearchHit[]) => void; reject: (error: Error) => void }
   >();
   constructor(private repository: WorkspaceRepository) {}
   private match(
     objects: TioObject[],
     navigation: TioObject[],
     query: SearchQuery,
-  ): Promise<TioObject[]> {
+  ): Promise<SearchHit[]> {
     if (this.closed) return Promise.reject(new HostError('closed'));
     if (!this.worker) {
       this.worker = new Worker(new URL('./search-worker.ts', import.meta.url), { type: 'module' });

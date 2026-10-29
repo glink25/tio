@@ -46,6 +46,7 @@ import {
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { CopyBlockLink } from './content-links';
 import { EditorFileReplaceButton } from './file-panel';
 
 const touchQuery = '(hover: none) and (pointer: coarse)';
@@ -194,6 +195,7 @@ function TouchToolbar() {
           <TextAlignButton textAlignment="right" />
           <NestBlockButton />
           <UnnestBlockButton />
+          <CopyBlockLink mobile />
           {mentions && (
             <Button
               label={t('editor.mention')}

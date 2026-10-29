@@ -434,3 +434,6 @@ export * from './host';
 export * from './connection';
 
 export * from './content';
+
+export * from './targets';
+export * from './references';

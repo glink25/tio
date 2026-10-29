@@ -449,10 +449,14 @@ export class WorkspaceOperations {
       this.live(check);
       return {
         ...result,
-        items: result.items.flatMap((o) => {
-          if (o.workspaceId !== workspaceId) return [];
-          const readable = readableObject(runtime.access, o);
-          return readable ? [readable] : [];
+        items: result.items.filter(({ target }) => {
+          const resource = { workspaceId: target.workspaceId, id: target.id, type: target.kind };
+          return (
+            target.workspaceId === workspaceId &&
+            runtime.access.allows(resource, 'read') &&
+            (target.anchor?.type !== 'field' ||
+              runtime.access.allows({ ...resource, fieldId: target.anchor.fieldId }, 'read'))
+          );
         }),
       };
     }

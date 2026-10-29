@@ -1,13 +1,16 @@
+import { lazy, Suspense } from 'react';
+const RelationshipGraph = lazy(() => import('../features/relations/graph'));
 import { titleOf, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
 import { OverlayPresence } from '@tio/ui';
 import { SelectInput } from '@tio/ui';
 import { Button, IconButton, MenuItem, Modal, LoadingSkeleton, cn, useMobile } from '@tio/ui';
 import { EditorSurface, type AppSlicePermissionStore } from '@tio/web-editor';
-import { ChevronRight, PanelLeft, Star, Move, Maximize2 } from 'lucide-react';
-import { Fragment, useLayoutEffect, useRef, type ReactNode } from 'react';
+import { PanelLeft, Star, Move, Maximize2 } from 'lucide-react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
 import { SyncStatus } from '../components/sync-status';
+import { Breadcrumbs } from '../features/workspace/breadcrumbs';
 import { Sidebar, WorkspaceSwitcher } from '../features/workspace/sidebar';
 import { statusLabel } from '../features/workspace/status';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
@@ -62,7 +65,9 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
   const current = m.current;
   const ancestors: TioObject[] = [];
   const visited = new Set<string>();
-  let parent = m.nav.find((o) => o.id === current?.parentId);
+  let parent = m.nav.find(
+    (o) => o.id === (current?.type === 'record' ? current.databaseId : current?.parentId),
+  );
   while (parent && !visited.has(parent.id)) {
     ancestors.unshift(parent);
     visited.add(parent.id);
@@ -98,20 +103,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
             <PanelLeft size={18} />
           </IconButton>
           {(mobile || m.sidebarCollapsed) && !m.sidebar && <WorkspaceSwitcher model={m} compact />}
-          {ancestors.map((o) => (
-            <Fragment key={o.id}>
-              <Button
-                className="hidden max-w-36 truncate p-1 text-sm md:block"
-                onClick={() => m.navigate(o)}
-              >
-                {titleOf(o)}
-              </Button>
-              <ChevronRight size={13} className="hidden shrink-0 md:block" />
-            </Fragment>
-          ))}
-          <span className="hidden truncate text-secondary md:block">
-            {current ? titleOf(current) : t('workspace.home')}
-          </span>
+          <Breadcrumbs ancestors={ancestors} current={current} navigate={m.navigate} />
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <SyncStatus model={m} />
@@ -134,7 +126,13 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
   const preview = m.objects.find((o) => o.id === m.previewId && !o.deleted);
   return (
     <div className="min-h-dvh">
+      {m.graph && m.runtime && (
+        <Suspense fallback={<output>{t('links.updating')}</output>}>
+          <RelationshipGraph model={m} />
+        </Suspense>
+      )}
       <div
+        hidden={m.graph}
         ref={layoutRef}
         className="tio-workspace-content min-w-0 md:ml-[var(--sidebar-width)]"
         data-sidebar-collapsed={m.sidebarCollapsed}
@@ -146,12 +144,17 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
       >
         {m.runtime ? (
           <EditorSurface
+            contentLinks={m.contentLinks}
+            onOpenGraph={(id) => void m.openGraph(id)}
             mentions={m.mentions}
             appSlice={appSlice}
             presentation={presentation}
             runtime={m.runtime}
             workspaceId={m.session!.workspaceId}
-            target={{ id: m.contentReady ? m.selected || current?.id || '' : '' }}
+            target={{
+              id: m.contentReady ? m.selected || current?.id || '' : '',
+              ...m.locationTarget,
+            }}
             renderEmptyState={
               m.contentReady
                 ? undefined
@@ -191,10 +194,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
               if (mode === 'preview') m.setPreviewId(id);
               else if (o) m.navigate(o);
             }}
-            onNavigate={({ id }) => {
-              const o = m.runtime!.snapshot().find((o) => o.id === id);
-              if (o) m.navigate(o);
-            }}
+            onNavigate={(target) => void m.navigateTarget(target)}
           />
         ) : (
           <>
@@ -239,6 +239,8 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
           >
             <div className="page-preview md:min-h-[78dvh]">
               <EditorSurface
+                contentLinks={m.contentLinks}
+                onOpenGraph={(id) => void m.openGraph(id)}
                 mentions={m.mentions}
                 appSlice={appSlice}
                 presentation={presentation}
@@ -252,10 +254,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
                   )
                 }
                 onOpen={({ id }) => m.setPreviewId(id)}
-                onNavigate={({ id }) => {
-                  const o = m.objects.find((o) => o.id === id);
-                  if (o) m.navigate(o);
-                }}
+                onNavigate={(target) => void m.navigateTarget(target)}
               />
             </div>
           </Modal>

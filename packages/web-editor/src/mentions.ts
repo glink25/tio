@@ -15,7 +15,7 @@ import type { EditorSession } from '@tio/workspace';
 export function createMentionService(
   runtime: EditorSession,
   workspaceId: string,
-  navigate: (id: string) => void,
+  navigate: (id: string, anchor?: import('@tio/core').ContentAnchor) => void,
   people?: () => Promise<MentionCandidate[]>,
 ): MentionService {
   const listeners = new Set<() => void>();
@@ -262,7 +262,7 @@ export function createMentionService(
       if (ref.workspaceId !== workspaceId) return;
       const url = githubMentionUrl(ref);
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
-      else navigate(ref.id);
+      else if (ref.kind !== 'github-user') navigate(ref.id, ref.anchor);
     },
   };
 }

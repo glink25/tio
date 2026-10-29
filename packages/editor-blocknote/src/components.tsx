@@ -18,6 +18,7 @@ import { interactionOwner, interactionHasKind } from '@tio/ui';
 import { GripVertical, Plus, Trash2 } from 'lucide-react';
 import { forwardRef, type ReactElement, type MouseEventHandler } from 'react';
 
+import { CopyBlockLink } from './content-links';
 import { useEditorMotion } from './motion';
 
 // These upstream leaf renderers use React 19's ref-as-prop convention.
@@ -157,6 +158,7 @@ function BlockMenu() {
   const dictionary = useDictionary();
   return (
     <DragHandleMenu>
+      <CopyBlockLink />
       <DeleteBlockItem />
       <BlockColorsItem>{dictionary.drag_handle.colors_menuitem}</BlockColorsItem>
       <TableRowHeaderItem>{dictionary.drag_handle.header_row_menuitem}</TableRowHeaderItem>

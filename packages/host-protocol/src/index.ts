@@ -1,3 +1,4 @@
+import type { RelationsProvider } from '@tio/core';
 import { DomainError, validateAssetSize, type AssetPolicy } from '@tio/core';
 import {
   HostError,
@@ -22,6 +23,7 @@ import {
   type RepositoryCapabilities,
 } from '@tio/core';
 
+import { relationPage, searchPage } from './relations';
 import {
   envelope,
   snapshot as parseSnapshot,
@@ -75,6 +77,8 @@ export class BridgeRepository implements WorkspaceRepository {
   attachmentPolicy!: AssetPolicy;
   storageCapabilities?: RepositoryCapabilities;
   automation?: AutomationProvider;
+  relations?: RelationsProvider;
+  private relationListeners = new Set<Parameters<RelationsProvider['subscribe']>[0]>();
   private automationRuns: AutomationRun[] = [];
   private automationListeners = new Set<() => void>();
   constructor(
@@ -92,6 +96,12 @@ export class BridgeRepository implements WorkspaceRepository {
         return;
       if (message.kind === 'extensionChanged') {
         const payload = message.payload;
+        if (
+          payload?.name === 'tio.relations' &&
+          payload.version === 1 &&
+          ['content', 'access', 'ready'].includes(payload.reason)
+        )
+          this.relationListeners.forEach((fn) => fn(payload.reason));
         if (
           this.automation &&
           payload?.name === 'tio.automation' &&
@@ -149,6 +159,29 @@ export class BridgeRepository implements WorkspaceRepository {
       throw new HostError('invalid');
     this.attachmentPolicy = Object.freeze({ ...policy });
     this.ready = true;
+    if (this.capabilities.some((c) => c.name === 'tio.relations' && c.version === 1))
+      this.relations = {
+        queryReferences: async (query) =>
+          relationPage(
+            await this.request('queryReferences', query),
+            this.context.workspaceId,
+            'references',
+          ),
+        queryReferenceOccurrences: async (query) =>
+          relationPage(
+            await this.request('queryReferenceOccurrences', query),
+            this.context.workspaceId,
+            'occurrences',
+          ),
+        queryGraph: async (query) =>
+          relationPage(await this.request('queryGraph', query), this.context.workspaceId, 'graph'),
+        subscribe: (fn) => {
+          this.relationListeners.add(fn);
+          return () => {
+            this.relationListeners.delete(fn);
+          };
+        },
+      };
     if (this.capabilities.some((c) => c.name === 'tio.automation' && c.version === 1)) {
       const state = await this.invoke('tio.automation', 1, { operation: 'state' });
       if (!validAutomationState(state)) throw new HostError('invalid');
@@ -253,9 +286,7 @@ export class BridgeRepository implements WorkspaceRepository {
     return this.page(await this.request('queryNavigation', query));
   }
   async search(query: SearchQuery): Promise<SearchPage> {
-    const page = this.page(await this.request('search', query));
-    if (!Number.isSafeInteger(page.scanned) || page.scanned < 0) throw new HostError('invalid');
-    return page;
+    return searchPage(await this.request('search', query), this.context.workspaceId);
   }
   private page(value: any) {
     if (
@@ -353,6 +384,7 @@ export class BridgeRepository implements WorkspaceRepository {
   }
   dispose() {
     this.closed = true;
+    this.relationListeners.clear();
     this.unsubscribe();
     this.listeners.clear();
     this.automation?.dispose();
@@ -422,7 +454,10 @@ export function serveHost(
           if (p?.version !== PROTOCOL_VERSION) throw new HostError('unsupported');
           ready = true;
           result = {
-            capabilities: extensions.map((e) => e.capability),
+            capabilities: [
+              ...extensions.map((e) => e.capability),
+              ...(repository.relations ? [{ name: 'tio.relations', version: 1 }] : []),
+            ],
             storageCapabilities: repository.storageCapabilities,
             attachmentPolicy: repository.attachmentPolicy,
           };
@@ -436,6 +471,12 @@ export function serveHost(
             case 'readObjects':
               if (!repository.readObjects) throw new HostError('unsupported');
               result = await repository.readObjects(p.ids);
+              break;
+            case 'queryReferences':
+            case 'queryReferenceOccurrences':
+            case 'queryGraph':
+              if (!repository.relations) throw new HostError('unsupported');
+              result = await repository.relations[request.method](p);
               break;
             case 'queryMentions':
             case 'queryNavigation':
@@ -529,6 +570,16 @@ export function serveHost(
       }
     })();
   });
+  const stopRelations = repository.relations?.subscribe((reason) => {
+    if (ready && !disposed)
+      transport.send({
+        ...context,
+        protocol: PROTOCOL_VERSION,
+        id: crypto.randomUUID(),
+        kind: 'extensionChanged',
+        payload: { name: 'tio.relations', version: 1, reason },
+      });
+  });
   const stopChanges = repository.subscribeChanges((event) => {
     if (ready && !disposed)
       transport.send({
@@ -557,6 +608,7 @@ export function serveHost(
       });
   });
   return () => {
+    stopRelations?.();
     stopAutomation?.();
     disposed = true;
     unsubscribe();
