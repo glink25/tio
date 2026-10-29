@@ -11,6 +11,7 @@ export function folderContent(root: string, workspaceId: string): FileWorkspaceC
   root = resolve(root);
   const location = (path: string) => join(root, ...segments(path));
   const files: FileStorageProvider = {
+    attachmentPolicy: { maxFileBytes: 20 * 1024 * 1024, maxImageBytes: 10 * 1024 * 1024 },
     async list(prefix) {
       const base = location(prefix.replace(/\/$/, ''));
       try {

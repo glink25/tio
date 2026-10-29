@@ -131,6 +131,7 @@ it('replays local edits against an external update even if change notification w
     assetIds: [],
   });
   const repository: WorkspaceRepository = {
+    attachmentPolicy: host.attachmentPolicy,
     readSnapshot: () => host.readSnapshot(),
     commit: (request) => host.commit(request),
     getCommitResult: (id) => host.getCommitResult(id),
@@ -213,3 +214,77 @@ for (const kind of ['memory', 'indexeddb']) {
     }
   });
 }
+
+it('enforces provider attachment limits before runtime edits and across the host bridge', async () => {
+  const { GitHubClient, GitHubProvider } = await import('@tio/provider-github');
+  const provider = new GitHubProvider(new GitHubClient(async () => 'unused'), {
+    repositoryId: 1,
+    fullName: 'owner/repo',
+    branch: 'main',
+    workspaceId: 'w',
+  });
+  class Replica extends LocalStore {
+    override readonly attachmentPolicy = provider.attachmentPolicy;
+  }
+  const repository = new Replica('attachment-limits', crypto.randomUUID());
+  const pair = createLoopback();
+  const context = { sessionId: 'limits', workspaceId: 'w' };
+  const stop = serveHost(pair.host, context, repository);
+  const bridge = new BridgeRepository(pair.client, context);
+  let runtime: WorkspaceRuntime | undefined;
+  try {
+    await bridge.connect();
+    expect(bridge.attachmentPolicy).toEqual({
+      maxFileBytes: 10 * 1024 * 1024,
+      maxImageBytes: 10 * 1024 * 1024,
+    });
+    runtime = await WorkspaceRuntime.open(bridge);
+    const maxBytes = provider.attachmentPolicy.maxFileBytes;
+    const oversize = {
+      name: 'large.bin',
+      mime: 'application/octet-stream',
+      bytes: new Uint8Array(maxBytes + 1),
+    };
+    const expected = { code: 'asset-size', details: { maxBytes } };
+    expect(() => runtime!.upload('w', oversize)).toThrow(expect.objectContaining(expected));
+    expect(() => runtime!.create([], undefined, new Map([['large', oversize]]))).toThrow(
+      expect.objectContaining(expected),
+    );
+    expect(() => runtime!.import([], new Map([['large', oversize]]))).toThrow(
+      expect.objectContaining(expected),
+    );
+    await expect(repository.stageAsset('large', oversize)).rejects.toMatchObject(expected);
+    await expect(bridge.stageAsset('large', oversize)).rejects.toMatchObject(expected);
+    expect(runtime.snapshot()).toEqual([]);
+    expect(runtime.attachmentPolicy).toEqual(provider.attachmentPolicy);
+    const exact = { ...oversize, bytes: new Uint8Array(maxBytes) };
+    await bridge.stageAsset('exact', exact);
+    await bridge.releaseAsset('exact');
+    runtime.upload('w', exact);
+    await runtime.flush();
+    expect((await repository.readSnapshot()).entries).toHaveLength(1);
+    const local = new MemoryRepository();
+    expect(local.attachmentPolicy).toEqual({
+      maxFileBytes: 20 * 1024 * 1024,
+      maxImageBytes: 10 * 1024 * 1024,
+    });
+    await local.stageAsset('local-exact', {
+      ...exact,
+      bytes: new Uint8Array(local.attachmentPolicy.maxFileBytes),
+    });
+    await expect(
+      local.stageAsset('local-large', {
+        ...exact,
+        bytes: new Uint8Array(local.attachmentPolicy.maxFileBytes + 1),
+      }),
+    ).rejects.toMatchObject({
+      code: 'asset-size',
+      details: { maxBytes: local.attachmentPolicy.maxFileBytes },
+    });
+  } finally {
+    runtime?.dispose();
+    bridge.dispose();
+    stop();
+    repository.close();
+  }
+});

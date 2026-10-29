@@ -9,7 +9,13 @@ import { HostError, type Domain, type AccessPolicy, type WorkspaceRepository } f
 import { EditorSchemaContext, defaultEditorSchema, type EditorSchema } from '@tio/editor-blocknote';
 import { BridgeRepository, type HostContext, type Transport } from '@tio/host-protocol';
 import { createLanguageInstance, I18nextProvider, type Language } from '@tio/i18n';
-import { ThemeContext, PortalContext, Notifications, NotificationContext } from '@tio/ui';
+import {
+  AssetPolicyContext,
+  ThemeContext,
+  PortalContext,
+  Notifications,
+  NotificationContext,
+} from '@tio/ui';
 import { ViewExtensionsContext, type ViewExtensions } from '@tio/views';
 import { WorkspaceRuntime, type WorkspaceState } from '@tio/workspace';
 import { useMemo, useState, useEffect, useId, type ReactNode } from 'react';
@@ -77,7 +83,9 @@ export function EditorSurface(props: EditorSurfaceProps & { presentation: Presen
       theme={props.presentation.theme}
       locale={props.presentation.locale}
     >
-      <Surface {...props} readOnly={props.presentation.readOnly || props.readOnly} />
+      <AssetPolicyContext.Provider value={props.runtime.attachmentPolicy}>
+        <Surface {...props} readOnly={props.presentation.readOnly || props.readOnly} />
+      </AssetPolicyContext.Provider>
     </Environment>
   );
 }

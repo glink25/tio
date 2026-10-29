@@ -1,3 +1,4 @@
+import { validateAssetSize } from '@tio/core';
 import {
   fullAccess,
   createDefaultRegistry,
@@ -21,6 +22,9 @@ export class FileWorkspaceContent implements WorkspaceContentPort {
   private cache = new Map<string, { fingerprint: string; object: TioObject }>();
   private types: ObjectRegistry;
   private tree: ChunkTree;
+  get attachmentPolicy() {
+    return this.files.attachmentPolicy;
+  }
   readonly maxFileBytes: number;
   snapshot?: () => Promise<import('@tio/core').ContentSnapshot>;
   constructor(
@@ -38,6 +42,7 @@ export class FileWorkspaceContent implements WorkspaceContentPort {
           publish: async (objects, assets) => {
             const changes = new Map<string, Uint8Array | null>();
             const overlay: FileStorageProvider = {
+              attachmentPolicy: files.attachmentPolicy,
               canWrite: () => files.canWrite?.() ?? Promise.resolve(true),
               list: (prefix) => snapshot.files.list(prefix),
               read: (path) =>
@@ -148,6 +153,7 @@ export class FileWorkspaceContent implements WorkspaceContentPort {
     return this.files.read(`workspaces/${this.workspaceId}/${object.assetPath}`);
   }
   async writeAsset(object: TioObject, bytes: Uint8Array) {
+    validateAssetSize(bytes.byteLength, this.attachmentPolicy.maxFileBytes);
     const path = `workspaces/${this.workspaceId}/${object.assetPath}`;
     if (this.filesPresent.has(path)) return;
     await this.files.write(path, bytes);

@@ -33,6 +33,12 @@ React 接入的 `EditorSurface` 可通过 `renderEmptyState()` 定制无当前�
 - [领域与 UI 扩展](../../../docs/protocols/extensions.md)
 - [App Slice](app-slice.md)
 
+## 附件上传
+
+宿主仓库必须提供 `attachmentPolicy: { maxFileBytes, maxImageBytes }`，单位为字节，等于上限时允许上传；`EditorSession.attachmentPolicy` 将策略传给所有内容上传入口。文件类 provider 通过 `FileStorageProvider` 和 `WorkspaceContentPort` 传递同一策略。GitHub 所有附件均不超过 10 MB；设备存储与本地文件夹普通附件不超过 20 MB，封面和图标图片不超过 10 MB（1 MB = 1024 × 1024 字节）。
+
+上传区点击选择后立即处理，数据库附件沿用字段草稿的完成/取消行为。普通上传及导入的附件均在运行时创建前和仓库暂存时校验；通用附件元数据构造不指定上限。超限返回 `DomainError('asset-size', ..., { maxBytes })`，由 UI 使用实际限制生成提示与错误。图片格式和解码校验独立于大小策略。
+
 ## 提及
 
 正文和数据库提及字段共用 `MentionService`，支持同空间页面、数据库、记录及宿主提供的 GitHub 人员。仓库提供独立 `queryMentions({text, after, limit, kind?})` 和批量 `readMetadata(ids)`；记录摘要标题从数据库标题字段派生，不读取目标正文到运行时缓存。

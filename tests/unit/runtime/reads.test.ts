@@ -16,6 +16,7 @@ it('opens a targeted body without reading a snapshot or unrelated bodies; export
   });
   const reads: string[][] = [];
   const repo: WorkspaceRepository = {
+    attachmentPolicy: memory.attachmentPolicy,
     readSnapshot: vi.fn(async () => {
       throw new Error('Full snapshot forbidden');
     }),

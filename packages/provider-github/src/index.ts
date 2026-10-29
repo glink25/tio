@@ -110,6 +110,7 @@ async function gitBlobSha(bytes: Uint8Array) {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 export class GitHubProvider implements FileStorageProvider {
+  readonly attachmentPolicy = { maxFileBytes: 10 * 1024 * 1024, maxImageBytes: 10 * 1024 * 1024 };
   private blobs = new Map<string, Uint8Array>();
   private observed?: GitHubSnapshotState;
   private async remember(sha: string, bytes: Uint8Array) {
@@ -163,6 +164,7 @@ export class GitHubProvider implements FileStorageProvider {
     const entries = new Map(state.entries);
     let permission: Promise<boolean> | undefined;
     const files: FileStorageProvider = {
+      attachmentPolicy: this.attachmentPolicy,
       canWrite: () => (permission ??= this.canWrite()),
       list: async (prefix) =>
         [...entries]

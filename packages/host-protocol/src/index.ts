@@ -1,3 +1,4 @@
+import { DomainError, validateAssetSize, type AssetPolicy } from '@tio/core';
 import {
   HostError,
   isMentionReference,
@@ -55,7 +56,7 @@ export interface Message extends HostContext {
   kind: 'request' | 'response' | 'changed' | 'extensionChanged';
   method?: string;
   payload?: any;
-  error?: { code: string; message: string };
+  error?: { code: string; message: string; details?: { maxBytes: number } };
 }
 export class BridgeRepository implements WorkspaceRepository {
   private pending = new Map<
@@ -71,6 +72,7 @@ export class BridgeRepository implements WorkspaceRepository {
   private closed = false;
   private ready = false;
   capabilities: Capability[] = [];
+  attachmentPolicy!: AssetPolicy;
   storageCapabilities?: RepositoryCapabilities;
   automation?: AutomationProvider;
   private automationRuns: AutomationRun[] = [];
@@ -117,7 +119,9 @@ export class BridgeRepository implements WorkspaceRepository {
       clearTimeout(request.timer);
       if (message.error)
         request.reject(
-          new HostError(message.error.code as HostError['code'], message.error.message),
+          message.error.code === 'asset-size'
+            ? new DomainError('asset-size', message.error.message, message.error.details)
+            : new HostError(message.error.code as HostError['code'], message.error.message),
         );
       else request.resolve(message.payload);
     });
@@ -133,6 +137,17 @@ export class BridgeRepository implements WorkspaceRepository {
       throw new HostError('invalid');
     this.capabilities = response.capabilities;
     this.storageCapabilities = response.storageCapabilities;
+    const policy = response.attachmentPolicy;
+    if (
+      !policy ||
+      !Number.isSafeInteger(policy.maxFileBytes) ||
+      policy.maxFileBytes <= 0 ||
+      !Number.isSafeInteger(policy.maxImageBytes) ||
+      policy.maxImageBytes <= 0 ||
+      policy.maxImageBytes > policy.maxFileBytes
+    )
+      throw new HostError('invalid');
+    this.attachmentPolicy = Object.freeze({ ...policy });
     this.ready = true;
     if (this.capabilities.some((c) => c.name === 'tio.automation' && c.version === 1)) {
       const state = await this.invoke('tio.automation', 1, { operation: 'state' });
@@ -303,6 +318,7 @@ export class BridgeRepository implements WorkspaceRepository {
     };
   };
   async stageAsset(id: string, asset: AssetData) {
+    validateAssetSize(asset.bytes.byteLength, this.attachmentPolicy.maxFileBytes);
     const reference = await this.transport.upload(asset.bytes);
     // Timeout is not cancellation: the host releases after consuming, or the lease expires.
     await this.request('stageAsset', { id, name: asset.name, mime: asset.mime, reference });
@@ -408,6 +424,7 @@ export function serveHost(
           result = {
             capabilities: extensions.map((e) => e.capability),
             storageCapabilities: repository.storageCapabilities,
+            attachmentPolicy: repository.attachmentPolicy,
           };
         } else {
           if (!ready) throw new HostError('unsupported', 'Handshake required');
@@ -504,7 +521,9 @@ export function serveHost(
         reply(request, result);
       } catch (error) {
         reply(request, undefined, {
-          code: error instanceof HostError ? error.code : 'unavailable',
+          code:
+            error instanceof HostError || error instanceof DomainError ? error.code : 'unavailable',
+          ...(error instanceof DomainError ? { details: error.details } : {}),
           message: error instanceof Error ? error.message : String(error),
         });
       }

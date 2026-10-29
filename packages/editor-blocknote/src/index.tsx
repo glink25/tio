@@ -13,6 +13,7 @@ import {
   SuggestionMenuController,
   DesktopFormattingToolbarController,
   SideMenuController,
+  FilePanelController,
   getDefaultReactSlashMenuItems,
 } from '@blocknote/react';
 import { BlockNoteView } from '@blocknote/shadcn';
@@ -26,17 +27,21 @@ import {
   type BlockContentCodec,
 } from './codec';
 import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './components';
+import { EditorFilePanel, EditorFormattingToolbar } from './file-panel';
+import { insertTransferredFiles } from './file-transfer';
 import { EditorInteraction, isolateInteractionNodeView } from './interaction';
 import { MentionMenu, SlashMenu } from './mention-menu';
 import { MobileEditorToolbar, TouchScroll, useTouchEditing } from './mobile-toolbar';
 import { useEditorMotion } from './motion';
 export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
-import { useT, useTranslation } from '@tio/i18n';
+import { errorMessage, useT, useTranslation } from '@tio/i18n';
 import {
   MentionLabel,
   EmptyNotice,
   useTheme,
+  useAssetPolicy,
+  useNotify,
   PortalContext,
   EditHistoryContext,
   InteractionBoundary,
@@ -220,6 +225,15 @@ export function EditorContent({
   renderDatabase,
   renderAppSlice,
 }: EditorProps) {
+  const attachmentPolicy = useAssetPolicy();
+  const notify = useNotify();
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const floatingMotion = useEditorMotion();
   const t = useT();
   const { schema, codecs, slashItems } = useContext(EditorSchemaContext);
@@ -234,6 +248,20 @@ export function EditorContent({
   const sent = useRef(new Set<string>());
   const editor = useCreateBlockNote({
     schema,
+    _tiptapOptions: {
+      editorProps: {
+        handleDOMEvents: {
+          drop: (_view, event): boolean =>
+            insertTransferredFiles(
+              event,
+              editor,
+              attachmentPolicy,
+              (error) => notify(errorMessage(error, t)),
+              () => active.current,
+            ),
+        },
+      },
+    },
     disableExtensions: history ? ['history'] : undefined,
     extensions: [
       TouchScroll(),
@@ -247,6 +275,16 @@ export function EditorContent({
     pasteHandler: (context) => {
       history?.breakGroup();
       try {
+        if (
+          insertTransferredFiles(
+            context.event,
+            context.editor,
+            attachmentPolicy,
+            (error) => notify(errorMessage(error, t)),
+            () => active.current,
+          )
+        )
+          return true;
         return paste(context);
       } finally {
         history?.breakGroup();
@@ -356,6 +394,7 @@ export function EditorContent({
                 ? { default: portal }
                 : undefined
           }
+          filePanel={false}
           slashMenu={false}
           sideMenu={false}
           linkToolbar={false}
@@ -384,12 +423,18 @@ export function EditorContent({
           }}
         >
           {!readOnly && <MentionMenu />}
+          {!readOnly && (
+            <FilePanelController filePanel={EditorFilePanel} floatingUIOptions={floatingMotion} />
+          )}
           {!readOnly &&
             (touch ? (
               <MobileEditorToolbar onPortal={setChromePortal} />
             ) : (
               <>
-                <DesktopFormattingToolbarController floatingUIOptions={floatingMotion} />
+                <DesktopFormattingToolbarController
+                  formattingToolbar={EditorFormattingToolbar}
+                  floatingUIOptions={floatingMotion}
+                />
                 <EditorLinkToolbar />
                 <SideMenuController sideMenu={EditorSideMenu} floatingUIOptions={floatingMotion} />
               </>

@@ -1,4 +1,5 @@
 import { prepareAsset } from '@tio/assets';
+import { validateAssetSize } from '@tio/core';
 import {
   createDomain,
   navigationObject,
@@ -767,6 +768,8 @@ export class WorkspaceRuntime {
     prepared = false,
     historyOptions?: HistoryOptions,
   ) {
+    for (const asset of assets.values())
+      validateAssetSize(asset.bytes.byteLength, this.attachmentPolicy.maxFileBytes);
     if (this.disposed || (this.closing && !prepared)) throw new Error('Workspace is closed');
     if (!prepared && !this.store.getState().writable) throw new HostError('permission');
     intent = { ...intent, timestamp: intent.timestamp ?? new Date().toISOString() };
@@ -1318,7 +1321,11 @@ export class WorkspaceRuntime {
   redo() {
     this.travelHistory(this.redos, this.history);
   }
+  get attachmentPolicy() {
+    return this.repository.attachmentPolicy;
+  }
   upload(workspaceId: string, file: AssetData) {
+    validateAssetSize(file.bytes.byteLength, this.attachmentPolicy.maxFileBytes);
     const { metadata, assets, ref } = prepareAsset(workspaceId, file);
     this.dispatch({ type: 'create', objects: [metadata] }, false, assets);
     return ref;
@@ -1389,6 +1396,7 @@ export type EditorSession = Pick<
   | 'breakHistoryGroup'
   | 'recordDraft'
   | 'discardDraft'
+  | 'attachmentPolicy'
   | 'upload'
   | 'readAsset'
   | 'flush'

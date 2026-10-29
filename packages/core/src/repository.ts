@@ -1,4 +1,5 @@
 import type { AutomationProvider, MutationSource } from './automation';
+import { DomainError } from './diagnostics';
 import type { TioObject } from './index';
 import type { MentionPage, MentionQuery } from './mentions';
 export interface WorkspaceEvent {
@@ -18,6 +19,14 @@ export interface WorkspaceSnapshot {
   denied?: string[];
 }
 export type WorkspaceMutation = (objects: TioObject[]) => TioObject[];
+export interface AssetPolicy {
+  readonly maxFileBytes: number;
+  readonly maxImageBytes: number;
+}
+export function validateAssetSize(size: number, maxBytes: number) {
+  if (size > maxBytes)
+    throw new DomainError('asset-size', 'Asset exceeds provider limit', { maxBytes });
+}
 export interface AssetData {
   name: string;
   mime: string;
@@ -70,6 +79,7 @@ export interface ObjectPage extends WorkspaceSnapshot {
   next?: string;
 }
 export interface WorkspaceRepository extends AssetStore {
+  readonly attachmentPolicy: AssetPolicy;
   automation?: AutomationProvider;
   queryObjects?(query: ObjectQuery): Promise<ObjectPage>;
   /** Explicit full traversal, reserved for export and providers which scan locally. */

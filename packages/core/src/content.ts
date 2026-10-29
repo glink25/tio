@@ -1,6 +1,7 @@
 import type { AccessPolicy, TioObject } from './index';
 /** Object-level remote contract. Database backends never need file layout semantics. */
 export interface WorkspaceContentPort {
+  readonly attachmentPolicy: import('./repository').AssetPolicy;
   snapshot?(): Promise<ContentSnapshot>;
   authorize(): Promise<AccessPolicy>;
   list(): Promise<string[]>;

@@ -1,5 +1,6 @@
 import type { FileStorageProvider } from '@tio/storage';
 export class MemoryProvider implements FileStorageProvider {
+  readonly attachmentPolicy = { maxFileBytes: 20 * 1024 * 1024, maxImageBytes: 10 * 1024 * 1024 };
   files = new Map<string, Uint8Array>();
   beforeWrite?: (path: string) => Promise<void>;
   fail = false;

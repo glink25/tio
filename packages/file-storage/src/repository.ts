@@ -1,3 +1,4 @@
+import { validateAssetSize } from '@tio/core';
 import {
   applyCommit,
   assertAccess as checkAccess,
@@ -56,6 +57,9 @@ async function fingerprint(object: unknown) {
 }
 /** Files are authoritative. Serialization is shared across instances by the host lock. */
 export class FileRepository implements WorkspaceRepository {
+  get attachmentPolicy() {
+    return this.content.attachmentPolicy;
+  }
   readonly storageCapabilities: RepositoryCapabilities = {
     persistence: 'recoverable',
     offline: false,
@@ -337,8 +341,8 @@ export class FileRepository implements WorkspaceRepository {
     };
   }
   async stageAsset(id: string, asset: AssetData) {
-    if (!/^[a-zA-Z0-9_-]+$/.test(id) || asset.bytes.byteLength > 20 * 1024 * 1024)
-      throw new HostError('invalid');
+    validateAssetSize(asset.bytes.byteLength, this.attachmentPolicy.maxFileBytes);
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new HostError('invalid');
     this.staged.set(id, structuredClone(asset));
   }
   async readAsset(id: string) {

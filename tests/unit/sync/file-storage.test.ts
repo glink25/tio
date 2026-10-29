@@ -119,3 +119,35 @@ it('reuses unchanged block chunks when editing a large document', async () => {
   expect(files.files.size - initial).toBeLessThan(initial / 4);
   expect(await content.read('p')).toEqual(page);
 });
+
+it('applies the file provider attachment policy to direct repository and content writes', async () => {
+  const { FileRepository } = await import('@tio/file-storage');
+  const files = new MemoryProvider();
+  Object.assign(files.attachmentPolicy, { maxFileBytes: 8, maxImageBytes: 4 });
+  const content = new FileWorkspaceContent(files, 'w');
+  const repository = new FileRepository(content, 'w', {
+    load: async () => undefined,
+    save: async () => {},
+  });
+  const asset = object('asset', 'w', {
+    id: 'asset',
+    filename: 'a.bin',
+    mime: 'application/octet-stream',
+    byteSize: 8,
+    assetPath: 'assets/a.bin',
+  });
+  expect(repository.attachmentPolicy).toEqual(files.attachmentPolicy);
+  await repository.stageAsset('asset', {
+    name: 'a.bin',
+    mime: 'application/octet-stream',
+    bytes: new Uint8Array(8),
+  });
+  await content.writeAsset(asset, new Uint8Array(8));
+  await expect(
+    repository.stageAsset('too-large', { name: 'a.bin', mime: '', bytes: new Uint8Array(9) }),
+  ).rejects.toMatchObject({ code: 'asset-size', details: { maxBytes: 8 } });
+  await expect(content.writeAsset(asset, new Uint8Array(9))).rejects.toMatchObject({
+    code: 'asset-size',
+    details: { maxBytes: 8 },
+  });
+});

@@ -1,3 +1,4 @@
+import { validateAssetSize } from '@tio/core';
 import { DomainError } from '@tio/core';
 import type { PageQuery, RecordQuery, RepositoryCapabilities } from '@tio/core';
 import {
@@ -30,6 +31,7 @@ export interface Entry {
   sync: Record<string, { base: TioObject; revision: number }>;
 }
 export class LocalStore {
+  readonly attachmentPolicy = { maxFileBytes: 20 * 1024 * 1024, maxImageBytes: 10 * 1024 * 1024 };
   /** Enabled only by replica providers; user commits still require local asset bytes. */
   remoteAssets = false;
   get assetPolicy(): 'eager' | 'on-demand' {
@@ -328,8 +330,8 @@ export class LocalStore {
     };
   }
   async stageAsset(id: string, asset: AssetData) {
-    if (!/^[a-zA-Z0-9_-]+$/.test(id) || asset.bytes.byteLength > 20 * 1024 * 1024)
-      throw new HostError('invalid');
+    validateAssetSize(asset.bytes.byteLength, this.attachmentPolicy.maxFileBytes);
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new HostError('invalid');
     await (await this.db).put('settings', asset, this.key('$asset/' + id));
   }
   readAsset(id: string): Promise<AssetData | undefined> {

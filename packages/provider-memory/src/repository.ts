@@ -1,3 +1,4 @@
+import { validateAssetSize } from '@tio/core';
 import type { PageQuery, RecordQuery, RepositoryCapabilities } from '@tio/core';
 import {
   applyCommit,
@@ -21,6 +22,7 @@ import {
 import { ScanningQueries } from '@tio/database/repository';
 /** Reference host implementation. Only this host owns durable state in embedding tests. */
 export class MemoryRepository implements WorkspaceRepository {
+  readonly attachmentPolicy = { maxFileBytes: 20 * 1024 * 1024, maxImageBytes: 10 * 1024 * 1024 };
   automation?: import('@tio/core').AutomationProvider;
   readonly storageCapabilities: RepositoryCapabilities = {
     persistence: 'atomic',
@@ -208,8 +210,8 @@ export class MemoryRepository implements WorkspaceRepository {
     return this.readableResult(result);
   }
   async stageAsset(id: string, asset: AssetData) {
-    if (!/^[a-zA-Z0-9_-]+$/.test(id) || asset.bytes.byteLength > 20 * 1024 * 1024)
-      throw new HostError('invalid');
+    validateAssetSize(asset.bytes.byteLength, this.attachmentPolicy.maxFileBytes);
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new HostError('invalid');
     this.staged.set(id, structuredClone(asset));
   }
   async readAsset(id: string) {

@@ -1,6 +1,7 @@
 import { isMediaUrl } from '@tio/core';
-import { useT } from '@tio/i18n';
-import { Button } from '@tio/ui';
+import { errorMessage, useT } from '@tio/i18n';
+import { Button, FilePicker, useAssetPolicy } from '@tio/ui';
+import { Image } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 
 import { MediaImageError, validateImageFile, validateImageUrl } from './image';
@@ -15,6 +16,7 @@ export default function ImagePanel({
   onSelect: (url: string) => void;
 }) {
   const t = useT();
+  const policy = useAssetPolicy();
   const [link, setLink] = useState('');
   const [preview, setPreview] = useState('');
   const [busy, setBusy] = useState(false);
@@ -37,7 +39,7 @@ export default function ImagePanel({
         setError(
           error instanceof MediaImageError
             ? t(`media.error.${error.code}`)
-            : t('media.error.upload'),
+            : errorMessage(error, t),
         );
     } finally {
       if (token === generation.current) setBusy(false);
@@ -46,31 +48,22 @@ export default function ImagePanel({
   return (
     <div className="space-y-4 p-4" data-history="native">
       {mode === 'upload' ? (
-        <>
-          <label className="flex cursor-pointer flex-col items-center gap-3 rounded-lg border border-dashed border-line p-8 text-center text-secondary">
-            <span>{t('media.uploadImage')}</span>
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              aria-label={t('media.uploadImage')}
-              disabled={busy}
-              className="max-w-full text-sm"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (!file) return;
-                const token = ++generation.current;
-                void run(async () => {
-                  await validateImageFile(file);
-                  if (token !== generation.current) return;
-                  const url = await upload(file);
-                  if (token === generation.current) onSelect(url);
-                });
-              }}
-            />
-          </label>
-          <p className="text-center text-xs text-muted">{t('media.uploadHint')}</p>
-        </>
+        <FilePicker
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          icon={<Image size={24} />}
+          label={t('media.uploadImage')}
+          hint={t('media.uploadHint', { maxMB: policy.maxImageBytes / (1024 * 1024) })}
+          busy={busy}
+          onSelect={([file]) => {
+            const token = ++generation.current;
+            void run(async () => {
+              await validateImageFile(file, policy.maxImageBytes);
+              if (token !== generation.current) return;
+              const url = await upload(file);
+              if (token === generation.current) onSelect(url);
+            });
+          }}
+        />
       ) : (
         <form
           className="space-y-3"

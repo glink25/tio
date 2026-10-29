@@ -46,6 +46,8 @@ import {
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { EditorFileReplaceButton } from './file-panel';
+
 const touchQuery = '(hover: none) and (pointer: coarse)';
 export function useTouchEditing() {
   const [touch, setTouch] = useState(
@@ -213,6 +215,7 @@ function TouchToolbar() {
               history?.breakGroup();
             }}
           />
+          <EditorFileReplaceButton />
           <MoreActions />
         </FormattingToolbar>
       </div>

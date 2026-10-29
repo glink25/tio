@@ -1,4 +1,5 @@
 import { AssetResolver, fileData } from '@tio/assets/browser';
+import { validateAssetSize } from '@tio/core';
 import {
   HostError,
   id,
@@ -241,6 +242,7 @@ export function useEditorController(props: EditorSurfaceProps) {
   };
   const upload = async (file: File) => {
     if (readOnly) throw new Error('Read only');
+    validateAssetSize(file.size, runtime.attachmentPolicy.maxFileBytes);
     const ref = runtime.upload(workspaceId, await fileData(file));
     await runtime.flush();
     return ref;

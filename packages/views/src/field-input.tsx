@@ -1,3 +1,4 @@
+import { validateAssetSize } from '@tio/core';
 /* oxlint-disable jsx-a11y/no-noninteractive-element-interactions -- The editor group handles Enter/Escape bubbling from its input controls. */
 /* oxlint-disable jsx-a11y/prefer-tag-over-role -- Rich searchable options render colored tags and record links. */
 import {
@@ -11,9 +12,10 @@ import {
 } from '@tio/core';
 import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
+import { errorMessage } from '@tio/i18n';
 import { useT, type TranslationKey } from '@tio/i18n';
+import { FilePicker, useAssetPolicy } from '@tio/ui';
 import { OptionsPanel } from '@tio/ui';
-import { LoadingIndicator } from '@tio/ui';
 import { MentionLabel, MentionPicker, Button, useDraftHistory, Popover } from '@tio/ui';
 import { useState, useEffect, useRef } from 'react';
 
@@ -383,6 +385,17 @@ export function FieldInput(props: FieldInputProps) {
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [search, setSearch] = useState(''),
     [error, setError] = useState('');
+  const assetPolicy = useAssetPolicy();
+  const uploadGeneration = useRef(0);
+  const uploadPending = useRef(false);
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  useEffect(
+    () => () => {
+      uploadGeneration.current++;
+    },
+    [field.id],
+  );
   const [uploading, setUploading] = useState(false),
     [failed, setFailed] = useState<File[]>([]);
   const draftHistory = useDraftHistory(draft, (next) => {
@@ -421,22 +434,32 @@ export function FieldInput(props: FieldInputProps) {
   if (readOnly || isDerivedField(field)) return <FieldValue {...props} />;
   const uploadFiles = async (files: File[]) => {
     if (!upload) return;
+    if (uploadPending.current) return;
+    uploadPending.current = true;
+    const token = uploadGeneration.current;
+    setError('');
     setUploading(true);
     setFailed([]);
+    let uploadError = '';
     const refs: string[] = [],
       failures: File[] = [];
     for (const file of files) {
       try {
-        if (file.size > 20 * 1024 * 1024) throw new Error('20 MB');
+        validateAssetSize(file.size, assetPolicy.maxFileBytes);
         refs.push(await upload(file));
+        if (token !== uploadGeneration.current) return;
       } catch (e) {
+        if (token !== uploadGeneration.current) return;
         failures.push(file);
-        setError(String(e));
+        uploadError = errorMessage(e, t);
       }
     }
-    if (props.commitMode === 'form') change([...(Array.isArray(draft) ? draft : []), ...refs]);
+    if (props.commitMode === 'form')
+      change([...(Array.isArray(draftRef.current) ? draftRef.current : []), ...refs]);
     else draftHistory.update((previous) => [...(Array.isArray(previous) ? previous : []), ...refs]);
+    setError(uploadError);
     setFailed(failures);
+    uploadPending.current = false;
     setUploading(false);
   };
   let control;
@@ -479,24 +502,14 @@ export function FieldInput(props: FieldInputProps) {
           />
         ))}
         {upload ? (
-          <label className="block text-xs text-muted">
-            {uploading ? (
-              <LoadingIndicator label={t('database.uploading')} />
-            ) : (
-              t('database.uploadFiles')
-            )}
-            <input
-              className="mt-2 block w-full text-xs"
-              aria-label={t('database.uploadFiles')}
-              type="file"
-              multiple
-              disabled={uploading}
-              onChange={(e) => {
-                void uploadFiles(Array.from(e.target.files ?? []));
-                e.target.value = '';
-              }}
-            />
-          </label>
+          <FilePicker
+            error={error}
+            label={t('upload.file')}
+            hint={t('upload.limit', { maxMB: assetPolicy.maxFileBytes / (1024 * 1024) })}
+            multiple
+            busy={uploading}
+            onSelect={(files) => void uploadFiles(files)}
+          />
         ) : (
           <p className="text-xs text-muted">{t('database.uploadUnavailable')}</p>
         )}
@@ -651,7 +664,7 @@ export function FieldInput(props: FieldInputProps) {
       }}
     >
       {control}
-      {error && (
+      {error && field.type !== 'files' && (
         <p role="alert" className="text-xs break-words text-red-600">
           {t('database.invalidValue', { message: error })}
         </p>

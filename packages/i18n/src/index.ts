@@ -48,13 +48,16 @@ export function setLanguage(language: Language) {
 }
 export { i18n };
 export { useTranslation, I18nextProvider } from 'react-i18next';
-export function errorMessage(error: unknown): string {
-  if (error instanceof DomainError) return t(domainErrorKeys[error.code]);
-  if (error instanceof ConnectionAccessError) return t(accessErrorKeys[error.state.code]);
-  if (error instanceof HostError) return t(hostErrorKeys[error.code]);
-  if (error instanceof StorageError) return t(storageErrorKeys[error.code]);
+export function errorMessage(error: unknown, translate: typeof t = t): string {
+  if (error instanceof DomainError)
+    return translate(domainErrorKeys[error.code], {
+      maxMB: error.details ? error.details.maxBytes / (1024 * 1024) : undefined,
+    });
+  if (error instanceof ConnectionAccessError) return translate(accessErrorKeys[error.state.code]);
+  if (error instanceof HostError) return translate(hostErrorKeys[error.code]);
+  if (error instanceof StorageError) return translate(storageErrorKeys[error.code]);
   const message = error instanceof Error ? error.message : String(error);
-  return t('errors.details', { message });
+  return translate('errors.details', { message });
 }
 const domainErrorKeys = {
   stale: 'errors.stale',

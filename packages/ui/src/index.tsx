@@ -1,3 +1,4 @@
+export { FilePicker, AssetPolicyContext, useAssetPolicy } from './file-picker';
 import type { DocumentIcon } from '@tio/core';
 
 import { builtinIcons, useMediaUrl, type MediaResolver } from './media';

@@ -54,6 +54,7 @@ describe('workspace command persistence', () => {
       release = resolve;
     });
     const repository: WorkspaceRepository = {
+      attachmentPolicy: store.attachmentPolicy,
       readSnapshot: () => store.readSnapshot(),
       subscribeChanges: (listener) => store.subscribeChanges(listener),
       getCommitResult: (id) => store.getCommitResult(id),

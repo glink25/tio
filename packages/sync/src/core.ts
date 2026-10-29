@@ -66,6 +66,7 @@ export class SyncCore {
           },
         });
         const content: WorkspaceContentPort = {
+          attachmentPolicy: snapshot.content.attachmentPolicy,
           authorize: () => snapshot.content.authorize(),
           list: () => snapshot.content.list(),
           read: (id, options) => snapshot.content.read(id, options),

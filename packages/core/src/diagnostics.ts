@@ -16,6 +16,7 @@ export class DomainError extends Error {
   constructor(
     readonly code: DomainErrorCode,
     message: string = code,
+    readonly details?: { maxBytes: number },
   ) {
     super(message);
     this.name = 'DomainError';

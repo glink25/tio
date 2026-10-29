@@ -71,6 +71,7 @@ export function githubBinding(connection: Connection): ConnectionBinding {
     return value;
   };
   class Replica extends LocalStore {
+    override readonly attachmentPolicy: import('@tio/core').AssetPolicy;
     private completeKey: string;
     constructor(
       instanceId: string,
@@ -79,6 +80,7 @@ export function githubBinding(connection: Connection): ConnectionBinding {
       const endpoint = endpoints.get(workspaceId);
       if (!endpoint) throw new Error('GitHub workspace is not bound');
       super(`${instanceId}/${endpoint.repositoryId}/${endpoint.branch}`);
+      this.attachmentPolicy = provider(endpoint).attachmentPolicy;
       this.remoteAssets = true;
       this.storageCapabilities.prefetch = 'all';
       this.completeKey = `tio.github.complete.${this.instanceId}`;

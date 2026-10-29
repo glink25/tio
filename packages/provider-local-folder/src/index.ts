@@ -1,5 +1,6 @@
 import { StorageError, segments, type FileStorageProvider } from '@tio/storage';
 export class LocalFolderProvider implements FileStorageProvider {
+  readonly attachmentPolicy = { maxFileBytes: 20 * 1024 * 1024, maxImageBytes: 10 * 1024 * 1024 };
   constructor(readonly handle: FileSystemDirectoryHandle) {}
   async deleteWorkspace(workspaceId: string) {
     if (!/^[a-zA-Z0-9_-]+$/.test(workspaceId))
