@@ -120,3 +120,31 @@ it('keeps a failed dependency load pending and retries the original command', as
   expect(runtime.state.getState().pending).toBe(0);
   runtime.dispose();
 });
+
+// An undiscovered target must remain loading, then hydrate through normal repository events.
+it('keeps unknown targets pending until acquisition completes and preserves edits during discovery', async () => {
+  const { LocalStore } = await import('@tio/local-store');
+  const host = new LocalStore(crypto.randomUUID(), crypto.randomUUID());
+  let complete = false;
+  Object.defineProperty(host, 'contentReady', { get: () => complete });
+  const runtime = await WorkspaceRuntime.open(host, undefined, undefined, { targetId: 'late' });
+  try {
+    expect(runtime.state.getState().loads.late).toBe('loading');
+    expect(runtime.state.getState().contentReady).toBe(false);
+    await host.receiveRemote(page('late'), 0, 'e', page('late'));
+    await vi.waitFor(() => expect(runtime.state.getState().loads.late).toBe('ready'));
+    runtime.patch('late', { title: 'Unconfirmed input' });
+    await host.receiveRemote(page('other'), 0, 'e', page('other'));
+    await runtime.flush();
+    expect(runtime.snapshot().find((o) => o.id === 'late')?.title).toBe('Unconfirmed input');
+    await runtime.ensure(['absent']);
+    expect(runtime.state.getState().loads.absent).toBe('loading');
+    complete = true;
+    await host.batch([]);
+    await vi.waitFor(() => expect(runtime.state.getState().loads.absent).toBe('missing'));
+    expect(runtime.state.getState().contentReady).toBe(true);
+  } finally {
+    runtime.dispose(true);
+    host.close();
+  }
+});

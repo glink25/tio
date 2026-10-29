@@ -23,6 +23,7 @@ import {
 } from '@tio/core';
 import { ScanningRelations } from '@tio/database/relations';
 import { ScanningQueries } from '@tio/database/repository';
+import { canonical } from '@tio/serialization';
 import type { IDBPDatabase, IDBPObjectStore } from 'idb';
 
 import { openHostDatabase } from './database';
@@ -193,7 +194,13 @@ export class LocalStore {
     const receipt = (await (await this.db).get('settings', this.key('$commit/' + id)))?.result;
     return receipt ? this.readableResult(receipt) : undefined;
   }
-  async commit(request: CommitRequest): Promise<CommitResult> {
+  commit(request: CommitRequest): Promise<CommitResult> {
+    return this.writeCommit(request);
+  }
+  private async writeCommit(
+    request: CommitRequest,
+    received?: { endpoint: string; remote: TioObject; clean: boolean },
+  ): Promise<CommitResult> {
     const tx = (await this.db).transaction(
       ['objects', 'assets', 'settings', 'recovery'],
       'readwrite',
@@ -271,12 +278,25 @@ export class LocalStore {
           throw new HostError('invalid', 'Missing asset');
         const entry = byId.get(object.id)!;
         const old = originals.get(object.id);
-        await tx
-          .objectStore('objects')
-          .put(
-            { ...entry, instanceId: this.instanceId, version: version + 1, sync: old?.sync ?? {} },
-            this.key(object.id),
-          );
+        await tx.objectStore('objects').put(
+          {
+            ...entry,
+            instanceId: this.instanceId,
+            version: version + 1,
+            sync: {
+              ...old?.sync,
+              ...(received
+                ? {
+                    [received.endpoint]: {
+                      base: received.remote,
+                      revision: received.clean ? entry.revision : 0,
+                    },
+                  }
+                : {}),
+            },
+          },
+          this.key(object.id),
+        );
       }
       const changed = request.changes.map((object) => byId.get(object.id)!);
       const result: CommitResult = { status: 'committed', version: version + 1, entries: changed };
@@ -358,13 +378,19 @@ export class LocalStore {
   async releaseAsset(id: string) {
     await (await this.db).delete('settings', this.key('$asset/' + id));
   }
-  private async internalCommit(request: CommitRequest) {
+  private async internalCommit(
+    request: CommitRequest,
+    received?: { endpoint: string; remote: TioObject; clean: boolean },
+  ) {
     const sequence = ++this.internalSequence;
-    const result = await this.commit({
-      ...request,
-      clientId: this.internalClientId,
-      sequence,
-    });
+    const result = await this.writeCommit(
+      {
+        ...request,
+        clientId: this.internalClientId,
+        sequence,
+      },
+      received,
+    );
     if (result.status === 'committed')
       await this.acknowledgeCommits(this.internalClientId, sequence);
     return result;
@@ -393,7 +419,7 @@ export class LocalStore {
       if (result.status === 'committed') return value;
     }
   }
-  async batch(objects: TioObject[], assets = new Map<string, Blob>()) {
+  async batch(objects: TioObject[], assets = new Map<string, Blob>(), origin = 'host') {
     for (const [id, blob] of assets)
       await this.stageAsset(id, {
         name: '',
@@ -406,6 +432,7 @@ export class LocalStore {
         id: crypto.randomUUID(),
         expectedVersion: snapshot.version,
         changes: objects,
+        origin,
         assetIds: [...assets.keys()],
       });
       if (result.status === 'committed') return;
@@ -432,6 +459,34 @@ export class LocalStore {
       recovery,
       assetIds: asset ? [value.id] : [],
     });
+    return result.status === 'committed' ? revision + 1 : null;
+  }
+  async receiveRemote(
+    object: TioObject,
+    revision: number,
+    endpoint: string,
+    remote: TioObject,
+    recovery?: unknown[],
+  ): Promise<number | null> {
+    if (object.id !== remote.id || object.workspaceId !== remote.workspaceId)
+      throw new HostError('invalid', 'Remote baseline identity mismatch');
+    const snapshot = await this.readObjects([object.id]);
+    if ((snapshot.entries[0]?.revision ?? 0) !== revision) return null;
+    const asset =
+      object.type === 'asset'
+        ? await (await this.db).get('settings', this.key('$asset/' + object.id))
+        : undefined;
+    const result = await this.internalCommit(
+      {
+        id: crypto.randomUUID(),
+        expectedVersion: snapshot.version,
+        changes: [object],
+        origin: 'sync',
+        recovery,
+        assetIds: asset ? [object.id] : [],
+      },
+      { endpoint, remote, clean: canonical(object) === canonical(remote) },
+    );
     return result.status === 'committed' ? revision + 1 : null;
   }
   /** ACK records the actual uploaded snapshot; later edits remain dirty. */

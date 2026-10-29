@@ -246,3 +246,97 @@ it('host deletion discards the active session, preserves retry after failure, an
     await services.dispose();
   }
 });
+
+// Exercise the actual host policy with a non-GitHub synchronization binding.
+it('initializes a manual remote replica progressively through the shared host and keeps edits unpublished', async () => {
+  const values = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key),
+  });
+  vi.stubGlobal('document', {
+    visibilityState: 'visible',
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  const { WorkspaceServices } = await import('../../../apps/web/src/services/workspace-services');
+  const { FileWorkspaceContent } = await import('@tio/file-storage');
+  const { MemoryProvider } = await import('@tio/provider-memory');
+  const workspaceId = crypto.randomUUID();
+  const workspace = object('workspace', workspaceId, {
+    id: workspaceId,
+    name: 'Manual replica',
+    manualSync: true,
+  });
+  const first = object('page', workspaceId, { id: 'a', title: 'Available early', blocks: [] });
+  const slow = object('page', workspaceId, { id: 'z', title: 'Available later', blocks: [] });
+  const repository = new LocalStore(crypto.randomUUID());
+  let complete = false;
+  Object.defineProperty(repository, 'contentReady', { get: () => complete });
+  const files = new MemoryProvider();
+  const content = new FileWorkspaceContent(files, workspaceId);
+  for (const value of [workspace, first, slow]) await content.write(value);
+  const read = content.read.bind(content);
+  const blocked = deferred();
+  vi.spyOn(content, 'read').mockImplementation(async (id, options) => {
+    if (id === slow.id && !complete) await blocked.promise;
+    return read(id, options);
+  });
+  const write = vi.spyOn(content, 'write');
+  const automation = vi.fn();
+  const services = new WorkspaceServices(() => ({
+    identity: { provider: 'test-replica', name: 'Test replica', icon: '', details: [] },
+    adapter: {
+      supportsSync: true,
+      getAccessState: async () => ({ code: 'available', scope: { connectionId: 'device' } }),
+      subscribe: () => () => {},
+      classifyError: () => ({ code: 'unreachable', scope: { connectionId: 'device' } }),
+    },
+    isContentReady: () => complete,
+    repository: () => repository,
+    discover: async () => [workspace],
+    automation,
+    sync: () => ({
+      store: repository,
+      content,
+      endpoint: 'test',
+      initialization: {
+        isComplete: () => complete,
+        complete: async () => {
+          complete = true;
+          await repository.batch([], undefined, 'sync');
+        },
+      },
+    }),
+    content: () => content,
+  }));
+  try {
+    await services.connect('device');
+    await services.refreshRemote();
+    await vi.waitFor(async () => expect(await repository.get(first.id)).toBeDefined());
+    const session = (await services.sessions()).find((s) => s.workspaceId === workspaceId)!;
+    const runtime = await services.open(session);
+    expect(services.manualSync).toBe(true);
+    expect(services.contentReady).toBe(false);
+    expect(runtime.snapshot().find((o) => o.id === first.id)).toBeDefined();
+    expect(automation).not.toHaveBeenCalled();
+    runtime.patch(first.id, { title: 'Saved locally during initialization' });
+    await runtime.flush();
+    blocked.resolve();
+    await vi.waitFor(() => expect(services.contentReady).toBe(true));
+    expect(automation).toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect((await read(first.id))!.title).toBe(first.title);
+    expect((await repository.get(first.id))!.object.title).toBe(
+      'Saved locally during initialization',
+    );
+    await services.sync();
+    expect((await read(first.id, { fresh: true }))!.title).toBe(
+      'Saved locally during initialization',
+    );
+  } finally {
+    blocked.resolve();
+    await services.dispose();
+  }
+});

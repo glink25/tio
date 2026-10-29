@@ -37,7 +37,7 @@ export interface ConnectionBinding {
     content: WorkspaceContentPort;
     endpoint: string;
     pollMs?: number;
-    onComplete?: () => void;
+    initialization: import('@tio/sync').ReplicaInitialization;
   };
   content(workspaceId: string): WorkspaceContentPort | undefined;
 }

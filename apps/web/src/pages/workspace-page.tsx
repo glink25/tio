@@ -154,14 +154,14 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
             runtime={m.runtime}
             workspaceId={m.session!.workspaceId}
             target={{
-              id: m.contentReady ? m.selected || current?.id || '' : '',
+              id: current ? m.selected || current.id : m.contentReady ? m.selected : '',
               ...m.locationTarget,
             }}
             renderEmptyState={
               m.contentReady
                 ? undefined
                 : () =>
-                    m.status.visual === 'attention' || (m.manualSync && !m.syncing) ? (
+                    m.status.visual === 'attention' ? (
                       <div
                         role="alert"
                         className="flex min-h-[60dvh] flex-col items-center justify-center gap-4 p-12 text-center text-sm"

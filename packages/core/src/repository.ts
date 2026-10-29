@@ -80,6 +80,8 @@ export interface ObjectPage extends WorkspaceSnapshot {
   next?: string;
 }
 export interface WorkspaceRepository extends AssetStore {
+  /** False while a replica is still acquiring its initial contents. */
+  readonly contentReady?: boolean;
   readonly attachmentPolicy: AssetPolicy;
   automation?: AutomationProvider;
   relations?: RelationsProvider;
@@ -112,6 +114,14 @@ export interface SyncStateStore {
   recover(value: unknown): Promise<void>;
 }
 export interface SyncRepository extends SyncStateStore {
+  /** Atomically receive a remote baseline without marking unpublished local changes clean. */
+  receiveRemote(
+    object: TioObject,
+    revision: number,
+    endpoint: string,
+    remote: TioObject,
+    recovery?: unknown[],
+  ): Promise<number | null>;
   readonly assetPolicy?: 'eager' | 'on-demand';
   entries(): Promise<SyncEntry[]>;
   all(): Promise<TioObject[]>;

@@ -1,6 +1,7 @@
 import { GitHubAdapter } from '@tio/adapter-github';
 import { AutomationRunner } from '@tio/automation';
 import type { Connection, TioObject, SearchQuery, PageQuery } from '@tio/core';
+import { HostError } from '@tio/core';
 import { WorkerSearch } from '@tio/database/search-browser';
 import { FileWorkspaceContent } from '@tio/file-storage';
 import { t } from '@tio/i18n';
@@ -88,17 +89,30 @@ export function githubBinding(connection: Connection): ConnectionBinding {
     protected override relationsReady() {
       return this.complete;
     }
-    markComplete() {
+    async markComplete() {
       if (!disposed) {
         localStorage.setItem(this.completeKey, 'true');
         this.relations.invalidate('ready');
+        // Versioned notification also refreshes queries and readiness in other windows.
+        await this.batch([], undefined, 'sync');
       }
     }
     get complete() {
       return localStorage.getItem(this.completeKey) === 'true';
     }
+    get contentReady() {
+      return this.complete;
+    }
     private requireComplete() {
-      if (!this.complete) throw new Error('工作空间仍在下载，请同步完成后重试');
+      if (!this.complete) throw new HostError('pending');
+    }
+    override queryRecords(query: import('@tio/core').RecordQuery) {
+      this.requireComplete();
+      return super.queryRecords(query);
+    }
+    override queryObjects(query: import('@tio/core').ObjectQuery) {
+      this.requireComplete();
+      return super.queryObjects(query);
     }
     private workerSearch: WorkerSearch = new WorkerSearch(this);
     search(query: SearchQuery): Promise<import('@tio/core').SearchPage> {
@@ -204,7 +218,10 @@ export function githubBinding(connection: Connection): ConnectionBinding {
       content: content(workspaceId),
       endpoint: `${userId}/${endpoints.get(workspaceId)!.repositoryId}/${endpoints.get(workspaceId)!.branch}/${workspaceId}`,
       pollMs: 60000,
-      onComplete: () => replicas.get(workspaceId)?.markComplete(),
+      initialization: {
+        isComplete: () => replicas.get(workspaceId)?.complete === true,
+        complete: () => replicas.get(workspaceId)!.markComplete(),
+      },
     }),
     async create(workspaceId) {
       await adapter.create(workspaceId);

@@ -58,6 +58,7 @@ export interface WorkspaceState {
   loads: Record<string, 'loading' | 'ready' | 'missing' | 'denied' | 'error'>;
   loadErrors: Record<string, string>;
   navigationComplete: boolean;
+  contentReady: boolean;
   writable: boolean;
   version: number;
   status: 'loading' | 'saved' | 'saving' | 'error';
@@ -83,6 +84,7 @@ export const emptyWorkspaceState: WorkspaceState = {
   loads: {},
   loadErrors: {},
   navigationComplete: false,
+  contentReady: true,
   writable: true,
   version: 0,
   status: 'loading',
@@ -309,6 +311,7 @@ export class WorkspaceRuntime {
       const ids = new Set(objects.map((o) => o.id));
       this.store.setState({
         version: this.version,
+        contentReady: this.repository.contentReady !== false,
         objects: this.projectWaiting([
           ...objects,
           ...[...this.navigation.values()].filter((o) => !ids.has(o.id)),
@@ -363,6 +366,11 @@ export class WorkspaceRuntime {
         this.accept(entries.filter((e) => this.baseline.has(e.object.id)));
       } else this.accept(entries);
       this.publish();
+      // A replica notification may make previously undiscovered targets available.
+      const waiting = Object.entries(this.store.getState().loads)
+        .filter(([id, state]) => state === 'loading' && !this.reads.has(id))
+        .map(([id]) => id);
+      if (waiting.length) void this.ensure(waiting, true).catch(() => {});
     } catch (error) {
       if (!this.disposed && generation === this.readGeneration) this.fail(error);
       if (initial) throw error;
@@ -401,6 +409,8 @@ export class WorkspaceRuntime {
               : await this.repository.readSnapshot();
             if (this.disposed) return;
             const entry = page.entries.find((e) => e.object.id === id);
+            if (!entry && !page.denied?.includes(id) && this.repository.contentReady === false)
+              return;
             if (entry) this.accept([entry]);
             else this.baseline.delete(id);
             this.store.setState({

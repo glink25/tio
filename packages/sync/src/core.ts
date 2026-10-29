@@ -79,6 +79,7 @@ export class SyncCore {
           },
         };
         const pass = new SyncCore(store, content, this.endpoint, this.workspaceId, this.types);
+        Object.defineProperty(pass, 'stopped', { get: () => this.stopped });
         pass.lazyAssets = this.store.assetPolicy === 'on-demand';
         pass.onDirty = this.onDirty;
         pass.onProgress = this.onProgress;
@@ -93,6 +94,127 @@ export class SyncCore {
       throw new Error('Remote version changed repeatedly; synchronization will retry');
     }
     return this.runDirect();
+  }
+  /** Initial replica acquisition: progressive local receipts, never remote publication. */
+  async pull(targetId?: string) {
+    this.issues = [];
+    const content = this.content.snapshot ? (await this.content.snapshot()).content : this.content;
+    if (this.stopped) return;
+    const ids = new Set(await content.list());
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+    const accepted = new Set<string>();
+    let loaded = 0;
+    this.onProgress(0, ids.size);
+    const visit = async (id: string): Promise<boolean> => {
+      if (this.stopped) return false;
+      if (visited.has(id)) return accepted.has(id);
+      // Parent cycles are handled only after the complete acquisition.
+      if (visiting.has(id)) return true;
+      if (!ids.has(id)) return false;
+      visiting.add(id);
+      try {
+        const remote = await content.read(id);
+        if (this.stopped) return false;
+        if (!remote) throw new DomainError('missing');
+        if (remote.id !== id || remote.workspaceId !== this.workspaceId)
+          throw new DomainError('identity');
+        let assetStaged = false;
+        if (remote.parentId) await visit(remote.parentId);
+        if (remote.databaseId && !(await visit(remote.databaseId)))
+          throw new DomainError('missing', 'Database dependency unavailable');
+        if (!remote.deleted) {
+          for (const assetId of assetReferences(remote))
+            if (!(await visit(assetId)) || (await this.store.get(assetId))?.object.type !== 'asset')
+              throw new DomainError('asset-pending');
+          if (remote.type === 'asset' && this.store.assetPolicy !== 'on-demand') {
+            if (!(await this.store.readAsset(id))) {
+              const bytes = await content.readAsset(remote);
+              if (!bytes) throw new DomainError('asset-missing');
+              if (this.stopped) return false;
+              await this.store.stageAsset(id, {
+                name: remote.filename ?? '',
+                mime: remote.mime!,
+                bytes,
+              });
+              assetStaged = true;
+            }
+          }
+        }
+        for (let attempt = 0; attempt < 32; attempt++) {
+          if (this.stopped) return false;
+          const entry = await this.store.get(id);
+          if (this.stopped) return false;
+          const base = entry?.sync[this.endpoint]?.base;
+          const result = entry
+            ? merge(base, entry.object, remote, this.types)
+            : { merged: remote, recovered: [] };
+          if (
+            !assetStaged &&
+            canonical(entry?.object) === canonical(result.merged) &&
+            canonical(base) === canonical(remote)
+          ) {
+            accepted.add(id);
+            return true;
+          }
+          if (
+            (await this.store.receiveRemote(
+              result.merged,
+              entry?.revision ?? 0,
+              this.endpoint,
+              remote,
+              result.recovered,
+            )) !== null
+          ) {
+            if (canonical(result.merged) !== canonical(remote)) this.onDirty();
+            accepted.add(id);
+            return true;
+          }
+        }
+        throw new HostError('conflict');
+      } catch (error) {
+        this.issue(id, error);
+        return false;
+      } finally {
+        visiting.delete(id);
+        visited.add(id);
+        this.onProgress(++loaded, ids.size);
+      }
+    };
+    await visit(this.workspaceId);
+    if (!accepted.has(this.workspaceId) && !this.stopped && !ids.has(this.workspaceId))
+      this.issue(this.workspaceId, new DomainError('missing'));
+    if (targetId) await visit(targetId);
+    for (const id of [...ids].sort()) await visit(id);
+    if (this.stopped || this.issues.length) return;
+    const entries = await this.store.entries();
+    const objects = new Map(entries.map((entry) => [entry.object.id, entry.object]));
+    if (
+      entries.some(
+        (entry) => canonical(entry.object) !== canonical(entry.sync[this.endpoint]?.base),
+      )
+    )
+      this.onDirty();
+    for (const entry of entries) {
+      if (entry.sync[this.endpoint] && !ids.has(entry.object.id))
+        this.issue(entry.object.id, new DomainError('missing'));
+      if (!entry.object.deleted && entry.object.parentId && !objects.has(entry.object.parentId))
+        this.issue(entry.object.id, new DomainError('missing', 'Parent unavailable'));
+    }
+    if (this.issues.length) return;
+    const originals = new Map(entries.map((entry) => [entry.object.id, entry]));
+    for (const object of repairTree(entries.map((entry) => entry.object))) {
+      const original = originals.get(object.id)!;
+      if (this.stopped) return;
+      if (object === original.object) continue;
+      if (
+        (await this.store.reconcile(object, original.revision, [
+          { reason: 'parent-cycle', object: original.object },
+        ])) === null
+      )
+        throw new HostError('conflict');
+      this.onDirty();
+    }
   }
   private lazyAssets = false;
   private async runDirect() {

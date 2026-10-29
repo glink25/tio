@@ -1,4 +1,4 @@
-import { editable, id, type TioObject } from '@tio/core';
+import { HostError, editable, id, type TioObject } from '@tio/core';
 import { useT } from '@tio/i18n';
 import { SelectInput } from '@tio/ui';
 import { LoadingIndicator } from '@tio/ui';
@@ -23,25 +23,30 @@ export function DatabaseEmbed({
   const t = useT();
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState('');
+  const [pending, setPending] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let live = true;
     const release = m.runtime.retain([databaseId]);
     setLoaded(false);
     setLoadError('');
+    setPending(false);
     void m.runtime
       .loadDatabase(databaseId)
       .then(() => {
         if (live) setLoaded(true);
       })
       .catch((error) => {
-        if (live) setLoadError(String(error));
+        if (live) {
+          if (error instanceof HostError && error.code === 'pending') setPending(true);
+          else setLoadError(String(error));
+        }
       });
     return () => {
       live = false;
       release();
     };
-  }, [m.runtime, databaseId, retry]);
+  }, [m.runtime, databaseId, retry, m.state.contentReady]);
   const db = m.objects.find((o) => o.id === databaseId);
   const views = m.objects.filter(
     (o) => o.type === 'databaseView' && o.databaseId === databaseId && !o.deleted,
@@ -85,6 +90,8 @@ export function DatabaseEmbed({
         .records({ databaseId, view, text: queryText, after: cursor, limit: 100 })
         .then((page) => {
           if (!live) return;
+          setPending(false);
+          setLoadError('');
           setResult({ rows: page.entries.map((e) => e.object), next: page.next, key: pageKey });
           setQuerying(false);
           setShowQuerying(false);
@@ -92,7 +99,8 @@ export function DatabaseEmbed({
         })
         .catch((error) => {
           if (live) {
-            setLoadError(String(error));
+            if (error instanceof HostError && error.code === 'pending') setPending(true);
+            else setLoadError(String(error));
             setQuerying(false);
             setShowQuerying(false);
             window.clearTimeout(indicator);
@@ -116,7 +124,7 @@ export function DatabaseEmbed({
         <Button onClick={() => setRetry((n) => n + 1)}>{t('common.retry')}</Button>
       </EmptyNotice>
     );
-  if (!loaded) return <LoadNotice runtime={m.runtime} id={databaseId} loading inline />;
+  if (pending || !loaded) return <LoadNotice runtime={m.runtime} id={databaseId} loading inline />;
   if (!db || db.deleted) return <EmptyNotice>{t('database.missing')}</EmptyNotice>;
   const choose = (next: string) => {
     setSelected(next);
