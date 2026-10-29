@@ -1,10 +1,9 @@
 import { t, useTranslation } from '@tio/i18n';
-import { ThemeSwitcher, LanguageSwitcher } from '@tio/ui';
 import { useEffect, useState } from 'react';
 
-import { setPresentation, usePresentation } from '../services/browser-presentation';
 import { Brand } from './brand';
 import { GitHubIcon } from './github-icon';
+import { WelcomeSettings } from './welcome-settings';
 
 function TypedLine() {
   const { i18n } = useTranslation();
@@ -66,7 +65,6 @@ function TypedLine() {
 }
 
 export function LoginHero() {
-  const presentation = usePresentation();
   const [hidden, setHidden] = useState(() => document.hidden);
   useEffect(() => {
     const update = () => setHidden(document.hidden);
@@ -92,16 +90,7 @@ export function LoginHero() {
             <GitHubIcon />
           </a>
         </div>
-        <div className="flex items-center gap-2">
-          <ThemeSwitcher
-            value={presentation.themePreference}
-            onChange={(theme) => setPresentation({ themePreference: theme })}
-          />
-          <LanguageSwitcher
-            value={presentation.locale}
-            onChange={(locale) => setPresentation({ locale })}
-          />
-        </div>
+        <WelcomeSettings />
       </header>
       <div className="login-brand-main">
         <Brand hero />

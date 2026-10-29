@@ -30,6 +30,7 @@ import {
   FileText,
   Database,
   BookOpen,
+  Pencil,
 } from 'lucide-react';
 import { useRef, useState, useEffect, useCallback } from 'react';
 
@@ -68,11 +69,11 @@ export function EditorSurface(props: EditorSurfaceProps) {
   const locationRoot = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
-    if (props.autoFocusTitle) {
+    if (props.autoFocusTitle && !m.readOnly) {
       titleRef.current?.focus();
       titleRef.current?.select();
     }
-  }, [props.autoFocusTitle, props.target.id]);
+  }, [props.autoFocusTitle, props.target.id, m.readOnly]);
   const prefKey = `tio.page-width.${props.workspaceId}.${props.target.id}`;
   const [widthPref, setWidthPref] = useState<Record<string, boolean>>({});
   let fullWidth = current?.type === 'database';
@@ -97,7 +98,7 @@ export function EditorSurface(props: EditorSurfaceProps) {
         <Menu
           trigger={
             <IconButton label={t('common.more')} className="p-1.5">
-              <MoreHorizontal size={19} />
+              {m.readingMode ? <Pencil size={19} /> : <MoreHorizontal size={19} />}
             </IconButton>
           }
         >
@@ -130,11 +131,18 @@ export function EditorSurface(props: EditorSurfaceProps) {
                 {t(fullWidth ? 'ui.readingWidth' : 'ui.fullWidth')}
               </MenuItem>
               {appModeAction}
-              <MenuItem onSelect={() => m.setReadOnly(!m.readOnly)}>
-                <BookOpen size={15} />
-                {t(m.readOnly ? 'common.edit' : 'common.read')}
-              </MenuItem>
             </>
+          )}
+          {knownTypes.has(current.type) && (
+            <MenuItem
+              disabled={
+                !!props.readOnly || (props.readingMode !== undefined && !props.onReadingModeChange)
+              }
+              onSelect={() => m.setReadingMode(!m.readingMode)}
+            >
+              {m.readingMode ? <Pencil size={15} /> : <BookOpen size={15} />}
+              {t(m.readingMode ? 'common.edit' : 'common.read')}
+            </MenuItem>
           )}
           {transfer.menu}
           <MenuSeparator />

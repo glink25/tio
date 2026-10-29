@@ -7,6 +7,7 @@ import { useRef, useState } from 'react';
 import { Brand } from '../components/brand';
 import { Identity } from '../components/identity';
 import { LoginHero } from '../components/login-hero';
+import { WelcomeSettings } from '../components/welcome-settings';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { connectionEntries } from '../services/connection-entry';
 
@@ -43,6 +44,7 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
           )}
           <div className="flex min-w-0 items-center gap-2 text-sm text-muted">
             <Identity identity={m.identity} />
+            <WelcomeSettings />
           </div>
         </header>
         {m.syncStatus.access?.code === 'reauthorization-required' && (
@@ -127,24 +129,15 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
             <div key={id} className="flex flex-col gap-2">
               <fieldset className="flex gap-3" aria-label={t(label)}>
                 {buttons.map(
-                  ({
-                    id: buttonId,
-                    label: buttonLabel,
-                    icon: Icon,
-                    emphasis,
-                    available,
-                    hint,
-                    run,
-                    iconOnly,
-                  }) =>
-                    iconOnly ? (
+                  ({ id: buttonId, label: buttonLabel, icon: Icon, emphasis, run, iconOnly }) =>
+                    iconOnly && buttons.length > 1 ? (
                       <Button
                         key={buttonId}
                         aria-label={t(buttonLabel)}
                         title={t(buttonLabel)}
                         variant={emphasis === 'primary' ? 'primary' : 'outline'}
                         className="size-[54px] [&>svg]:size-[19px]"
-                        disabled={m.busy || startingEntry || !available}
+                        disabled={m.busy || startingEntry}
                         onClick={() => void start(run)}
                       >
                         <Icon />
@@ -158,8 +151,7 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
                             ? 'min-h-[54px] flex-1 py-3 [&>svg]:size-[19px]'
                             : 'connection-button'
                         }
-                        disabled={m.busy || startingEntry || !available}
-                        aria-describedby={hint ? `${buttonId}-hint` : undefined}
+                        disabled={m.busy || startingEntry}
                         onClick={() => void start(run)}
                       >
                         <Icon />
@@ -168,14 +160,6 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
                     ),
                 )}
               </fieldset>
-              {buttons.map(
-                ({ id: buttonId, hint }) =>
-                  hint && (
-                    <p key={buttonId} id={`${buttonId}-hint`} className="text-xs text-muted">
-                      {t(hint)}
-                    </p>
-                  ),
-              )}
             </div>
           ))}
         </div>

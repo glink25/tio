@@ -12,7 +12,6 @@ export function folderEntries(actions: ConnectionEntryActions): ConnectionEntry[
       icon: FolderOpen,
       emphasis: 'secondary',
       available,
-      hint: available ? undefined : 'welcome.unsupported',
       run: actions.folder,
     },
   ];

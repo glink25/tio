@@ -24,6 +24,8 @@ await editor.dispose();
 
 宿主传入已解析的 `Presentation`，编辑器不写宿主偏好。每个实例具有独立主题、语言和门户上下文。`onReady` 在挂载后触发；`open` 先刷新并重新检查关闭状态；`dispose` 异步合并并发调用，刷新失败时保留会话。不得因远端故障丢弃当前草稿。
 
+React 接入的 `EditorSurface` 支持可选的 `readingMode` 和 `onReadingModeChange(boolean)` 受控阅读模式，由宿主保存偏好；未提供时使用编辑器临时状态。`readOnly` 与 `presentation.readOnly` 仍是不可由阅读菜单解除的强制只读约束。Web 宿主在浏览器统一记住阅读选择，没有偏好时移动布局默认阅读、桌面默认编辑。阅读模式中的铅笔仍打开文档菜单。
+
 React 接入的 `EditorSurface` 可通过 `renderEmptyState()` 定制无当前目标时的区域；默认显示空页面插画和新建按钮。Web 宿主首次下载尚未完成时暂不传入内容目标，通过该插槽展示骨架屏或初始化错误与重试；就绪后恢复原目标。指定目标的加载、缺失和权限提示仍由编辑器处理。
 
 `EditorSession` / `WorkspaceRuntime` 是 Web 与桥接接入共享的数据接口。宿主无界面修改使用 `executeBasic`，仍走仓库校验与变更事件。后台同步不依赖编辑器打开，系统副作用只在确认提交后触发，不在命令重放时执行。

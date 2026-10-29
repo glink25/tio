@@ -51,6 +51,9 @@ export interface EditorSurfaceProps {
   renderEmptyState?: () => ReactNode;
   onOpen?: (target: EditorTarget) => void;
   readOnly?: boolean;
+  /** Host-controlled reading preference, independent of enforced readOnly access. */
+  readingMode?: boolean;
+  onReadingModeChange?: (readingMode: boolean) => void;
   onNavigate: (target: EditorTarget) => void;
   onError?: (error: unknown) => void;
 }
@@ -87,8 +90,13 @@ export function useEditorController(props: EditorSurfaceProps) {
     () => state.objects.filter((o) => o.workspaceId === workspaceId),
     [state.objects, workspaceId],
   );
-  const [localReadOnly, setReadOnly] = useState(false);
-  const readOnly = !!props.readOnly || localReadOnly;
+  const [localReadingMode, setLocalReadingMode] = useState(false);
+  const readingMode = props.readingMode ?? localReadingMode;
+  const setReadingMode = (next: boolean) => {
+    if (props.readingMode === undefined) setLocalReadingMode(next);
+    props.onReadingModeChange?.(next);
+  };
+  const readOnly = !!props.readOnly || readingMode;
   const can = (o: TioObject, fieldId?: string) => !readOnly && runtime.can(o, 'update', fieldId);
   const [recordId, setRecordId] = useState<string | null>(null);
   const [fieldDb, updateFieldDb] = useState<string | null>(null);
@@ -104,7 +112,7 @@ export function useEditorController(props: EditorSurfaceProps) {
   useEffect(() => () => resolver.dispose(), [resolver]);
   useEffect(() => {
     setRecordId(null);
-    setReadOnly(false);
+    setLocalReadingMode(false);
     setFieldDb(null);
     setEmbedPicker(false);
   }, [target.id]);
@@ -262,7 +270,7 @@ export function useEditorController(props: EditorSurfaceProps) {
     contentLinks: props.contentLinks,
     onOpenGraph: props.onOpenGraph,
     appSlice,
-    hostReadOnly: !!props.readOnly,
+    hostReadOnly: readOnly,
     runtime,
     openFull: (id: string) => onNavigate({ id, mode: 'page' }),
     state,
@@ -271,7 +279,8 @@ export function useEditorController(props: EditorSurfaceProps) {
     nav,
     readOnly,
     can,
-    setReadOnly,
+    readingMode,
+    setReadingMode,
     recordId,
     setRecordId,
     record,

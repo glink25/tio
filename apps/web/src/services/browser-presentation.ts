@@ -1,13 +1,19 @@
 import { i18n, setLanguage, type Language } from '@tio/i18n';
 import { useSyncExternalStore } from 'react';
 type ThemePreference = 'light' | 'dark' | 'system';
-type Preference = { themePreference: ThemePreference; locale: Language; readOnly: boolean };
+type Preference = {
+  themePreference: ThemePreference;
+  locale: Language;
+  readOnly: boolean;
+  readingMode: boolean;
+};
 type Presentation = Preference & { theme: 'light' | 'dark' };
 let state: Presentation = {
   themePreference: 'system',
   theme: 'light',
   locale: 'zh',
   readOnly: false,
+  readingMode: window.matchMedia('(max-width: 767px)').matches,
 };
 const listeners = new Set<() => void>();
 const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
@@ -36,14 +42,18 @@ export function setPresentation(next: Partial<Preference>) {
   try {
     localStorage.setItem(
       'tio.presentation',
-      JSON.stringify({ theme: state.themePreference, locale: state.locale }),
+      JSON.stringify({
+        theme: state.themePreference,
+        locale: state.locale,
+        readingMode: state.readingMode,
+      }),
     );
   } catch {
     /* optional preference storage */
   }
 }
 export function initializePresentation() {
-  let value: { theme?: unknown; locale?: unknown } = {};
+  let value: { theme?: unknown; locale?: unknown; readingMode?: unknown } = {};
   try {
     value = JSON.parse(localStorage.getItem('tio.presentation') ?? '{}') ?? {};
   } catch {
@@ -52,6 +62,10 @@ export function initializePresentation() {
   setPresentation({
     themePreference: value.theme === 'dark' || value.theme === 'light' ? value.theme : 'system',
     locale: value.locale === 'en' ? 'en' : 'zh',
+    readingMode:
+      typeof value.readingMode === 'boolean'
+        ? value.readingMode
+        : window.matchMedia('(max-width: 767px)').matches,
   });
 }
 export function usePresentation() {

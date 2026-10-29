@@ -14,7 +14,7 @@ import { Breadcrumbs } from '../features/workspace/breadcrumbs';
 import { Sidebar, WorkspaceSwitcher } from '../features/workspace/sidebar';
 import { statusLabel } from '../features/workspace/status';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
-import { usePresentation } from '../services/browser-presentation';
+import { setPresentation, usePresentation } from '../services/browser-presentation';
 
 const appSlicePermissions: AppSlicePermissionStore = {
   subscribe(key, listener) {
@@ -149,6 +149,8 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
             mentions={m.mentions}
             appSlice={appSlice}
             presentation={presentation}
+            readingMode={presentation.readingMode}
+            onReadingModeChange={(readingMode) => setPresentation({ readingMode })}
             runtime={m.runtime}
             workspaceId={m.session!.workspaceId}
             target={{
@@ -244,6 +246,8 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
                 mentions={m.mentions}
                 appSlice={appSlice}
                 presentation={presentation}
+                readingMode={presentation.readingMode}
+                onReadingModeChange={(readingMode) => setPresentation({ readingMode })}
                 runtime={m.runtime}
                 workspaceId={m.session!.workspaceId}
                 target={{ id: preview.id, mode: 'preview' }}

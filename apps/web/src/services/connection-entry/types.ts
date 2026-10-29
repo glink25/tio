@@ -8,7 +8,6 @@ export interface ConnectionEntry {
   emphasis: 'primary' | 'secondary';
   available: boolean;
   iconOnly?: boolean;
-  hint?: TranslationKey;
   run: () => void | Promise<void>;
 }
 export interface ConnectionEntryActions {

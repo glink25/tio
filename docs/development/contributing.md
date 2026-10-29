@@ -25,7 +25,7 @@ Oxfmt 负责格式、导入与 Tailwind 排序；Oxlint 负责正确性与类型
 
 品牌唯一源为 `apps/web/src/brand/logo.svg`，静态 Logo、Hero 与首屏共用该 SVG，保留源文件的主体路径、圆点比例与位置；动画只作用于 `.mark-dot`。界面隐藏 `.mark-background`，由 `.mark-symbol` 继承当前文字颜色，适配深浅主题。修改后执行 `corepack pnpm brand:icons`，提交生成的 `apps/web/public/` 图标。派生 SVG、favicon、Touch Icon 和 PWA PNG 不手工编辑；普通应用图标沿用白底黑标与圆角，Touch Icon 使用白色实底方形画布交由系统裁切；maskable 沿用深色外底、带安全留白的白色圆角底板与黑色标志。
 
-Web 连接入口注册于 `apps/web/src/services/connection-entry/`。各集成声明稳定 ID、翻译键、图标、层级、可用状态、提示与执行动作；同一集成的入口按按钮组渲染，次要入口可声明仅图标展示，宿主统一渲染和防止重复触发。目录选择须直接在点击调用链中执行；底层存储 provider 不依赖 React，也不承担登录按钮展示。
+Web 连接入口注册于 `apps/web/src/services/connection-entry/`。各集成声明稳定 ID、翻译键、图标、层级、可用状态与执行动作；同一集成的入口按按钮组渲染，次要入口可声明仅图标展示，宿主过滤不可用入口及空分组，单入口显示完整按钮，并统一防止重复触发。目录选择须直接在点击调用链中执行；底层存储 provider 不依赖 React，也不承担登录按钮展示。
 
 空状态插画源位于 `packages/ui/src/illustrations/`，由 `EmptyStateIllustration` 统一提供尺寸、主题颜色和读屏文案。页面采用空白纸张，工作空间采用打开的空收纳盒，回收站采用掀盖的空桶，以可见内腔表达无内容；使用原创 SVG，不增加插画库依赖。设计参考 [Ant Design Empty](https://ant.design/components/empty/) 的空容器表达，以及 [Atlassian Illustrations](https://atlassian.design/foundations/illustrations) 的中性、单一概念原则。
 

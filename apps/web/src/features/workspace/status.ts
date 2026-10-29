@@ -40,13 +40,13 @@ export function statusModel(
           : 'saved',
   };
 }
-const saveKeys = {
+export const saveKeys = {
   loading: 'status.loading',
   saved: 'status.saved',
   saving: 'status.saving',
   error: 'status.saveFailed',
 } satisfies Record<SaveStatus, TranslationKey>;
-const syncKeys = {
+export const syncKeys = {
   idle: 'status.ready',
   syncing: 'status.syncing',
   synced: 'status.synced',
@@ -55,7 +55,7 @@ const syncKeys = {
   failed: 'status.failed',
   issues: 'status.issues',
 } satisfies Record<SyncPhase, TranslationKey>;
-const accessKeys = {
+export const accessKeys = {
   available: 'status.ready',
   'reauthorization-required': 'status.reauthorize',
   unreachable: 'status.unreachable',
@@ -67,12 +67,7 @@ export function statusLabel(model: StatusModel): string {
   if (model.access && model.access.code !== 'available')
     labels.push(t(accessKeys[model.access.code]));
   const sync = model.sync;
-  if (sync) {
-    const progress = sync.phase === 'syncing' ? sync.progress : undefined;
-    labels.push(
-      t(syncKeys[sync.phase]) + (progress ? ` ${progress.loaded}/${progress.total}` : ''),
-    );
-  }
+  if (sync) labels.push(t(syncKeys[sync.phase]));
   if (model.hasIssues) labels.push(t('sync.showIssues'));
   return [...new Set(labels)].join(' · ');
 }

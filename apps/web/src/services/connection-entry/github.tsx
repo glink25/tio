@@ -12,7 +12,6 @@ export function githubEntries(actions: ConnectionEntryActions): ConnectionEntry[
       icon: GitHubIcon,
       emphasis: 'primary',
       available: Boolean(authOrigin),
-      hint: !authOrigin ? 'welcome.oauthUnavailable' : undefined,
       run: actions.github,
     },
     {
