@@ -399,14 +399,18 @@ export function EditorSurface(props: EditorSurfaceProps) {
                         </>
                       ) : (
                         <DatabaseEmbed
-                          key={current.id}
+                          key={`database:${props.workspaceId}:${current.id}`}
                           model={m}
                           databaseId={current.id}
                           fullPage
                         />
                       )}
                       {current.type !== 'record' && (
-                        <ReferenceFooter key={current.id} model={m} id={current.id} />
+                        <ReferenceFooter
+                          key={`references:${props.workspaceId}:${current.id}`}
+                          model={m}
+                          id={current.id}
+                        />
                       )}
                     </main>
                   </>
