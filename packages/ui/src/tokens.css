@@ -41,6 +41,30 @@
   --input: #383838;
   --ring: #999;
 }
+/* Full-screen geometry and content clearance are separate contracts. */
+:root {
+  --tio-screen-height: 100dvh;
+  --tio-safe-top: env(safe-area-inset-top, 0px);
+  --tio-safe-right: env(safe-area-inset-right, 0px);
+  --tio-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tio-safe-left: env(safe-area-inset-left, 0px);
+}
+@media (display-mode: standalone) {
+  :root {
+    --tio-screen-height: 100vh;
+  }
+}
+.tio-modal-layer {
+  display: contents;
+}
+.tio-modal-layer[data-state='closed'] > .tio-overlay {
+  pointer-events: none;
+}
+/* Drawers can also be opened on wide touch screens with nonzero safe areas. */
+.tio-drawer {
+  box-sizing: border-box;
+  padding: var(--tio-safe-top) var(--tio-safe-right) var(--tio-safe-bottom) var(--tio-safe-left);
+}
 [cmdk-list] {
   max-height: 55dvh;
   overflow: auto;
@@ -180,117 +204,85 @@ a[href] {
   }
 }
 @media (max-width: 767px) {
+  /* The portal owns a full-screen containing block, independent of page padding. */
+  .tio-modal-layer {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--tio-screen-height);
+    z-index: 50;
+    pointer-events: none;
+  }
+  .tio-modal-layer[data-drawer] {
+    z-index: 40;
+  }
+  .tio-modal-layer > .tio-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+  }
   .tio-dialog,
   .tio-drawer {
-    --tio-viewport-top: 0px;
-    --tio-viewport-left: 0px;
-    --tio-viewport-width: 100vw;
-    --tio-viewport-height: 100dvh;
-    --tio-layout-height: 100dvh;
-    --tio-viewport-obscured: 0px;
-    --tio-content-obscured: max(
-      0px,
-      calc(var(--tio-viewport-obscured) - env(safe-area-inset-bottom, 0px))
-    );
-    top: var(--tio-viewport-top);
-    bottom: auto;
-    left: var(--tio-viewport-left);
-    width: var(--tio-viewport-width);
-    max-height: calc(var(--tio-layout-height) - var(--tio-viewport-top));
-    padding: 0;
+    --tio-keyboard-bottom: 0px;
+    --tio-visible-top: 0px;
+    --tio-visible-height: var(--tio-screen-height);
+    --tio-panel-bottom: max(var(--tio-safe-bottom), var(--tio-keyboard-bottom));
+    position: absolute;
+    box-sizing: border-box;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: calc(var(--tio-screen-height) - var(--tio-safe-top) - 12px);
+    padding: 0 var(--tio-safe-right) var(--tio-panel-bottom) var(--tio-safe-left);
+    pointer-events: auto;
   }
   .tio-dialog[data-placement='sheet']:not([data-wide='true']) {
-    top: var(--tio-layout-height);
-    translate: 0 -100%;
-    max-height: calc(
-      var(--tio-layout-height) - var(--tio-viewport-top) - 12px - env(safe-area-inset-top, 0px)
-    );
+    top: auto;
+    bottom: 0;
+    translate: none;
   }
   .tio-dialog[data-placement='center'] {
-    --tio-content-obscured: 0px;
     top: calc(
-      var(--tio-viewport-top) +
-        (
-          var(--tio-viewport-height) + env(safe-area-inset-top, 0px) -
-            env(safe-area-inset-bottom, 0px)
-        ) /
-        2
+      var(--tio-visible-top) + var(--tio-safe-top) +
+        (var(--tio-visible-height) - var(--tio-safe-top) - var(--tio-safe-bottom)) / 2
     );
-    left: calc(
-      var(--tio-viewport-left) +
-        (
-          var(--tio-viewport-width) + env(safe-area-inset-left, 0px) -
-            env(safe-area-inset-right, 0px)
-        ) /
-        2
-    );
+    bottom: auto;
+    left: calc(var(--tio-safe-left) + (100% - var(--tio-safe-left) - var(--tio-safe-right)) / 2);
     translate: -50% -50%;
-    width: calc(
-      var(--tio-viewport-width) - 24px - env(safe-area-inset-left, 0px) -
-        env(safe-area-inset-right, 0px)
-    );
+    width: calc(100% - 24px - var(--tio-safe-left) - var(--tio-safe-right));
     max-height: calc(
-      var(--tio-viewport-height) - 24px - env(safe-area-inset-top, 0px) -
-        env(safe-area-inset-bottom, 0px)
+      var(--tio-visible-height) - 24px - var(--tio-safe-top) - var(--tio-safe-bottom)
     );
+    padding: 0;
     border-radius: 12px;
   }
   .tio-dialog[data-placement='full'],
   .tio-dialog[data-wide='true']:not([data-placement='center']),
+  .tio-dialog[data-placement='sidebar'],
   .tio-drawer {
-    /* The background fills the layout viewport; only content follows the visible viewport. */
     top: 0;
-    height: var(--tio-layout-height);
-    max-height: var(--tio-layout-height);
+    bottom: 0;
+    height: 100%;
+    max-height: 100%;
+    padding-top: max(var(--tio-safe-top), var(--tio-visible-top));
     border-radius: 0;
   }
   .tio-dialog[data-placement='sidebar'] {
-    top: 0;
-    width: min(320px, calc(var(--tio-viewport-width) - 32px));
-    height: var(--tio-layout-height);
-    max-height: var(--tio-layout-height);
-    padding-left: env(safe-area-inset-left, 0px);
+    width: min(320px, calc(100% - 32px));
   }
-  .tio-dialog[data-placement='sidebar'],
-  .tio-dialog[data-placement='full'],
-  .tio-dialog[data-wide='true']:not([data-placement='center']),
-  .tio-drawer {
-    padding-top: max(env(safe-area-inset-top, 0px), var(--tio-viewport-top));
-  }
-  .tio-dialog:not([data-placement='center']),
-  .tio-drawer {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .tio-dialog:not([data-placement='sidebar']):not([data-placement='center']),
-  .tio-drawer {
-    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
-  }
-  /* Extend the panel behind the keyboard; only its content needs scroll clearance. */
   .tio-dialog-body,
   .tio-drawer-body {
-    scroll-padding-bottom: calc(12px + var(--tio-content-obscured));
-  }
-  .tio-dialog-body::after,
-  .tio-drawer-body::after {
-    content: '';
-    display: block;
-    height: var(--tio-content-obscured);
-    flex-shrink: 0;
-    pointer-events: none;
-  }
-  .tio-dialog:has(> .tio-dialog-footer):not([data-placement='center']) {
-    --tio-content-obscured: 0px;
-  }
-  .tio-dialog:not([data-placement='center']) > .tio-dialog-footer {
-    margin-bottom: max(0px, calc(var(--tio-viewport-obscured) - env(safe-area-inset-bottom, 0px)));
+    scroll-padding-block: 12px;
   }
   .tio-dialog[data-wide='true']:has(.page-preview) {
-    top: calc(var(--tio-viewport-top) + 12px + env(safe-area-inset-top, 0px));
-    height: calc(
-      var(--tio-layout-height) - var(--tio-viewport-top) - 12px - env(safe-area-inset-top, 0px)
-    );
-    border-radius: 12px 12px 0 0;
+    top: calc(var(--tio-safe-top) + 12px);
+    height: calc(100% - var(--tio-safe-top) - 12px);
+    max-height: calc(100% - var(--tio-safe-top) - 12px);
     padding-top: 0;
+    border-radius: 12px 12px 0 0;
   }
   :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='range']):not(
       [type='file']

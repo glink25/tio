@@ -74,22 +74,24 @@
   fill: currentColor;
 }
 /* The welcome background also paints the standalone status bar and overscroll. */
-html:has(.login-page),
-body:has(.login-page) {
+html:has(.login-page) {
   background: #111;
 }
+body:has(.login-page) {
+  background: var(--color-surface);
+}
 .login-page {
+  box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1.13fr) minmax(420px, 0.87fr);
-  min-height: 100dvh;
+  min-height: var(--tio-screen-height);
 }
 .login-brand {
   display: flex;
   min-height: 680px;
   flex-direction: column;
-  padding: calc(clamp(34px, 4.1vw, 66px) + env(safe-area-inset-top, 0px)) clamp(35px, 5.1vw, 86px)
-    calc(39px + env(safe-area-inset-bottom, 0px))
-    max(clamp(35px, 5.1vw, 86px), env(safe-area-inset-left, 0px));
+  padding: calc(clamp(34px, 4.1vw, 66px) + var(--tio-safe-top)) clamp(35px, 5.1vw, 86px)
+    calc(39px + var(--tio-safe-bottom)) max(clamp(35px, 5.1vw, 86px), var(--tio-safe-left));
   background: #111;
   color: #fff;
 }
@@ -145,10 +147,9 @@ body:has(.login-page) {
 .login-auth {
   display: flex;
   align-items: center;
-  min-height: 100dvh;
-  padding: calc(48px + env(safe-area-inset-top, 0px))
-    max(clamp(30px, 5.1vw, 90px), env(safe-area-inset-right, 0px))
-    calc(33px + env(safe-area-inset-bottom, 0px)) clamp(30px, 5.1vw, 90px);
+  min-height: var(--tio-screen-height);
+  padding: calc(48px + var(--tio-safe-top)) max(clamp(30px, 5.1vw, 90px), var(--tio-safe-right))
+    calc(33px + var(--tio-safe-bottom)) clamp(30px, 5.1vw, 90px);
   background: var(--color-surface);
 }
 .login-actions {
@@ -228,26 +229,26 @@ body:has(.login-page) {
     grid-template-columns: minmax(0, 1fr) minmax(370px, 1fr);
   }
   .login-brand {
-    padding-inline: 43px;
+    padding-inline: max(43px, var(--tio-safe-left)) 43px;
   }
   .login-brand h1 {
     font-size: clamp(40px, 5vw, 60px);
   }
   .login-auth {
-    padding-inline: 34px;
+    padding-inline: 34px max(34px, var(--tio-safe-right));
   }
 }
 @media (max-width: 767px) {
   .login-page {
     display: flex;
     flex-direction: column;
-    min-height: 100dvh;
+    min-height: var(--tio-screen-height);
   }
   .login-brand {
     flex: 1 0 auto;
     min-height: 0;
-    padding: calc(clamp(14px, 3svh, 26px) + env(safe-area-inset-top, 0px))
-      max(24px, env(safe-area-inset-right, 0px)) 20px max(24px, env(safe-area-inset-left, 0px));
+    padding: calc(clamp(14px, 3svh, 26px) + var(--tio-safe-top)) max(24px, var(--tio-safe-right))
+      20px max(24px, var(--tio-safe-left));
   }
   .login-brand header,
   .login-brand header > div {
@@ -276,8 +277,8 @@ body:has(.login-page) {
   .login-auth {
     flex: 0 0 auto;
     min-height: 0;
-    padding: 20px max(24px, env(safe-area-inset-right, 0px))
-      max(20px, env(safe-area-inset-bottom, 0px)) max(24px, env(safe-area-inset-left, 0px));
+    padding: 20px max(24px, var(--tio-safe-right)) max(20px, var(--tio-safe-bottom))
+      max(24px, var(--tio-safe-left));
   }
   .login-actions {
     width: min(100%, 400px);
@@ -287,8 +288,7 @@ body:has(.login-page) {
 @media (max-width: 360px) {
   .login-brand,
   .login-auth {
-    padding-inline: max(22px, env(safe-area-inset-left, 0px))
-      max(22px, env(safe-area-inset-right, 0px));
+    padding-inline: max(22px, var(--tio-safe-left)) max(22px, var(--tio-safe-right));
   }
   .login-brand h1 {
     font-size: 31px;
@@ -347,43 +347,51 @@ body:has(.login-page) {
   }
 }
 
-@media (max-width: 767px) {
-  .tio-workspace-content {
-    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-  }
-  .tio-workspace-header {
-    height: calc(48px + env(safe-area-inset-top, 0px));
-    padding-top: env(safe-area-inset-top, 0px);
-  }
-  .tio-connection-page {
-    padding: calc(24px + env(safe-area-inset-top, 0px)) calc(24px + env(safe-area-inset-right, 0px))
-      calc(24px + env(safe-area-inset-bottom, 0px)) calc(24px + env(safe-area-inset-left, 0px));
-  }
-}
-
-/* Installed apps paint edge to edge; each layout owns the clearance for its controls. */
+/* The shell paints the entire screen; each content region consumes its safe area once. */
 html {
   background: var(--color-panel);
 }
-@media (display-mode: standalone) and (min-width: 768px) {
-  .tio-workspace-content {
-    padding-right: env(safe-area-inset-right, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+body,
+#root,
+.tio-workspace,
+.tio-workspace-loading {
+  min-height: var(--tio-screen-height);
+}
+@media (display-mode: standalone) {
+  body {
+    height: var(--tio-screen-height);
   }
-  .tio-workspace-header {
-    height: calc(48px + env(safe-area-inset-top, 0px));
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-left: max(20px, env(safe-area-inset-left, 0px));
-  }
-  .tio-sidebar {
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    padding-left: env(safe-area-inset-left, 0px);
-  }
+}
+.tio-workspace-content,
+.tio-workspace-loading-content {
+  padding-inline: var(--tio-safe-left) var(--tio-safe-right);
+  padding-bottom: var(--tio-safe-bottom);
+}
+.tio-workspace-header {
+  box-sizing: border-box;
+  height: calc(48px + var(--tio-safe-top));
+  padding-top: var(--tio-safe-top);
+}
+.tio-sidebar,
+.tio-loading-sidebar {
+  box-sizing: border-box;
+  height: var(--tio-screen-height);
+  padding: var(--tio-safe-top) 0 var(--tio-safe-bottom) var(--tio-safe-left);
+}
+.tio-connection-page {
+  box-sizing: border-box;
+  height: var(--tio-screen-height);
+  padding: calc(24px + var(--tio-safe-top)) calc(24px + var(--tio-safe-right))
+    calc(24px + var(--tio-safe-bottom)) calc(24px + var(--tio-safe-left));
+}
+.tio-graph {
+  box-sizing: border-box;
+  height: var(--tio-screen-height);
+  padding: var(--tio-safe-top) var(--tio-safe-right) var(--tio-safe-bottom) var(--tio-safe-left);
+}
+@media (min-width: 768px) {
   .tio-connection-page {
-    padding-top: max(64px, env(safe-area-inset-top, 0px));
-    padding-bottom: max(24px, env(safe-area-inset-bottom, 0px));
+    padding-top: calc(64px + var(--tio-safe-top));
   }
 }
 

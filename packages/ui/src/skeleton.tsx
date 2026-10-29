@@ -59,7 +59,7 @@ export function SidebarSkeleton() {
     <output
       aria-label={t('common.loading')}
       aria-busy="true"
-      className="flex h-dvh min-h-0 flex-col gap-6 px-4 py-5 motion-safe:animate-pulse"
+      className="flex h-full min-h-0 flex-col gap-6 px-4 py-5 motion-safe:animate-pulse"
     >
       <div aria-hidden="true" className="flex items-center gap-2">
         <span className={`${bar} size-6`} />

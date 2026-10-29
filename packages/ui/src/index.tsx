@@ -105,75 +105,77 @@ export function Modal({
         if (!open) close();
       }}
     >
-      <Dialog.Portal container={useContext(PortalContext)}>
-        <Dialog.Overlay className="tio-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
-        <Dialog.Content
-          {...interaction}
-          onEscapeKeyDown={(event) => {
-            // Floating controls are portalled; their Escape must not dismiss the containing dialog.
-            const floating = [
-              ...document.querySelectorAll(
-                '.tio-popover[data-state="open"], .tio-select[data-state="open"], .tio-menu[data-state="open"]',
-              ),
-            ];
-            if (floating.some((element) => !element.closest('[aria-hidden="true"]')))
-              event.preventDefault();
-          }}
-          {...{ inert: !open ? '' : undefined }}
-          data-motion={sheet ? 'left' : mobilePlacement}
-          data-placement={sheet ? 'sidebar' : layout === 'workspace' ? 'full' : mobilePlacement}
-          data-wide={wide || undefined}
-          data-layout={layout}
-          data-headerless={hideHeader || undefined}
-          style={position}
-          aria-describedby={undefined}
-          className="tio-dialog fixed z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border border-line bg-panel text-ink shadow-xl outline-none"
-        >
-          {hideHeader ? (
-            <Dialog.Title className="sr-only">{title}</Dialog.Title>
-          ) : (
+      <Dialog.Portal forceMount container={useContext(PortalContext)}>
+        <div className="tio-modal-layer" data-state={open ? 'open' : 'closed'}>
+          <Dialog.Overlay className="tio-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
+          <Dialog.Content
+            {...interaction}
+            onEscapeKeyDown={(event) => {
+              // Floating controls are portalled; their Escape must not dismiss the containing dialog.
+              const floating = [
+                ...document.querySelectorAll(
+                  '.tio-popover[data-state="open"], .tio-select[data-state="open"], .tio-menu[data-state="open"]',
+                ),
+              ];
+              if (floating.some((element) => !element.closest('[aria-hidden="true"]')))
+                event.preventDefault();
+            }}
+            {...{ inert: !open ? '' : undefined }}
+            data-motion={sheet ? 'left' : mobilePlacement}
+            data-placement={sheet ? 'sidebar' : layout === 'workspace' ? 'full' : mobilePlacement}
+            data-wide={wide || undefined}
+            data-layout={layout}
+            data-headerless={hideHeader || undefined}
+            style={position}
+            aria-describedby={undefined}
+            className="tio-dialog fixed z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border border-line bg-panel text-ink shadow-xl outline-none"
+          >
+            {hideHeader ? (
+              <Dialog.Title className="sr-only">{title}</Dialog.Title>
+            ) : (
+              <div
+                className={cn(
+                  'tio-dialog-header flex shrink-0 items-center justify-between gap-4',
+                  layout === 'workspace'
+                    ? 'shrink-0 items-start border-b border-line px-4 py-3 md:items-center md:px-6'
+                    : 'px-4 py-3 md:px-5 md:py-4',
+                )}
+              >
+                {header ? (
+                  <>
+                    <Dialog.Title className="sr-only">{title}</Dialog.Title>
+                    {header}
+                  </>
+                ) : (
+                  <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+                )}
+                <Dialog.Close asChild>
+                  <IconButton label={t('common.close')} className="p-1">
+                    <X size={20} />
+                  </IconButton>
+                </Dialog.Close>
+              </div>
+            )}
+            {description && (
+              <Dialog.Description className="shrink-0 px-4 pb-3 text-sm text-muted md:px-5">
+                {description}
+              </Dialog.Description>
+            )}
             <div
               className={cn(
-                'tio-dialog-header flex shrink-0 items-center justify-between gap-4',
-                layout === 'workspace'
-                  ? 'shrink-0 items-start border-b border-line px-4 py-3 md:items-center md:px-6'
-                  : 'px-4 py-3 md:px-5 md:py-4',
+                'tio-dialog-body min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain',
+                layout === 'default' && !hideHeader && 'px-4 pb-4 md:px-5 md:pb-5',
               )}
             >
-              {header ? (
-                <>
-                  <Dialog.Title className="sr-only">{title}</Dialog.Title>
-                  {header}
-                </>
-              ) : (
-                <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
-              )}
-              <Dialog.Close asChild>
-                <IconButton label={t('common.close')} className="p-1">
-                  <X size={20} />
-                </IconButton>
-              </Dialog.Close>
+              {children}
             </div>
-          )}
-          {description && (
-            <Dialog.Description className="shrink-0 px-4 pb-3 text-sm text-muted md:px-5">
-              {description}
-            </Dialog.Description>
-          )}
-          <div
-            className={cn(
-              'tio-dialog-body min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain',
-              layout === 'default' && !hideHeader && 'px-4 pb-4 md:px-5 md:pb-5',
+            {footer && (
+              <div className="tio-dialog-footer shrink-0 border-t border-line bg-panel px-4 py-3 md:px-6">
+                {footer}
+              </div>
             )}
-          >
-            {children}
-          </div>
-          {footer && (
-            <div className="tio-dialog-footer shrink-0 border-t border-line bg-panel px-4 py-3 md:px-6">
-              {footer}
-            </div>
-          )}
-        </Dialog.Content>
+          </Dialog.Content>
+        </div>
       </Dialog.Portal>
     </Dialog.Root>
   );
@@ -211,33 +213,35 @@ export function Drawer({
         if (!open) close();
       }}
     >
-      <Dialog.Portal container={useContext(PortalContext)}>
-        <Dialog.Overlay className="tio-overlay fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
-        <Dialog.Content
-          {...{ inert: !open ? '' : undefined }}
-          style={position}
-          {...interaction}
-          ref={attach}
-          aria-describedby={undefined}
-          className="tio-drawer fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col overflow-hidden bg-panel shadow-xl"
-        >
-          <header className="tio-drawer-header z-10 flex shrink-0 items-center justify-between border-b border-line bg-panel px-4 py-3 md:px-6">
-            <Dialog.Title className="text-sm text-secondary">{title}</Dialog.Title>
-            <div className="flex items-center gap-2">
-              {actions}
-              <Dialog.Close asChild>
-                <IconButton label={closeLabel ?? t('database.closeRecord')} className="p-1">
-                  <X size={20} />
-                </IconButton>
-              </Dialog.Close>
-            </div>
-          </header>
-          <PortalContext.Provider value={portalContainer ?? undefined}>
-            <div className="tio-drawer-body min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-              {children}
-            </div>
-          </PortalContext.Provider>
-        </Dialog.Content>
+      <Dialog.Portal forceMount container={useContext(PortalContext)}>
+        <div className="tio-modal-layer" data-drawer="" data-state={open ? 'open' : 'closed'}>
+          <Dialog.Overlay className="tio-overlay fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
+          <Dialog.Content
+            {...{ inert: !open ? '' : undefined }}
+            style={position}
+            {...interaction}
+            ref={attach}
+            aria-describedby={undefined}
+            className="tio-drawer fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col overflow-hidden bg-panel shadow-xl"
+          >
+            <header className="tio-drawer-header z-10 flex shrink-0 items-center justify-between border-b border-line bg-panel px-4 py-3 md:px-6">
+              <Dialog.Title className="text-sm text-secondary">{title}</Dialog.Title>
+              <div className="flex items-center gap-2">
+                {actions}
+                <Dialog.Close asChild>
+                  <IconButton label={closeLabel ?? t('database.closeRecord')} className="p-1">
+                    <X size={20} />
+                  </IconButton>
+                </Dialog.Close>
+              </div>
+            </header>
+            <PortalContext.Provider value={portalContainer ?? undefined}>
+              <div className="tio-drawer-body min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+                {children}
+              </div>
+            </PortalContext.Provider>
+          </Dialog.Content>
+        </div>
       </Dialog.Portal>
     </Dialog.Root>
   );

@@ -94,12 +94,12 @@ export function App() {
 
 function WorkspaceLoading() {
   return (
-    <div className="flex min-h-dvh">
-      <aside className="hidden w-[260px] shrink-0 border-r border-line bg-surface md:block">
+    <div className="tio-workspace-loading flex">
+      <aside className="tio-loading-sidebar hidden w-[260px] shrink-0 border-r border-line bg-surface md:block">
         <SidebarSkeleton />
       </aside>
-      <div className="min-w-0 flex-1">
-        <div aria-hidden="true" className="h-12" />
+      <div className="tio-workspace-loading-content min-w-0 flex-1">
+        <div aria-hidden="true" className="tio-workspace-header" />
         <LoadingSkeleton />
       </div>
     </div>

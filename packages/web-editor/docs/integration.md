@@ -22,7 +22,7 @@ await editor.dispose();
 
 保存、同步进度及持久化错误统一由宿主展示；编辑器不显示保存状态或持久化失败横幅。独立接入使用 `onSaveState`、`onError` 与句柄的 `getSaveState()` 接收状态，由宿主调度 `retry()` 恢复；Web 宿主将这些信息集中在顶部状态图标中，悬停查看提示，点击展开详情，仅在需要时提供恢复授权入口。编辑器保留内容加载、字段校验等交互反馈。
 
-宿主传入已解析的 `Presentation`，编辑器不写宿主偏好。每个实例具有独立主题、语言和门户上下文。`onReady` 在挂载后触发；`open` 先刷新并重新检查关闭状态；`dispose` 异步合并并发调用，刷新失败时保留会话。不得因远端故障丢弃当前草稿。
+宿主传入已解析的 `Presentation`，编辑器不写宿主偏好。每个实例具有独立主题、语言和门户上下文。共享弹窗使用独立全屏 Portal 外壳，安全区通过 `--tio-safe-top/right/bottom/left` 在内部布局消费；`--tio-screen-height` 在普通浏览器为 `100dvh`，standalone 为 `100vh`。可见视口测量仅参与输入时的键盘避让，不覆盖外壳高度。`onReady` 在挂载后触发；`open` 先刷新并重新检查关闭状态；`dispose` 异步合并并发调用，刷新失败时保留会话。不得因远端故障丢弃当前草稿。
 
 React 接入的 `EditorSurface` 支持可选的 `readingMode` 和 `onReadingModeChange(boolean)` 受控阅读模式，由宿主保存偏好；未提供时使用编辑器临时状态。`readOnly` 与 `presentation.readOnly` 仍是不可由阅读菜单解除的强制只读约束。Web 宿主在浏览器统一记住阅读选择，没有偏好时移动布局默认阅读、桌面默认编辑。阅读模式中的铅笔仍打开文档菜单。
 

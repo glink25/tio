@@ -257,7 +257,7 @@ export default function RelationshipGraph({ model: m }: { model: WorkspaceContro
   );
   return (
     <section
-      className="fixed inset-0 z-30 flex flex-col bg-panel"
+      className="tio-graph fixed inset-0 z-30 flex flex-col bg-panel"
       aria-label={t('links.graph')}
       data-theme={theme}
       aria-busy={!!provider && status === 'loading'}
