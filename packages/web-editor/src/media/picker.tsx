@@ -16,6 +16,7 @@ import {
 
 const EmojiPicker = lazy(() => import('./emoji-picker'));
 const ImagePanel = lazy(() => import('./image-panel'));
+const IconPicker = lazy(() => import('./icon-picker'));
 const Gallery = lazy(() => import('./gallery'));
 type Tab = 'emoji' | 'icons' | 'upload' | 'link' | 'presets' | 'unsplash';
 class PanelBoundary extends Component<
@@ -39,17 +40,38 @@ class PanelBoundary extends Component<
 export interface MediaPickerProps {
   kind: 'icon' | 'cover';
   present: boolean;
+  icon?: DocumentIcon;
+  cover?: DocumentCover | null;
   label: string;
   trigger: ReactNode;
   upload: (file: File) => Promise<string>;
   onSelect: (value: DocumentIcon | DocumentCover | null) => void;
 }
-export function MediaPicker({ kind, present, label, trigger, upload, onSelect }: MediaPickerProps) {
+export function MediaPicker({
+  kind,
+  present,
+  icon,
+  cover,
+  label,
+  trigger,
+  upload,
+  onSelect,
+}: MediaPickerProps) {
   const t = useT();
   const id = useId();
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<Tab>(kind === 'icon' ? 'emoji' : 'presets');
+  const initialTab = (): Tab => {
+    if (kind === 'icon') {
+      if (typeof icon !== 'object') return 'emoji';
+      if (icon.type === 'builtin') return 'icons';
+      return icon.url.startsWith('asset:') ? 'upload' : 'link';
+    }
+    if (!cover || cover.type === 'preset') return 'presets';
+    if (cover.url.startsWith('asset:')) return 'upload';
+    return cover.credit?.url.startsWith('https://unsplash.com/') ? 'unsplash' : 'link';
+  };
+  const [tab, setTab] = useState<Tab>(initialTab);
   const tabs: Tab[] =
     kind === 'icon'
       ? ['emoji', 'icons', 'upload', 'link']
@@ -72,7 +94,7 @@ export function MediaPicker({ kind, present, label, trigger, upload, onSelect }:
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) setTab(kind === 'icon' ? 'emoji' : 'presets');
+        if (next) setTab(initialTab());
       }}
       trigger={cloneElement(trigger as ReactElement<{ ref: typeof anchor }>, { ref: anchor })}
       className="flex w-[480px] flex-col overflow-hidden p-0"
@@ -133,6 +155,8 @@ export function MediaPicker({ kind, present, label, trigger, upload, onSelect }:
               <Suspense fallback={<LoadingIndicator className="w-full p-4" />}>
                 {tab === 'emoji' ? (
                   <EmojiPicker onSelect={change} />
+                ) : tab === 'icons' ? (
+                  <IconPicker value={icon} onSelect={change} />
                 ) : tab === 'upload' || tab === 'link' ? (
                   <ImagePanel key={tab} mode={tab} upload={upload} onSelect={selectUrl} />
                 ) : (

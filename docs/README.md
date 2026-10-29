@@ -4,6 +4,8 @@ A local-first document and database editor. Use device storage, a local folder, 
 
 [简体中文](README.zh-CN.md) · [Project principles](zen.md)
 
+Fork the [demo space](https://github.com/glink25/tio-demo-space) to quickly explore Tio with sample documents, databases and App Slices.
+
 ## Start
 
 Use Node.js 24 and the pnpm version pinned in `packageManager`:

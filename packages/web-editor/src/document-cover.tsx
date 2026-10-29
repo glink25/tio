@@ -169,6 +169,7 @@ function Cover({
             <>
               <MediaPicker
                 kind="cover"
+                cover={cover}
                 present
                 label={t('document.changeCover')}
                 upload={upload}

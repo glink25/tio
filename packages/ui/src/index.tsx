@@ -1,8 +1,8 @@
 export { FilePicker, AssetPolicyContext, useAssetPolicy } from './file-picker';
 import type { DocumentIcon } from '@tio/core';
 
-import { builtinIcons, useMediaUrl, type MediaResolver } from './media';
-export { builtinIcons, coverPresets, useMediaUrl, type MediaResolver } from './media';
+import { BuiltinIcon, useMediaUrl, type MediaResolver } from './media';
+export { BuiltinIcon, coverPresets, useMediaUrl, type MediaResolver } from './media';
 export { EditHistoryContext, useDraftHistory, type EditHistory } from './edit-history';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useT } from '@tio/i18n';
@@ -286,8 +286,9 @@ export function ObjectIcon({
   const style = { width: size, height: size, flexShrink: 0 };
   if (typeof icon === 'object') {
     if (icon.type === 'builtin') {
-      const Icon = builtinIcons[icon.name];
-      return <Icon size={size} style={style} strokeWidth={1.7} aria-hidden />;
+      return (
+        <BuiltinIcon name={icon.name} color={icon.color} size={size} style={style} aria-hidden />
+      );
     }
     if (url && failed !== url)
       return (

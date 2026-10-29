@@ -25,6 +25,7 @@ export function DocumentIcon({ object, editable, patch, upload, resolve }: Docum
       {editable ? (
         <MediaPicker
           kind="icon"
+          icon={object.icon}
           present
           label={t('document.changeIcon')}
           upload={upload}
@@ -52,6 +53,7 @@ export function DocumentMediaActions({ object, editable, patch, upload }: Docume
       {!object.icon && (
         <MediaPicker
           kind="icon"
+          icon={object.icon}
           present={false}
           label={t('document.changeIcon')}
           upload={upload}

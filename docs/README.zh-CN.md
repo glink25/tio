@@ -4,6 +4,8 @@
 
 [English](README.md) · [Tio 之禅](zen.md)
 
+Fork [示例空间](https://github.com/glink25/tio-demo-space)，即可快速体验文档、数据库和 App Slice。
+
 ## 启动
 
 使用 Node.js 24 和 `packageManager` 锁定的 pnpm：

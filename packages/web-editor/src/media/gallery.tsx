@@ -1,52 +1,19 @@
-import { builtinIconNames, coverPresetIds, type DocumentIcon, type DocumentCover } from '@tio/core';
+import { coverPresetIds, type DocumentIcon, type DocumentCover } from '@tio/core';
 import { useT } from '@tio/i18n';
-import { Button, builtinIcons, coverPresets } from '@tio/ui';
+import { Button, coverPresets } from '@tio/ui';
 import { useLayoutEffect, useRef, useState } from 'react';
 
 import { validateImageUrl } from './image';
+import { photoCategories, type CoverPhoto } from './photo-catalog';
 
-const photos = [
-  { id: 'lake', image: 'photo-1470770841072-f978cf4d019e', name: 'Luca Bravo', user: 'lucabravo' },
-  {
-    id: 'forest',
-    image: 'photo-1441974231531-c6227db76b6e',
-    name: 'Sebastian Unrau',
-    user: 'sebastian_unrau',
-  },
-  {
-    id: 'mountain',
-    image: 'photo-1464822759023-fed622ff2c3b',
-    name: 'Simon Berger',
-    user: '8moments',
-  },
-] as const;
 export default function Gallery({
   mode,
   onSelect,
 }: {
-  mode: 'icons' | 'presets' | 'unsplash';
+  mode: 'presets' | 'unsplash';
   onSelect: (value: DocumentIcon | DocumentCover) => void;
 }) {
   const t = useT();
-  if (mode === 'icons')
-    return (
-      <div className="grid grid-cols-6 gap-2 p-4">
-        {builtinIconNames.map((name) => {
-          const Icon = builtinIcons[name];
-          return (
-            <button
-              key={name}
-              aria-label={t(`media.icon.${name}`)}
-              title={t(`media.icon.${name}`)}
-              className="flex aspect-square items-center justify-center rounded-md text-secondary hover:bg-surface-hover focus-visible:outline-2"
-              onClick={() => onSelect({ type: 'builtin', name })}
-            >
-              <Icon size={24} strokeWidth={1.7} />
-            </button>
-          );
-        })}
-      </div>
-    );
   if (mode === 'presets')
     return (
       <div className="p-4">
@@ -66,18 +33,28 @@ export default function Gallery({
       </div>
     );
   return (
-    <div className="grid grid-cols-2 gap-3 p-4">
-      {photos.map((photo) => (
-        <PhotoTile key={photo.id} photo={photo} onSelect={onSelect} />
+    <div className="space-y-5 p-4">
+      {photoCategories.map((category) => (
+        <section key={category.id} aria-label={t(`media.photoCategory.${category.id}`)}>
+          <h3 className="mb-3 text-xs font-medium text-muted">
+            {t(`media.photoCategory.${category.id}`)}
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            {category.photos.map((photo) => (
+              <PhotoTile key={photo.id} photo={photo} onSelect={onSelect} />
+            ))}
+          </div>
+        </section>
       ))}
     </div>
   );
 }
+
 function PhotoTile({
   photo,
   onSelect,
 }: {
-  photo: (typeof photos)[number];
+  photo: CoverPhoto;
   onSelect: (value: DocumentCover) => void;
 }) {
   const t = useT();
@@ -110,6 +87,7 @@ function PhotoTile({
   return (
     <div>
       <button
+        type="button"
         disabled={busy}
         className="block w-full rounded focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
         aria-label={t(`media.photo.${photo.id}`)}
