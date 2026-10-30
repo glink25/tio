@@ -2,9 +2,13 @@ packages:
   - apps/*
   - packages/*
   - tests
+minimumReleaseAge: 10080
+# Exact-version exceptions to the release-age window.
 minimumReleaseAgeExclude:
-  - i18next@26.5.5
-  - react-i18next@17.1.1
+  - es-toolkit@1.53.0
+  - pdfmake@0.3.13
+  - unist-util-visit-parents@6.1.0
+  - unist-util-visit@5.2.0
 allowBuilds:
   esbuild: true
   puppeteer: true

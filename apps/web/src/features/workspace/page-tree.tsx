@@ -55,7 +55,7 @@ export function PageTree({
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [activeId, setActiveId] = useState<string>();
   const [placement, setPlacement] = useState<Placement>();
-  const drop = useRef<Placement>();
+  const drop = useRef<Placement | undefined>(undefined);
   const keyboardInside = useRef(false);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -268,7 +268,7 @@ function TreeRow({
     <div
       ref={setNodeRef}
       className="tio-tree-row grid"
-      {...{ inert: hidden ? '' : undefined }}
+      inert={hidden || undefined}
       aria-hidden={hidden || undefined}
       data-hidden={hidden}
       data-navigation-id={o.id}

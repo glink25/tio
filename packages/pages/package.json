@@ -68,7 +68,7 @@
     "@tio/core": "workspace:*",
     "@tio/file-storage": "workspace:*",
     "@tio/storage": "workspace:*",
-    "tsdown": "0.23.2",
+    "tsdown": "0.23.1",
     "tsx": "^4.20.2"
   },
   "engines": {

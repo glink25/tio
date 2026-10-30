@@ -52,7 +52,7 @@ export default function AutomationDialog({
   const [leave, setLeave] = useState<() => void>();
   const [change, setChange] = useState<() => void>();
   const [deleteRule, setDeleteRule] = useState<AutomationRule>();
-  const submitted = useRef<{ id: string; write: Promise<void> }>();
+  const submitted = useRef<{ id: string; write: Promise<void> } | undefined>(undefined);
   const content = useRef<HTMLDivElement>(null);
   const name = useRef<HTMLInputElement>(null);
   const provider = runtime.automation;

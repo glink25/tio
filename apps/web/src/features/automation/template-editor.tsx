@@ -26,8 +26,8 @@ export function TemplateEditor({
 }) {
   const t = useT();
   const element = useRef<HTMLDivElement>(null);
-  const last = useRef<string>();
-  const selection = useRef<Range>();
+  const last = useRef<string | undefined>(undefined);
+  const selection = useRef<Range | undefined>(undefined);
   const emit = () => {
     if (element.current) {
       const value = serialize(element.current);

@@ -15,7 +15,7 @@ export function HtmlEditor({
 }) {
   const initial = useRef(value);
   const root = useRef<HTMLDivElement>(null);
-  const view = useRef<EditorView>();
+  const view = useRef<EditorView | undefined>(undefined);
   const callback = useRef(onChange);
   callback.current = onChange;
   useEffect(() => {

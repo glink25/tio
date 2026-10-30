@@ -22,7 +22,7 @@ export default function RelationshipGraph({ model: m }: { model: WorkspaceContro
   const t = useT();
   const theme = useTheme();
   const container = useRef<HTMLDivElement>(null);
-  const cy = useRef<Core>();
+  const cy = useRef<Core | undefined>(undefined);
   const [nodes, setNodes] = useState<ReferenceNode[]>([]);
   const [selected, setSelected] = useState(m.selected);
   const [query, setQuery] = useState('');

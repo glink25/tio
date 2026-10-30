@@ -14,7 +14,7 @@ export default defineConfig([
     format: 'esm',
     platform: 'node',
     target: 'node24',
-    dts: { tsc: { eager: true } },
+    dts: { generator: 'tsgo', tsconfig: '../../tsconfig.pages.json' },
     deps: { alwaysBundle: [/^@tio\//] },
   },
   {

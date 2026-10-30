@@ -275,7 +275,7 @@ export function Sidebar({
       {!mobile && (
         <aside
           data-collapsed={m.sidebarCollapsed}
-          {...{ inert: m.sidebarCollapsed ? '' : undefined }}
+          inert={m.sidebarCollapsed || undefined}
           className="tio-sidebar fixed inset-y-0 left-0 z-20 hidden border-r border-line bg-surface md:block"
           style={{ width: m.sidebarWidth, translate: m.sidebarCollapsed ? '-100% 0' : '0 0' }}
         >

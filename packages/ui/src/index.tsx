@@ -120,7 +120,7 @@ export function Modal({
               if (floating.some((element) => !element.closest('[aria-hidden="true"]')))
                 event.preventDefault();
             }}
-            {...{ inert: !open ? '' : undefined }}
+            inert={!open || undefined}
             data-motion={sheet ? 'left' : mobilePlacement}
             data-placement={sheet ? 'sidebar' : layout === 'workspace' ? 'full' : mobilePlacement}
             data-wide={wide || undefined}
@@ -217,7 +217,7 @@ export function Drawer({
         <div className="tio-modal-layer" data-drawer="" data-state={open ? 'open' : 'closed'}>
           <Dialog.Overlay className="tio-overlay fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
           <Dialog.Content
-            {...{ inert: !open ? '' : undefined }}
+            inert={!open || undefined}
             style={position}
             {...interaction}
             ref={attach}
