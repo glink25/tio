@@ -2,6 +2,25 @@ import { StorageError, segments, type FileStorageProvider } from '@tio/storage';
 export class LocalFolderProvider implements FileStorageProvider {
   readonly attachmentPolicy = { maxFileBytes: 20 * 1024 * 1024, maxImageBytes: 10 * 1024 * 1024 };
   constructor(readonly handle: FileSystemDirectoryHandle) {}
+  async canRead() {
+    try {
+      return (await this.handle.queryPermission({ mode: 'read' })) === 'granted';
+    } catch (error) {
+      throw storageError(error);
+    }
+  }
+  async workspaceIds() {
+    try {
+      const root = await this.handle.getDirectoryHandle('workspaces');
+      const ids: string[] = [];
+      for await (const [id, entry] of root.entries())
+        if (entry.kind === 'directory' && /^[A-Za-z0-9_-]+$/.test(id)) ids.push(id);
+      return ids.sort();
+    } catch (error) {
+      if ((error as DOMException).name === 'NotFoundError') return [];
+      throw storageError(error);
+    }
+  }
   async deleteWorkspace(workspaceId: string) {
     if (!/^[a-zA-Z0-9_-]+$/.test(workspaceId))
       throw new StorageError('invalid', 'Invalid workspace ID');

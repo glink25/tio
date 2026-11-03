@@ -1,3 +1,4 @@
+export * from './query-index';
 import {
   validDocumentIcon,
   validDocumentCover,

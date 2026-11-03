@@ -154,19 +154,23 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
             runtime={m.runtime}
             workspaceId={m.session!.workspaceId}
             target={{
-              id: current ? m.selected || current.id : m.contentReady ? m.selected : '',
+              id: current
+                ? m.selected || current.id
+                : m.contentReady && m.navigationReady
+                  ? m.selected
+                  : '',
               ...m.locationTarget,
             }}
             renderEmptyState={
-              m.contentReady
+              m.contentReady && m.navigationReady
                 ? undefined
                 : () =>
-                    m.status.visual === 'attention' ? (
+                    m.queryIndexError || m.status.visual === 'attention' ? (
                       <div
                         role="alert"
                         className="flex min-h-[60dvh] flex-col items-center justify-center gap-4 p-12 text-center text-sm"
                       >
-                        <p>{statusLabel(m.status)}</p>
+                        <p>{m.queryIndexError ?? statusLabel(m.status)}</p>
                         <Button variant="outline" onClick={() => void m.retryInitialization()}>
                           {t(m.manualSync ? 'sync.now' : 'common.retry')}
                         </Button>

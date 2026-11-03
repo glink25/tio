@@ -1,9 +1,12 @@
-import { validateAssetSize } from '@tio/core';
 import {
   applyCommit,
-  assertAccess as checkAccess,
+  assertAccess,
   createDomain,
   HostError,
+  readableObject,
+  navigationObject,
+  preservePrivateFields,
+  validateAssetSize,
   type AssetData,
   type CommitRequest,
   type CommitResult,
@@ -12,51 +15,46 @@ import {
   type PageQuery,
   type RecordQuery,
   type RepositoryCapabilities,
+  type RepositoryStateStore,
   type WorkspaceContentPort,
   type WorkspaceEntry,
   type WorkspaceEvent,
   type WorkspaceRepository,
   type WorkspaceSnapshot,
+  type TioObject,
+  type QueryEntry,
+  type QueryIndexState,
+  type ProjectionQuery,
 } from '@tio/core';
+import { queryEntry } from '@tio/database/query-entry';
 import { ScanningRelations } from '@tio/database/relations';
-import { ScanningQueries, pageEntries } from '@tio/database/repository';
+import { ProjectionQueries } from '@tio/database/repository';
 import { canonical } from '@tio/serialization';
 
-const assertAccess: typeof checkAccess = (...args) => {
-  try {
-    checkAccess(...args);
-  } catch {
-    throw new HostError('permission');
-  }
-};
 interface PendingWrite {
   request: CommitRequest;
   before: Record<string, string | null>;
   assets: Record<string, AssetData>;
+  signature: string;
 }
-export interface FileJournalState {
-  version: number;
-  objects: Record<string, { hash: string; revision: number; changedAt: number }>;
-  pending?: PendingWrite;
-  receipts: Record<
-    string,
-    { signature: string; ids: string[]; version: number; clientId?: string; sequence?: number }
-  >;
-  watermarks: Record<string, number>;
+interface ObjectState extends QueryEntry {
+  hash: string;
+  changedAt: number;
 }
-/** Durable metadata plus unfinished writes only; acknowledged bodies are removed. */
-export interface FileJournal {
-  load(): Promise<FileJournalState | undefined>;
-  save(state: FileJournalState): Promise<void>;
+interface Receipt {
+  signature: string;
+  ids: string[];
+  clientId?: string;
+  sequence?: number;
 }
-const fresh = (): FileJournalState => ({ version: 0, objects: {}, receipts: {}, watermarks: {} });
+const changeKey = (version: number, id = '') => `change/${String(version).padStart(16, '0')}/${id}`;
 async function fingerprint(object: unknown) {
   const bytes = new TextEncoder().encode(canonical(object));
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
-    .map((b) => b.toString(16).padStart(2, '0'))
+    .map((v) => v.toString(16).padStart(2, '0'))
     .join('');
 }
-/** Files are authoritative. Serialization is shared across instances by the host lock. */
+/** Files are authoritative; the state store contains projections and unfinished publications only. */
 export class FileRepository implements WorkspaceRepository {
   get attachmentPolicy() {
     return this.content.attachmentPolicy;
@@ -66,84 +64,223 @@ export class FileRepository implements WorkspaceRepository {
     offline: false,
     prefetch: 'none',
   };
-  private queries = new ScanningQueries(this);
+  private queries = new ProjectionQueries(this);
   private relationQueries?: ScanningRelations;
   get relations() {
-    return (this.relationQueries ??= new ScanningRelations(this, () => this.relationsReady()));
+    return (this.relationQueries ??= new ScanningRelations(this));
   }
-  protected relationsReady() {
-    return true;
-  }
-
   private staged = new Map<string, AssetData>();
   private listeners = new Set<(event: WorkspaceEvent) => void>();
+  private indexListeners = new Set<() => void>();
   private queue: Promise<unknown> = Promise.resolve();
+  private building?: Promise<void>;
   private closed = false;
+  private notifiedVersion = 0;
+  queryIndexState: QueryIndexState = { status: 'building' };
   constructor(
     private content: WorkspaceContentPort,
     private workspaceId: string,
-    private journal: FileJournal,
+    private state: RepositoryStateStore,
     private lock: <T>(work: () => Promise<T>) => Promise<T> = (work) => work(),
     private domain: Domain = createDomain(),
   ) {}
-  private serial<T>(work: (state: FileJournalState) => Promise<T>): Promise<T> {
+  private serial<T>(work: () => Promise<T>): Promise<T> {
     const next = this.queue.then(() =>
       this.lock(async () => {
         if (this.closed) throw new HostError('closed');
-        return work((await this.journal.load()) ?? fresh());
+        return work();
       }),
     );
     this.queue = next.catch(() => {});
     return next;
   }
-  private emit(state: FileJournalState, commitId: string, ids: string[], origin = 'external') {
-    for (const listener of this.listeners)
-      listener({ version: state.version, commitId, changedIds: ids, origin });
+  private async version() {
+    return (await this.state.read<number>('version')) ?? 0;
   }
-  private async scanState(state: FileJournalState): Promise<WorkspaceSnapshot> {
-    const entries: WorkspaceEntry[] = [];
-    const ids = await this.content.list();
-    const changed: string[] = [];
-    for (const id of ids) {
+  private emit(version: number, commitId: string, changedIds: string[], origin = 'external') {
+    this.notifiedVersion = Math.max(this.notifiedVersion, version);
+    for (const listener of this.listeners) listener({ version, commitId, changedIds, origin });
+  }
+  private async authorize() {
+    const access = await this.content.authorize();
+    if (
+      !access.allows(
+        { workspaceId: this.workspaceId, id: this.workspaceId, type: 'workspace' },
+        'read',
+      )
+    )
+      throw new HostError('permission');
+    return access;
+  }
+  private indexStatus(status: QueryIndexState) {
+    this.queryIndexState = status;
+    for (const listener of this.indexListeners) listener();
+  }
+  subscribeQueryIndex = (listener: () => void) => {
+    this.indexListeners.add(listener);
+    return () => {
+      this.indexListeners.delete(listener);
+    };
+  };
+  private async initialize() {
+    await this.authorize();
+    if (await this.state.read<boolean>('ready')) {
+      if (!this.building && this.queryIndexState.status !== 'error')
+        this.queryIndexState = { status: 'ready' };
+      return;
+    }
+    if (!this.building && this.queryIndexState.status !== 'error')
+      void this.refreshExternal().catch(() => {});
+  }
+  /** Only explicit refresh and first-use indexing discover external files. Never called by poll(). */
+  refreshExternal(): Promise<void> {
+    if (this.building) return this.building;
+    this.indexStatus({ status: 'building' });
+    this.building = (async () => {
+      await this.authorize();
+      const start = await this.serial(async () => {
+        await this.recover();
+        return this.version();
+      });
+      const ids = await this.content.list();
+      const observed = new Map<string, { object: TioObject; state: ObjectState }>();
+      // Bounded batches keep file I/O and object lifetimes independent of the full corpus.
+      for (let offset = 0; offset < ids.length; offset += 64) {
+        if (this.closed) throw new HostError('closed');
+        await Promise.all(
+          Array.from({ length: 4 }, async (_, worker) => {
+            for (let i = offset + worker; i < Math.min(offset + 64, ids.length); i += 4) {
+              const object = await this.content.read(ids[i], { fresh: true });
+              if (!object)
+                throw new HostError('unavailable', `Object disappeared during scan: ${ids[i]}`);
+              const derived = queryEntry(object, 0);
+              // Keep the projection, not a complete body, throughout the rebuild.
+              observed.set(object.id, {
+                object: derived.projection,
+                state: { ...derived, hash: await fingerprint(object), changedAt: 0 },
+              });
+            }
+          }),
+        );
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+      }
+      await this.serial(async () => {
+        await this.authorize();
+        await this.recover();
+        const previous = await this.state.entries<ObjectState>('object/');
+        const byId = new Map(previous.map(({ value }) => [value.projection.id, value]));
+        for (const [id, old] of byId)
+          if (!observed.has(id) && old.changedAt <= start)
+            throw new HostError('unavailable', `Previously known file is missing: ${id}`);
+        const version = await this.version();
+        const updates: { key: string; value: unknown }[] = [];
+        const deletes: string[] = [];
+        const changed: string[] = [];
+        for (const [id, { state: entry }] of observed) {
+          const old = byId.get(id);
+          if (old && (old.changedAt > start || old.hash === entry.hash)) continue;
+          const next = { ...entry, revision: (old?.revision ?? 0) + 1, changedAt: version + 1 };
+          this.indexUpdate(next, old, updates, deletes);
+          changed.push(id);
+        }
+        await this.state.write(
+          [
+            ...updates,
+            { key: 'version', value: changed.length ? version + 1 : version },
+            { key: 'ready', value: true },
+            ...(!previous.length ? [{ key: 'record-order-ready', value: true }] : []),
+          ],
+          deletes,
+        );
+        if (changed.length) this.emit(version + 1, crypto.randomUUID(), changed);
+      });
+      this.indexStatus({ status: 'ready' });
+    })()
+      .catch((error) => {
+        if (!this.closed) this.indexStatus({ status: 'error', error: String(error) });
+        throw error;
+      })
+      .finally(() => {
+        this.building = undefined;
+      });
+    return this.building;
+  }
+  private indexUpdate(
+    entry: ObjectState,
+    previous: ObjectState | undefined,
+    puts: { key: string; value: unknown }[],
+    deletes: string[],
+  ) {
+    const o = entry.projection;
+    if (previous) {
+      if (previous.projection.databaseId)
+        deletes.push(`record-order/${previous.projection.databaseId}/${o.id}`);
+      deletes.push(changeKey(previous.changedAt, o.id), `type/${previous.projection.type}/${o.id}`);
+      if (previous.projection.databaseId)
+        deletes.push(`database/${previous.projection.databaseId}/${o.id}`);
+    }
+    puts.push(
+      { key: `object/${o.id}`, value: entry },
+      { key: `type/${o.type}/${o.id}`, value: o.id },
+      { key: changeKey(entry.changedAt, o.id), value: o.id },
+    );
+    if (o.type === 'record' && o.databaseId && !o.deleted)
+      puts.push({ key: `record-order/${o.databaseId}/${o.id}`, value: navigationObject(o) });
+    if (o.databaseId) puts.push({ key: `database/${o.databaseId}/${o.id}`, value: o.id });
+  }
+  private async observe(ids: string[], complete = false): Promise<WorkspaceSnapshot> {
+    const version = await this.version();
+    const access = await this.authorize();
+    const entries: WorkspaceEntry[] = [],
+      missing: string[] = [],
+      denied: string[] = [];
+    const puts: { key: string; value: unknown }[] = [],
+      deletes: string[] = [],
+      changed: string[] = [];
+    for (const id of new Set(ids)) {
+      const previous = await this.state.read<ObjectState>('object/' + id);
       const object = await this.content.read(id, { fresh: true });
-      if (!object) throw new HostError('unavailable', `Object disappeared during scan: ${id}`);
+      if (!object) {
+        if (previous) throw new HostError('unavailable', `Previously known file is missing: ${id}`);
+        missing.push(id);
+        continue;
+      }
       const hash = await fingerprint(object);
-      const previous = state.objects[id];
+      let revision = previous?.revision ?? 0;
       if (previous?.hash !== hash) {
-        state.objects[id] = {
-          hash,
-          revision: (previous?.revision ?? 0) + 1,
-          changedAt: state.version + 1,
-        };
+        revision++;
+        this.indexUpdate(
+          { ...queryEntry(object, revision), hash, changedAt: version + 1 },
+          previous,
+          puts,
+          deletes,
+        );
         changed.push(id);
       }
-      entries.push({ object, revision: state.objects[id].revision });
+      const readable = complete ? object : readableObject(access, object);
+      if (readable) entries.push({ object: readable, revision });
+      else denied.push(id);
     }
-    for (const id of Object.keys(state.objects))
-      if (!ids.includes(id))
-        throw new HostError('unavailable', `Previously known file is missing: ${id}`);
     if (changed.length) {
-      state.version++;
-      await this.journal.save(state);
-      this.emit(state, crypto.randomUUID(), changed);
+      await this.state.write([...puts, { key: 'version', value: version + 1 }], deletes);
+      this.emit(version + 1, crypto.randomUUID(), changed);
     }
-    return { version: state.version, entries };
+    return { version: changed.length ? version + 1 : version, entries, missing, denied };
   }
-  private async recover(state: FileJournalState) {
-    const pending = state.pending;
+  private async recover() {
+    const pending = await this.state.read<PendingWrite>('pending');
     if (!pending) return;
     const { request, before, assets } = pending;
-    const access = await this.content.authorize();
-    // Validate every object before writing any. A conflicting external edit is never overwritten.
     for (const object of request.changes) {
       const current = await this.content.read(object.id, { fresh: true });
       const hash = current ? await fingerprint(current) : null;
       if (hash !== before[object.id] && hash !== (await fingerprint(object)))
         throw new HostError('conflict', `Recovery conflicts with an external edit: ${object.id}`);
-      assertAccess(access, current, object);
+      assertAccess(await this.content.authorize(), current, object);
     }
     for (const [id, asset] of Object.entries(assets)) {
-      const metadata = request.changes.find((o) => o.id === id) ?? (await this.content.read(id));
+      const metadata =
+        request.changes.find((o) => o.id === id) ?? (await this.content.read(id, { fresh: true }));
       if (!metadata || metadata.type !== 'asset')
         throw new HostError('invalid', 'Asset metadata missing');
       await this.content.writeAsset(metadata, asset.bytes);
@@ -151,210 +288,337 @@ export class FileRepository implements WorkspaceRepository {
     for (const object of request.changes) {
       const current = await this.content.read(object.id, { fresh: true });
       const hash = current ? await fingerprint(current) : null;
-      const desired = await fingerprint(object);
-      if (hash === desired) continue;
+      if (hash === (await fingerprint(object))) continue;
       if (hash !== before[object.id])
         throw new HostError('conflict', `File changed during publication: ${object.id}`);
       assertAccess(await this.content.authorize(), current, object);
       await this.content.write(object);
     }
-    const entries: WorkspaceEntry[] = [];
-    state.version++;
+    const version = (await this.version()) + 1;
+    const puts: { key: string; value: unknown }[] = [],
+      deletes = ['pending'];
     for (const object of request.changes) {
-      const revision = (state.objects[object.id]?.revision ?? 0) + 1;
-      state.objects[object.id] = {
-        hash: await fingerprint(object),
-        revision,
-        changedAt: state.version,
-      };
-      entries.push({ object, revision });
+      const previous = await this.state.read<ObjectState>('object/' + object.id);
+      this.indexUpdate(
+        {
+          ...queryEntry(object, (previous?.revision ?? 0) + 1),
+          hash: await fingerprint(object),
+          changedAt: version,
+        },
+        previous,
+        puts,
+        deletes,
+      );
     }
-    state.receipts[request.id] = {
-      signature: await fingerprint(request),
-      ids: entries.map((e) => e.object.id),
-      version: state.version,
+    const receipt: Receipt = {
+      signature: pending.signature,
+      ids: request.changes.map((o) => o.id),
       clientId: request.clientId,
       sequence: request.sequence,
     };
-    delete state.pending;
-    await this.journal.save(state);
+    puts.push({ key: 'receipt/' + request.id, value: receipt }, { key: 'version', value: version });
+    if (request.clientId && request.sequence)
+      puts.push({
+        key: `client/${request.clientId}/${String(request.sequence).padStart(16, '0')}`,
+        value: request.id,
+      });
+    await this.state.write(puts, deletes);
     request.assetIds.forEach((id) => this.staged.delete(id));
     this.emit(
-      state,
+      version,
       request.id,
       request.changes.map((o) => o.id),
       request.origin ?? 'host',
     );
   }
-  readSnapshot() {
-    return this.serial(async (state) => {
-      await this.recover(state);
-      return this.scanState(state);
-    });
-  }
   readObjects(ids: string[]) {
-    return this.serial(async (state) => {
-      await this.recover(state);
-      const entries: WorkspaceEntry[] = [];
-      const missing: string[] = [];
-      const changed: string[] = [];
-      for (const id of [...new Set(ids)]) {
-        const object = await this.content.read(id, { fresh: true });
-        if (!object) {
-          missing.push(id);
-          continue;
-        }
-        const hash = await fingerprint(object);
-        if (state.objects[id]?.hash !== hash) {
-          state.objects[id] = {
-            hash,
-            revision: (state.objects[id]?.revision ?? 0) + 1,
-            changedAt: state.version + 1,
-          };
-          changed.push(id);
-        }
-        entries.push({ object, revision: state.objects[id].revision });
-      }
-      if (changed.length) {
-        state.version++;
-        await this.journal.save(state);
-        this.emit(state, crypto.randomUUID(), changed);
-      }
-      return { version: state.version, entries, missing };
+    return this.serial(async () => {
+      await this.recover();
+      return this.observe(ids);
     });
   }
-  readChanges(since: number) {
-    return this.serial(async (state) => {
-      await this.recover(state);
-      const snapshot = await this.scanState(state);
+  async readSnapshot(): Promise<WorkspaceSnapshot> {
+    await this.refreshExternal();
+    const ids = (await this.state.entries<ObjectState>('object/')).map(
+      (e) => e.value.projection.id,
+    );
+    const entries: WorkspaceEntry[] = [];
+    for (let offset = 0; offset < ids.length; offset += 250)
+      entries.push(...(await this.readObjects(ids.slice(offset, offset + 250))).entries);
+    return { version: await this.version(), entries };
+  }
+  readChanges(since: number, ids?: string[]) {
+    return this.serial(async () => {
+      await this.recover();
+      const changed = await this.state.entries<string>('change/', changeKey(since, '\uffff'));
+      const scoped = ids ? new Set(ids) : undefined;
+      const states = (
+        await this.state.readMany<ObjectState>(changed.map(({ value }) => 'object/' + value))
+      ).filter((e): e is ObjectState => !!e);
+      const selected = states
+        .filter((e) => !scoped || scoped.has(e.projection.id))
+        .map((e) => e.projection.id);
+      const snapshot = await this.observe(selected);
+      if (scoped) {
+        const access = await this.authorize();
+        for (const entry of states) {
+          if (
+            scoped.has(entry.projection.id) ||
+            !['workspace', 'page', 'database', 'databaseView'].includes(entry.projection.type)
+          )
+            continue;
+          const object = readableObject(access, navigationObject(entry.projection));
+          if (object) snapshot.entries.push({ object, revision: entry.revision });
+        }
+      }
+      return snapshot;
+    });
+  }
+  async readProjection(query: ProjectionQuery) {
+    await this.initialize();
+    return this.serial(async () => {
+      await this.recover();
+      const access = await this.authorize();
+      let values: ObjectState[];
+      if (query.ids)
+        values = (
+          await this.state.readMany<ObjectState>(
+            [...new Set(query.ids)].map((id) => 'object/' + id),
+          )
+        ).filter((e): e is ObjectState => !!e);
+      else {
+        const prefix = query.type
+          ? `type/${query.type}/`
+          : query.databaseId
+            ? `database/${query.databaseId}/`
+            : 'object/';
+        const rows = await this.state.entries<ObjectState | string>(
+          prefix,
+          query.after ? prefix + query.after : undefined,
+          query.limit,
+        );
+        values =
+          prefix === 'object/'
+            ? rows.map(({ value }) => value as ObjectState)
+            : (
+                await this.state.readMany<ObjectState>(
+                  rows.map(({ value }) => 'object/' + (value as string)),
+                )
+              ).filter((e): e is ObjectState => !!e);
+      }
+      const denied: string[] = [];
       return {
-        ...snapshot,
-        entries: snapshot.entries.filter((e) => state.objects[e.object.id].changedAt > since),
+        version: await this.version(),
+        next:
+          query.limit !== undefined && values.length === query.limit
+            ? values.at(-1)!.projection.id
+            : undefined,
+        entries: values.flatMap((e) => {
+          const projection = readableObject(access, e.projection);
+          if (!projection) {
+            denied.push(e.projection.id);
+            return [];
+          }
+          return [{ projection, revision: e.revision, references: e.references }];
+        }),
+        missing: query.ids?.filter((id) => !values.some((e) => e.projection.id === id)),
+        denied,
       };
     });
   }
+  async queryAccessVersion() {
+    return (await this.authorize()).version;
+  }
+  async readRecordOrder(databaseId: string) {
+    await this.requireIndex();
+    return this.serial(async () => {
+      await this.recover();
+      const access = await this.authorize();
+      if (!(await this.state.read<boolean>('record-order-ready'))) {
+        const objects = await this.state.entries<ObjectState>('object/');
+        await this.state.write([
+          ...objects.flatMap(({ value: { projection: o } }) =>
+            o.type === 'record' && o.databaseId && !o.deleted
+              ? [{ key: `record-order/${o.databaseId}/${o.id}`, value: navigationObject(o) }]
+              : [],
+          ),
+          { key: 'record-order-ready', value: true },
+        ]);
+      }
+      const rows = await this.state.entries<TioObject>(`record-order/${databaseId}/`);
+      return {
+        version: await this.version(),
+        ids: rows.filter(({ value }) => readableObject(access, value)).map(({ value }) => value.id),
+      };
+    });
+  }
+  private async requireIndex() {
+    await this.initialize();
+    if (this.queryIndexState.status !== 'ready')
+      throw new HostError(
+        this.queryIndexState.status === 'error' ? 'unavailable' : 'pending',
+        this.queryIndexState.error ?? 'Query index is being prepared',
+      );
+  }
   async readMetadata(ids: string[]) {
+    await this.requireIndex();
     return this.queries.metadata(ids);
   }
-  queryMentions(query: import('@tio/core').MentionQuery) {
+  async queryMentions(query: import('@tio/core').MentionQuery) {
+    await this.requireIndex();
     return this.queries.mentions(query);
   }
-  queryNavigation(query: import('@tio/core').NavigationQuery) {
+  async queryNavigation(query: import('@tio/core').NavigationQuery) {
+    await this.initialize();
+    if (this.queryIndexState.status === 'error')
+      throw new HostError('unavailable', this.queryIndexState.error);
     return this.queries.navigation(query);
   }
-  queryRecords(query: RecordQuery) {
+  async queryRecordWindow(query: import('@tio/core').RecordWindowQuery) {
+    await this.requireIndex();
+    return this.queries.window(query);
+  }
+  async queryRecords(query: RecordQuery) {
+    await this.requireIndex();
     return this.queries.records(query);
   }
-  scan(query: PageQuery) {
+  async scan(query: PageQuery) {
+    await this.requireIndex();
     return this.queries.scan(query);
   }
   async queryObjects(query: ObjectQuery) {
-    const snapshot = await this.readSnapshot();
-    return pageEntries(
-      {
-        ...snapshot,
-        entries: snapshot.entries.filter((e) =>
-          'type' in query.scope
-            ? e.object.type === query.scope.type
-            : e.object.databaseId === query.scope.databaseId,
-        ),
-      },
-      query,
-    );
+    await this.requireIndex();
+    return this.queries.objects(query);
   }
   commit(request: CommitRequest): Promise<CommitResult> {
-    return this.serial(async (state) => {
-      if (
-        state.pending &&
-        state.pending.request.id === request.id &&
-        canonical(state.pending.request) !== canonical(request)
-      )
+    return this.serial(async () => {
+      const signature = await fingerprint(request);
+      const pending = await this.state.read<PendingWrite>('pending');
+      if (pending?.request.id === request.id && pending.signature !== signature)
         throw new HostError('invalid', 'Commit ID reused');
-      await this.recover(state);
-      const receipt = state.receipts[request.id];
+      await this.recover();
+      const receipt = await this.state.read<Receipt>('receipt/' + request.id);
       if (receipt) {
         if (receipt.signature !== (await fingerprint(request)))
           throw new HostError('invalid', 'Commit ID reused');
-        return this.receiptResult(state, request.id);
+        return { status: 'committed', ...(await this.observe(receipt.ids)) };
       }
+      const version = await this.version();
       if (
         request.clientId &&
         request.sequence &&
-        request.sequence <= (state.watermarks[request.clientId] ?? 0)
+        request.sequence <= ((await this.state.read<number>('watermark/' + request.clientId)) ?? 0)
       )
-        return { status: 'compacted', version: state.version };
-      const snapshot = await this.scanState(state);
-      if (request.expectedVersion !== state.version)
-        return { status: 'conflict', version: state.version };
+        return { status: 'compacted', version };
       if (request.changes.some((o) => o.workspaceId !== this.workspaceId))
         throw new HostError('invalid', 'Cross-workspace write');
-      applyCommit(snapshot, request, this.domain);
+      const needed = [
+        ...new Set(request.changes.flatMap((o) => [o.id, ...(o.databaseId ? [o.databaseId] : [])])),
+      ];
+      const snapshot = await this.observe(needed, true);
+      if (request.expectedVersion !== snapshot.version)
+        return { status: 'conflict', version: snapshot.version };
       const access = await this.content.authorize();
-      const before: PendingWrite['before'] = {};
-      for (const object of request.changes) {
-        assertAccess(
-          access,
-          snapshot.entries.find((e) => e.object.id === object.id)?.object,
-          object,
-        );
-        before[object.id] = state.objects[object.id]?.hash ?? null;
+      const originals = new Map(snapshot.entries.map((e) => [e.object.id, e.object]));
+      const effective = {
+        ...request,
+        changes: request.changes.map((object) =>
+          preservePrivateFields(access, originals.get(object.id), object),
+        ),
+      };
+      applyCommit(snapshot, effective, this.domain);
+      const before: PendingWrite['before'] = {},
+        assets: PendingWrite['assets'] = {};
+      for (const object of effective.changes) {
+        assertAccess(access, originals.get(object.id), object);
+        before[object.id] = originals.has(object.id)
+          ? await fingerprint(originals.get(object.id))
+          : null;
+        if (
+          object.type === 'asset' &&
+          !object.deleted &&
+          !request.assetIds.includes(object.id) &&
+          !(await this.content.readAsset(object))
+        )
+          throw new HostError('invalid', 'Missing asset');
       }
-      const assets: PendingWrite['assets'] = {};
       for (const id of request.assetIds) {
         const asset = this.staged.get(id);
         if (!asset) throw new HostError('invalid', 'Missing staged asset');
         assets[id] = asset;
       }
-      for (const object of request.changes)
-        if (
-          object.type === 'asset' &&
-          !object.deleted &&
-          !assets[object.id] &&
-          !(await this.content.readAsset(object))
-        )
-          throw new HostError('invalid', 'Missing asset');
-      state.pending = structuredClone({ request, before, assets });
-      await this.journal.save(state);
-      await this.recover(state);
-      return this.receiptResult(state, request.id);
+      await this.state.write([
+        { key: 'pending', value: { request: effective, before, assets, signature } },
+      ]);
+      await this.recover();
+      // Recovery already verified and published exactly these objects. No workspace scan.
+      const entries = await Promise.all(
+        effective.changes.map(async (object) => ({
+          object,
+          revision: (await this.state.read<ObjectState>('object/' + object.id))!.revision,
+        })),
+      );
+      return {
+        status: 'committed',
+        version: await this.version(),
+        entries: structuredClone(
+          entries.flatMap((entry) => {
+            const object = readableObject(access, entry.object);
+            return object ? [{ ...entry, object }] : [];
+          }),
+        ),
+      };
     });
   }
-  private async receiptResult(state: FileJournalState, id: string): Promise<CommitResult> {
-    const receipt = state.receipts[id];
-    const snapshot = await this.scanState(state);
-    return {
-      status: 'committed',
-      version: snapshot.version,
-      entries: snapshot.entries.filter((e) => receipt.ids.includes(e.object.id)),
-    };
-  }
-  getCommitResult(id: string) {
-    return this.serial(async (state) => {
-      await this.recover(state);
-      return state.receipts[id] ? this.receiptResult(state, id) : undefined;
+  getCommitResult(id: string): Promise<CommitResult | undefined> {
+    return this.serial(async () => {
+      await this.recover();
+      const receipt = await this.state.read<Receipt>('receipt/' + id);
+      return receipt ? { status: 'committed', ...(await this.observe(receipt.ids)) } : undefined;
     });
   }
   acknowledgeCommits(clientId: string, sequence: number) {
-    return this.serial(async (state) => {
-      state.watermarks[clientId] = Math.max(sequence, state.watermarks[clientId] ?? 0);
-      for (const [id, receipt] of Object.entries(state.receipts))
-        if (receipt.clientId === clientId && receipt.sequence! <= sequence)
-          delete state.receipts[id];
-      await this.journal.save(state);
+    return this.serial(async () => {
+      const watermark = Math.max(
+        sequence,
+        (await this.state.read<number>('watermark/' + clientId)) ?? 0,
+      );
+      const rows = await this.state.entries<string>('client/' + clientId + '/');
+      const deletes = rows
+        .filter(({ key }) => Number(key.slice(key.lastIndexOf('/') + 1)) <= watermark)
+        .flatMap(({ key, value }) => [key, 'receipt/' + value]);
+      await this.state.write([{ key: 'watermark/' + clientId, value: watermark }], deletes);
     });
   }
-  subscribeChanges(listener: (event: WorkspaceEvent) => void) {
-    this.listeners.add(listener);
+  subscribeChanges = (fn: (event: WorkspaceEvent) => void) => {
+    this.listeners.add(fn);
     return () => {
-      this.listeners.delete(listener);
+      this.listeners.delete(fn);
     };
-  }
+  };
+  notifyChanges = () =>
+    this.serial(async () => {
+      const version = await this.version();
+      if (version <= this.notifiedVersion) return;
+      const rows = await this.state.entries<string>(
+        'change/',
+        changeKey(this.notifiedVersion, '\uffff'),
+      );
+      this.emit(
+        version,
+        crypto.randomUUID(),
+        rows.map((row) => row.value),
+      );
+    }).catch((error) => {
+      if (!this.closed) throw error;
+    });
   async stageAsset(id: string, asset: AssetData) {
     validateAssetSize(asset.bytes.byteLength, this.attachmentPolicy.maxFileBytes);
     if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new HostError('invalid');
     this.staged.set(id, structuredClone(asset));
   }
   async readAsset(id: string) {
+    await this.authorize();
     const object = await this.content.read(id, { fresh: true });
     if (!object || object.deleted) return undefined;
     const bytes = await this.content.readAsset(object);
@@ -365,9 +629,11 @@ export class FileRepository implements WorkspaceRepository {
     this.staged.delete(id);
   }
   close() {
-    this.relationQueries?.close();
     this.closed = true;
+    this.relationQueries?.close();
+    this.queries.close();
     this.listeners.clear();
+    this.indexListeners.clear();
     this.staged.clear();
   }
 }

@@ -1,3 +1,4 @@
+import { prepareAsset } from '@tio/assets';
 import {
   blockMentions,
   mentionReferences,
@@ -6,6 +7,8 @@ import {
   readableObject,
   validate,
   validateValue,
+  validateAssetSize,
+  type AssetData,
   type Block,
   type TioObject,
 } from '@tio/core';
@@ -45,6 +48,7 @@ export interface BrokerOptions {
   readOnly: () => boolean;
   context: () => Record<string, unknown>;
   resize: (height: number) => void;
+  download?: (file: AssetData) => void;
 }
 /** No caller-supplied identity can expand this instance's page-derived authority. */
 export class AppSliceBroker {
@@ -58,7 +62,25 @@ export class AppSliceBroker {
   private origin: string | undefined;
   constructor(private options: BrokerOptions) {
     this.last = this.signature();
+    const stateKey = () => {
+      const state = options.runtime.state.getState();
+      const page = state.objects.find((o) => o.id === options.pageId);
+      return JSON.stringify([
+        state.version,
+        state.pending,
+        state.contentReady,
+        state.queryIndexState.status,
+        options.runtime.access.version,
+        page?.title,
+        page?.blocks,
+      ]);
+    };
+    let previousState = stateKey();
     this.stop = options.runtime.state.subscribe(() => {
+      const state = stateKey();
+      // Query-window publication changes cache coverage, not business content.
+      if (state === previousState && !options.runtime.state.getState().pending) return;
+      previousState = state;
       const next = this.signature();
       if (next !== this.last) {
         this.last = next;
@@ -71,6 +93,8 @@ export class AppSliceBroker {
     this.closed = true;
     this.stop();
     this.listeners.clear();
+    this.receipts.clear();
+    this.tokens.clear();
   }
   subscribe(listener: (event: unknown) => void) {
     this.listeners.add(listener);
@@ -235,7 +259,11 @@ export class AppSliceBroker {
     const saved = this.tokens.get(String(version));
     if (!saved || saved.id !== o.id || saved.value !== JSON.stringify(o)) fail('CONFLICT');
   }
-  private async commit(expected: TioObject[], changes: TioObject[]) {
+  private async commit(
+    expected: TioObject[],
+    changes: TioObject[],
+    assets: ReadonlyMap<string, AssetData> = new Map(),
+  ) {
     this.writable();
     const page = this.page();
     for (const o of changes) {
@@ -289,6 +317,7 @@ export class AppSliceBroker {
         [...new Map([page, ...expected].map((o) => [o.id, o])).values()],
         changes,
         recheck,
+        { assets },
       );
     } catch (error) {
       if (error instanceof AppSliceError) throw error;
@@ -307,6 +336,7 @@ export class AppSliceBroker {
   }
   private validateBlocks(before: Block[], after: Block[]) {
     const allowed = this.databaseIds();
+    this.validateAssetRefs(this.blockAssets(after), this.blockAssets(before));
     this.validateMentions(blockMentions(after), blockMentions(before));
     const protectedBefore = flatten(before).filter((b) => b.type === 'appSlice');
     const protectedAfter = flatten(after).filter((b) => b.type === 'appSlice');
@@ -320,7 +350,272 @@ export class AppSliceBroker {
         fail('PERMISSION_DENIED');
     }
   }
-  invoke(method: string, input: unknown = {}, requestId = crypto.randomUUID()): Promise<unknown> {
+  private blockAssets(blocks: Block[]) {
+    return flatten(blocks).flatMap((block) =>
+      Object.values(block.props).filter(
+        (value) => typeof value === 'string' && value.startsWith('asset:'),
+      ),
+    );
+  }
+  private availableAssets() {
+    const refs = new Set<unknown>(this.blockAssets(this.readable(this.page()).blocks ?? []));
+    for (const o of this.objects()) {
+      if (
+        o.type === 'page' &&
+        this.references().some((ref) => ref.kind === 'page' && ref.id === o.id) &&
+        this.options.runtime.can(o, 'read')
+      )
+        this.blockAssets(this.readable(o).blocks ?? []).forEach((ref) => refs.add(ref));
+      if (
+        o.type === 'record' &&
+        o.databaseId &&
+        this.databaseIds().has(o.databaseId) &&
+        this.options.runtime.can(o, 'read')
+      ) {
+        const db = this.databases().find((db) => db.id === o.databaseId);
+        if (!db) continue;
+        const readable = this.readable(o);
+        for (const field of this.readable(db).fields ?? [])
+          if (field.type === 'files') {
+            const values = readable.properties?.[field.id];
+            if (Array.isArray(values)) values.forEach((ref) => refs.add(ref));
+          }
+      }
+    }
+    return refs;
+  }
+  private validateAssetRefs(refs: unknown[], previous: unknown[] = []) {
+    const allowed = this.availableAssets();
+    previous.forEach((ref) => allowed.add(ref));
+    for (const ref of refs)
+      if (typeof ref !== 'string' || !ref.startsWith('asset:') || !allowed.has(ref))
+        fail('PERMISSION_DENIED');
+  }
+  private async attachmentTarget(target: any) {
+    if (!target || typeof target !== 'object') return fail('INVALID_INPUT');
+    if (target.kind === 'page') {
+      only(target, ['kind', 'pageId', 'afterBlockId']);
+      const pageId = target.pageId ?? this.options.pageId;
+      if (
+        typeof pageId !== 'string' ||
+        (target.afterBlockId !== undefined && typeof target.afterBlockId !== 'string')
+      )
+        fail('INVALID_INPUT');
+      if (pageId !== this.options.pageId) this.targetPage(pageId);
+      await this.options.runtime.loadTarget(pageId);
+      this.page();
+      const object = pageId === this.options.pageId ? this.page() : this.targetPage(pageId);
+      return { object, db: undefined, field: undefined };
+    }
+    if (target.kind !== 'record') return fail('INVALID_INPUT');
+    only(target, ['kind', 'databaseId', 'recordId', 'fieldId']);
+    if (
+      ![target.databaseId, target.recordId, target.fieldId].every(
+        (value) => typeof value === 'string',
+      )
+    )
+      fail('INVALID_INPUT');
+    this.db(target.databaseId);
+    await this.options.runtime.loadTarget(target.recordId);
+    const db = this.db(target.databaseId);
+    const object = this.objects().find(
+      (o) => o.id === target.recordId && o.type === 'record' && o.databaseId === db.id,
+    );
+    if (!object || !this.options.runtime.can(object, 'read')) return fail('PERMISSION_DENIED');
+    const field = this.readable(db).fields?.find(
+      (field) => field.id === target.fieldId && field.type === 'files',
+    );
+    if (!field || !this.options.runtime.can(object, 'read', field.id))
+      return fail('PERMISSION_DENIED');
+    return { object, db, field };
+  }
+  private attachmentRefs(object: TioObject, field?: import('@tio/core').Field) {
+    const readable = this.readable(object);
+    if (field) {
+      const values = readable.properties?.[field.id];
+      return (Array.isArray(values) ? values : [])
+        .filter((ref): ref is string => typeof ref === 'string' && ref.startsWith('asset:'))
+        .map((ref) => ({ ref, fieldId: field.id }));
+    }
+    return flatten(readable.blocks ?? []).flatMap((block) =>
+      typeof block.props.url === 'string' && block.props.url.startsWith('asset:')
+        ? [{ ref: block.props.url, blockId: block.id }]
+        : [],
+    );
+  }
+  private async attachment(method: string, p: Record<string, any>, binary?: Uint8Array) {
+    only(p, ['target', 'file', 'version', 'ref']);
+    let { object, db, field } = await this.attachmentTarget(p.target);
+    const refs = this.attachmentRefs(object, field);
+    if (method === 'attachments.list') {
+      const ids = [...new Set(refs.map((item) => item.ref.slice(6)))];
+      for (let offset = 0; offset < ids.length; offset += 1000)
+        await this.options.runtime.ensure(ids.slice(offset, offset + 1000));
+      ({ object, db, field } = await this.attachmentTarget(p.target));
+      const assets = new Map(
+        this.objects()
+          .filter((o) => o.type === 'asset' && this.options.runtime.can(o, 'read'))
+          .map((o) => [o.id, this.readable(o)]),
+      );
+      return {
+        version: this.version(object),
+        attachments: this.attachmentRefs(object, field).flatMap((item) => {
+          const asset = assets.get(item.ref.slice(6));
+          return asset
+            ? [{ ...item, name: asset.filename, mime: asset.mime, byteSize: asset.byteSize }]
+            : [];
+        }),
+      };
+    }
+    if (method === 'attachments.read' || method === 'attachments.download') {
+      if (typeof p.ref !== 'string' || !refs.some((item) => item.ref === p.ref))
+        return fail('PERMISSION_DENIED');
+      await this.options.runtime.ensure([p.ref.slice(6)]);
+      const metadata = this.objects().find((o) => o.id === p.ref.slice(6) && o.type === 'asset');
+      if (!metadata || !this.options.runtime.can(metadata, 'read'))
+        return fail('PERMISSION_DENIED');
+      if (
+        typeof metadata.byteSize === 'number' &&
+        metadata.byteSize > this.options.runtime.attachmentPolicy.maxFileBytes
+      )
+        return fail('ASSET_TOO_LARGE');
+      const file = await this.options.runtime.readAsset(p.ref.slice(6));
+      if (!file) return fail('RESOURCE_REMOVED');
+      if (file.bytes.byteLength > this.options.runtime.attachmentPolicy.maxFileBytes)
+        return fail('ASSET_TOO_LARGE');
+      ({ object, field } = await this.attachmentTarget(p.target));
+      if (
+        !this.attachmentRefs(object, field).some((item) => item.ref === p.ref) ||
+        !this.options.runtime.can(metadata, 'read')
+      )
+        return fail('PERMISSION_DENIED');
+      if (method === 'attachments.download') {
+        if (!this.options.download) return fail('INVALID_INPUT');
+        this.options.download(file);
+        return null;
+      }
+      return { name: file.name, mime: file.mime, bytes: file.bytes.slice() };
+    }
+    if (!['attachments.write', 'attachments.remove'].includes(method)) return fail('INVALID_INPUT');
+    this.writable();
+    this.checkVersion(object, p.version);
+    if (!this.options.runtime.can(object, 'update', field?.id)) return fail('PERMISSION_DENIED');
+    let metadata: TioObject | undefined,
+      assets = new Map<string, AssetData>(),
+      ref: string;
+    if (method === 'attachments.write') {
+      if (
+        !binary ||
+        !p.file ||
+        typeof p.file.name !== 'string' ||
+        !p.file.name ||
+        typeof p.file.mime !== 'string'
+      )
+        return fail('INVALID_INPUT');
+      const prepared = prepareAsset(this.options.workspaceId, {
+        name: p.file.name,
+        mime: p.file.mime,
+        bytes: binary,
+      });
+      metadata = prepared.metadata;
+      assets = prepared.assets;
+      ref = prepared.ref;
+    } else {
+      if (typeof p.ref !== 'string' || !refs.some((item) => item.ref === p.ref))
+        return fail('PERMISSION_DENIED');
+      ref = p.ref;
+    }
+    let next: TioObject;
+    if (field) {
+      const values = this.readable(object).properties?.[field.id];
+      const before = Array.isArray(values) ? values : [];
+      next = changeRecord(
+        object.workspaceId,
+        db!.id,
+        { [field.id]: metadata ? [...before, ref] : before.filter((value) => value !== ref) },
+        object,
+      );
+    } else {
+      const blocks = structuredClone(object.blocks ?? []);
+      const walk = (items: Block[]): Block[] =>
+        items
+          .filter(
+            (block) =>
+              !(
+                method === 'attachments.remove' &&
+                block.props.url === ref &&
+                ['image', 'video', 'audio', 'file'].includes(block.type)
+              ),
+          )
+          .map((block) => ({ ...block, children: walk(block.children) }));
+      if (metadata) {
+        const type = p.file.mime.startsWith('image/')
+          ? 'image'
+          : p.file.mime.startsWith('video/')
+            ? 'video'
+            : p.file.mime.startsWith('audio/')
+              ? 'audio'
+              : 'file';
+        const block: Block = {
+          id: id('block'),
+          type,
+          props: { url: ref, name: p.file.name, caption: '' },
+          content: [],
+          children: [],
+        };
+        if (p.target.afterBlockId) {
+          let inserted = false;
+          const insert = (items: Block[]) => {
+            const i = items.findIndex((b) => b.id === p.target.afterBlockId);
+            if (i >= 0) {
+              items.splice(i + 1, 0, block);
+              inserted = true;
+            } else for (const b of items) insert(b.children);
+          };
+          insert(blocks);
+          if (!inserted) return fail('INVALID_INPUT');
+        } else blocks.push(block);
+      }
+      next = { ...object, blocks: metadata ? blocks : walk(blocks) };
+    }
+    // The newly prepared asset is authorized only as part of this target-bound command.
+    const recheck = () => {
+      this.writable();
+      if (field) {
+        this.db(db!.id);
+        if (!this.options.runtime.can(object, 'update', field.id)) fail('PERMISSION_DENIED');
+      } else if (object.id !== this.options.pageId) this.targetPage(object.id);
+    };
+    if (
+      !field &&
+      !same(
+        flatten(object.blocks ?? []).filter((b) => b.type === 'appSlice'),
+        flatten(next.blocks ?? []).filter((b) => b.type === 'appSlice'),
+      )
+    )
+      fail('PERMISSION_DENIED');
+    const existing = new Set(this.objects().map((o) => o.id));
+    if (metadata && existing.has(metadata.id)) return fail('INVALID_INPUT');
+    this.origin = this.options.blockId;
+    try {
+      await this.options.runtime.checked(
+        [...new Map([this.page(), object, ...(db ? [db] : [])].map((o) => [o.id, o])).values()],
+        [next, ...(metadata ? [metadata] : [])],
+        recheck,
+        { assets },
+      );
+    } finally {
+      this.origin = undefined;
+    }
+    const updated = this.objects().find((o) => o.id === object.id) ?? next;
+    return { ref, version: this.version(updated) };
+  }
+  async invoke(
+    method: string,
+    input: unknown = {},
+    requestId = crypto.randomUUID(),
+    binary?: Uint8Array,
+  ): Promise<unknown> {
     const encoded = JSON.stringify([method, input]);
     if (encoded.length > 2_000_000) return Promise.reject(new AppSliceError('INVALID_INPUT'));
     try {
@@ -330,7 +625,9 @@ export class AppSliceBroker {
         if (typeof p.databaseId !== 'string') fail('INVALID_INPUT');
         this.db(p.databaseId as string);
       }
-      if (/\.(create|update|delete|insertBlocks|updateBlock|removeBlock)$/.test(method))
+      if (
+        /\.(create|update|delete|insertBlocks|updateBlock|removeBlock|write|remove)$/.test(method)
+      )
         this.writable();
     } catch (error) {
       return Promise.reject(error);
@@ -340,22 +637,48 @@ export class AppSliceBroker {
       return previous.input === encoded
         ? previous.result
         : Promise.reject(new AppSliceError('INVALID_INPUT'));
+    if (binary) {
+      if (method !== 'attachments.write') fail('INVALID_INPUT');
+      const file = (input as any)?.file;
+      try {
+        validateAssetSize(binary.byteLength, this.options.runtime.attachmentPolicy.maxFileBytes);
+      } catch {
+        return fail('ASSET_TOO_LARGE');
+      }
+      const digest = Array.from(
+        new Uint8Array(await crypto.subtle.digest('SHA-256', binary as Uint8Array<ArrayBuffer>)),
+        (b) => b.toString(16).padStart(2, '0'),
+      ).join('');
+      if (!file || file.byteSize !== binary.byteLength || file.digest !== digest)
+        fail('INVALID_INPUT');
+      // Hashing yields; another retry may already have installed the same receipt.
+      const existing = this.receipts.get(requestId);
+      if (existing) return existing.input === encoded ? existing.result : fail('INVALID_INPUT');
+    }
+    if (method === 'attachments.write' && !binary) fail('INVALID_INPUT');
+    if (
+      method.startsWith('attachments.') &&
+      !['attachments.write', 'attachments.remove'].includes(method)
+    )
+      return this.execute(method, input as Record<string, any>, binary);
     if (this.receipts.size >= 10_000)
       return Promise.reject(
         new AppSliceError('RATE_LIMITED', 'Restart this App Slice to begin a new request session'),
       );
-    const result = this.tail.then(() => this.execute(method, input as Record<string, any>));
+    const result = this.tail.then(() => this.execute(method, input as Record<string, any>, binary));
     this.tail = result.catch(() => undefined);
     this.receipts.set(requestId, { input: encoded, result });
     return result;
   }
-  private async execute(method: string, p: Record<string, any>) {
+  private async execute(method: string, p: Record<string, any>, binary?: Uint8Array) {
     this.page();
     if (!p || typeof p !== 'object' || Array.isArray(p)) fail('INVALID_INPUT');
+    if (method.startsWith('attachments.')) return this.attachment(method, p, binary);
     if (method === 'context.get')
       return {
         ...this.options.context(),
         apiVersion: 1,
+        attachmentPolicy: this.options.runtime.attachmentPolicy,
         pageId: this.options.pageId,
         instanceId: this.options.blockId,
         permissions: this.options.permission(),
@@ -484,7 +807,7 @@ export class AppSliceBroker {
       });
       this.db(db.id);
       return {
-        records: page.entries.map((e) => this.output(e.object)),
+        records: page.entries.map((e) => this.output(e.projection)),
         nextCursor: page.next ?? null,
       };
     }
@@ -504,6 +827,11 @@ export class AppSliceBroker {
         if (['formula', 'rollup', 'createdTime', 'lastEditedTime'].includes(field.type))
           fail('INVALID_INPUT');
         validateValue(field, value);
+        if (field.type === 'files')
+          this.validateAssetRefs(
+            Array.isArray(value) ? value : [],
+            Array.isArray(old?.properties?.[key]) ? (old.properties![key] as unknown[]) : [],
+          );
         if (field.type === 'mention') {
           const previous = old?.properties?.[key];
           this.validateMentions(mentionReferences(value), mentionReferences(previous));

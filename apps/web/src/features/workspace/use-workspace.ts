@@ -697,7 +697,12 @@ export function useWorkspace() {
     (o) => ['page', 'database'].includes(o.type) && isVisible(o) && runtime?.can(o, 'read'),
   );
   useEffect(() => {
-    if (!openingWorkspace && !selected && current && !services.contentReady)
+    if (
+      !openingWorkspace &&
+      !selected &&
+      current &&
+      (!services.contentReady || !state.navigationComplete)
+    )
       navigate(current, true);
     // Lock the first discovered page so later arrivals do not change the current document.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
@@ -706,7 +711,11 @@ export function useWorkspace() {
     if (!runtime || !session || openingWorkspace) return;
     const selectedObject = objects.find((o) => o.id === selected);
     if (previewId && objects.some((o) => o.id === previewId && !isVisible(o))) setPreviewId(null);
-    if (!services.contentReady && (!selectedObject || !isVisible(selectedObject))) return;
+    if (
+      (!services.contentReady || !state.navigationComplete) &&
+      (!selectedObject || !isVisible(selectedObject))
+    )
+      return;
     if (!selected || (selectedObject && isVisible(selectedObject))) return;
     const next = navigationTree(nav)[0];
     if (next) navigate(next, true);
@@ -799,6 +808,11 @@ export function useWorkspace() {
     executeWorkspaceAction,
     status,
     contentReady: services.contentReady,
+    navigationReady: state.navigationComplete,
+    queryIndexError:
+      state.queryIndexState.status === 'error'
+        ? (state.queryIndexState.error ?? t('workspace.prepareFailed'))
+        : undefined,
     retryInitialization: syncWorkspace,
     restoreAuthorization,
     canReauthorize: services.canReauthorize,

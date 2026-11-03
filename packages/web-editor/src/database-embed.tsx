@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 
 import type { EditorController } from './controller';
 import { LoadNotice } from './load-notice';
+import { useRecordWindow } from './record-window';
 export function DatabaseEmbed({
   model: m,
   databaseId,
@@ -46,7 +47,7 @@ export function DatabaseEmbed({
       live = false;
       release();
     };
-  }, [m.runtime, databaseId, retry, m.state.contentReady]);
+  }, [m.runtime, databaseId, retry, m.state.contentReady, m.state.queryIndexState.status]);
   const db = m.objects.find((o) => o.id === databaseId);
   const views = m.objects.filter(
     (o) => o.type === 'databaseView' && o.databaseId === databaseId && !o.deleted,
@@ -62,61 +63,19 @@ export function DatabaseEmbed({
   });
   const referenced = views.find((o) => o.id === viewId);
   const view = views.find((o) => o.id === selected) ?? (fullPage ? views[0] : referenced);
-  const [result, setResult] = useState<{ rows: TioObject[]; next?: string; key: string }>({
-    rows: [],
-    key: '',
-  });
-  const [pagination, setPagination] = useState<{ key: string; after?: string }>();
   const [queryText, setQueryText] = useState('');
-  const [querying, setQuerying] = useState(false);
-  const [showQuerying, setShowQuerying] = useState(false);
-  const queryKey = JSON.stringify([databaseId, view?.id, view?.filters, view?.sorts, queryText]);
-  const cursor = pagination?.key === queryKey ? pagination.after : undefined;
-  const pageKey = JSON.stringify([queryKey, cursor]);
-  const rows = result.rows;
-  const next = result.key === pageKey ? result.next : undefined;
-  const setCursor = (after?: string) => setPagination({ key: queryKey, after });
-  useEffect(() => {
-    if (!loaded || !view) return;
-    let live = true;
-    setQuerying(true);
-    setShowQuerying(false);
-    const indicator = window.setTimeout(() => {
-      if (live) setShowQuerying(true);
-    }, 200);
-    // Coalesce invalidations from the same React commit, including undo/redo.
-    const request = window.setTimeout(() => {
-      void m.runtime
-        .records({ databaseId, view, text: queryText, after: cursor, limit: 100 })
-        .then((page) => {
-          if (!live) return;
-          setPending(false);
-          setLoadError('');
-          setResult({ rows: page.entries.map((e) => e.object), next: page.next, key: pageKey });
-          setQuerying(false);
-          setShowQuerying(false);
-          window.clearTimeout(indicator);
-        })
-        .catch((error) => {
-          if (live) {
-            if (error instanceof HostError && error.code === 'pending') setPending(true);
-            else setLoadError(String(error));
-            setQuerying(false);
-            setShowQuerying(false);
-            window.clearTimeout(indicator);
-          }
-        });
-    }, 0);
-    return () => {
-      live = false;
-      window.clearTimeout(request);
-      window.clearTimeout(indicator);
-    };
-    // Query results update the projection; only view definitions and completed writes invalidate queries.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [m.runtime, databaseId, loaded, queryKey, queryText, pageKey, cursor, m.state.version, retry]);
-  const rowIds = rows.map((row) => row.id).join(',');
-  useEffect(() => m.runtime.retain(rowIds ? rowIds.split(',') : []), [m.runtime, rowIds]);
+  const windowed = useRecordWindow(m, { databaseId, view, text: queryText }, loaded && !!view);
+  const byId = new Map(m.objects.map((o) => [o.id, o]));
+  const rows = windowed.rows.map((row) => byId.get(row.id) ?? row).filter((row) => !row.deleted);
+  const rowWindow = {
+    ...windowed.rowWindow,
+    getRow: (index: number) => {
+      const row = windowed.rowWindow.getRow(index);
+      return row ? (byId.get(row.id) ?? row) : undefined;
+    },
+  };
+  const [shown, setShown] = useState(100);
+  useEffect(() => setShown(100), [windowed.rowWindow.key]);
   if (loadError)
     return (
       <EmptyNotice>
@@ -207,9 +166,8 @@ export function DatabaseEmbed({
         view={view}
         views={views}
         objects={m.objects}
-        queriedRows={rows
-          .map((row) => m.objects.find((o) => o.id === row.id) ?? row)
-          .filter((o) => !o.deleted)}
+        queriedRows={rows}
+        rowWindow={!view.layout || view.layout === 'table' ? rowWindow : undefined}
         queryText={queryText}
         onQueryText={setQueryText}
         readOnly={!writable}
@@ -242,15 +200,23 @@ export function DatabaseEmbed({
           )
         }
       />
-      {showQuerying && <LoadingIndicator label={t('database.loadingRecords')} />}
-      <div className="flex gap-2">
-        {cursor && <Button onClick={() => setCursor(undefined)}>←</Button>}
-        {next && (
-          <Button disabled={querying} onClick={() => setCursor(next)}>
-            →
-          </Button>
-        )}
-      </div>
+      {windowed.loading && <LoadingIndicator label={t('database.loadingRecords')} />}
+      {windowed.error && (
+        <EmptyNotice>
+          {windowed.error}
+          <Button onClick={windowed.retry}>{t('common.retry')}</Button>
+        </EmptyNotice>
+      )}
+      {view.layout && view.layout !== 'table' && shown < rowWindow.total && (
+        <Button
+          onClick={() => {
+            rowWindow.onVisibleRange(shown, shown + 99);
+            setShown((n) => n + 100);
+          }}
+        >
+          {t('database.loadMore')}
+        </Button>
+      )}
     </div>
   );
 }

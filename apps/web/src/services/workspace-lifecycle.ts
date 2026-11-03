@@ -71,7 +71,10 @@ export class WorkspaceLifecycle {
             configurable: true,
             writable: true,
             value:
-              key === 'close' || key === 'subscribe' || key === 'subscribeChanges'
+              key === 'close' ||
+              key === 'subscribe' ||
+              key === 'subscribeChanges' ||
+              key === 'subscribeQueryIndex'
                 ? invoke
                 : guarded,
           });

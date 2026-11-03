@@ -79,6 +79,11 @@ export function DatabaseView(props: ViewProps) {
   return (
     <div className="min-w-0 bg-panel font-normal">
       <QueryToolbar {...childProps} />
+      {props.rowWindow && mobile && !mobileTable && (
+        <div className="px-3 py-1 text-xs text-muted">
+          {t('database.totalRows', { count: props.rowWindow.total })}
+        </div>
+      )}
       {Custom ? (
         <Custom {...childProps} />
       ) : view.layout && !['table', 'board'].includes(view.layout) ? (
@@ -89,7 +94,7 @@ export function DatabaseView(props: ViewProps) {
         <MobileView {...childProps} />
       ) : (
         <Suspense fallback={<LoadingSkeleton layout="inline" />}>
-          <GridView {...childProps} />
+          <GridView key={props.rowWindow?.key ?? view.id} {...childProps} />
         </Suspense>
       )}
       <Button
@@ -112,6 +117,6 @@ export {
   type ViewExtensions,
   type FieldInputProps,
 } from './extensions';
-export type { ViewProps, RowsProps } from './types';
+export type { ViewProps, RowsProps, RowWindow } from './types';
 
 export { RecordQueryContext } from './extensions';

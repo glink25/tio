@@ -19,8 +19,9 @@ import {
   type WorkspaceSnapshot,
   type ObjectQuery,
 } from '@tio/core';
+import { queryEntry } from '@tio/database/query-entry';
 import { ScanningRelations } from '@tio/database/relations';
-import { ScanningQueries } from '@tio/database/repository';
+import { ProjectionQueries } from '@tio/database/repository';
 /** Reference host implementation. Only this host owns durable state in embedding tests. */
 export class MemoryRepository implements WorkspaceRepository {
   readonly attachmentPolicy = { maxFileBytes: 20 * 1024 * 1024, maxImageBytes: 10 * 1024 * 1024 };
@@ -30,7 +31,7 @@ export class MemoryRepository implements WorkspaceRepository {
     offline: true,
     prefetch: 'none',
   };
-  private queries = new ScanningQueries(this);
+  private queries = new ProjectionQueries(this);
   private relationQueries?: ScanningRelations;
   get relations() {
     return (this.relationQueries ??= new ScanningRelations(this, () => this.relationsReady()));
@@ -48,6 +49,9 @@ export class MemoryRepository implements WorkspaceRepository {
   queryNavigation(query: import('@tio/core').NavigationQuery) {
     return this.queries.navigation(query);
   }
+  async queryRecordWindow(query: import('@tio/core').RecordWindowQuery) {
+    return this.queries.window(query);
+  }
   queryRecords(query: RecordQuery) {
     return this.queries.records(query);
   }
@@ -56,6 +60,60 @@ export class MemoryRepository implements WorkspaceRepository {
   }
 
   private snapshot: WorkspaceSnapshot = { version: 0, entries: [] };
+  private projections = new Map<string, import('@tio/core').QueryEntry>();
+  async readProjection(
+    query: import('@tio/core').ProjectionQuery,
+  ): Promise<import('@tio/core').QueryPage> {
+    const selected = query.ids
+      ? query.ids.flatMap((id) => (this.projections.has(id) ? [this.projections.get(id)!] : []))
+      : [...this.projections.values()]
+          .filter(
+            ({ projection: o }) =>
+              (!query.type || o.type === query.type) &&
+              (!query.databaseId || o.databaseId === query.databaseId) &&
+              (!query.after || o.id > query.after),
+          )
+          .sort((a, b) =>
+            a.projection.id < b.projection.id ? -1 : a.projection.id > b.projection.id ? 1 : 0,
+          );
+    return {
+      version: this.snapshot.version,
+      next:
+        query.limit !== undefined && selected.length >= query.limit
+          ? selected[query.limit - 1].projection.id
+          : undefined,
+      entries: selected.slice(0, query.limit).flatMap((e) => {
+        const projection = readableObject(this.access, e.projection);
+        return projection
+          ? [
+              {
+                ...e,
+                projection: structuredClone(projection),
+                references: structuredClone(e.references),
+              },
+            ]
+          : [];
+      }),
+    };
+  }
+  async queryAccessVersion() {
+    return this.access.version;
+  }
+  async readRecordOrder(databaseId: string) {
+    return {
+      version: this.snapshot.version,
+      ids: [...this.projections.values()]
+        .filter(
+          ({ projection: o }) =>
+            o.type === 'record' &&
+            o.databaseId === databaseId &&
+            !o.deleted &&
+            readableObject(this.access, o),
+        )
+        .map((e) => e.projection.id)
+        .sort(),
+    };
+  }
   private changedAt = new Map<string, number>();
   private receipts = new Map<string, { signature: string; result: CommitResult }>();
   readonly recovery: unknown[] = [];
@@ -83,25 +141,8 @@ export class MemoryRepository implements WorkspaceRepository {
       }),
     };
   }
-  async queryObjects(query: ObjectQuery) {
-    if (!Number.isSafeInteger(query.limit) || query.limit < 1 || query.limit > 1000)
-      throw new HostError('invalid', 'Query limit must be 1..1000');
-    const snapshot = await this.readSnapshot();
-    const matched = snapshot.entries
-      .filter(
-        ({ object }) =>
-          ('type' in query.scope
-            ? object.type === query.scope.type
-            : object.databaseId === query.scope.databaseId) &&
-          (!query.after || object.id > query.after),
-      )
-      .sort((a, b) => (a.object.id < b.object.id ? -1 : a.object.id > b.object.id ? 1 : 0));
-    const entries = matched.slice(0, query.limit);
-    return {
-      version: snapshot.version,
-      entries,
-      next: matched.length > entries.length ? entries[entries.length - 1].object.id : undefined,
-    };
+  queryObjects(query: ObjectQuery) {
+    return this.queries.objects(query);
   }
   async readObjects(ids: string[]): Promise<WorkspaceSnapshot> {
     const selected = new Set(ids);
@@ -116,8 +157,17 @@ export class MemoryRepository implements WorkspaceRepository {
       ),
     };
   }
-  async readChanges(since: number): Promise<WorkspaceSnapshot> {
-    return this.selectEntries((id) => (this.changedAt.get(id) ?? 0) > since);
+  async readChanges(since: number, ids?: string[]): Promise<WorkspaceSnapshot> {
+    const selected = ids ? new Set(ids) : undefined;
+    return this.selectEntries(
+      (id) =>
+        (this.changedAt.get(id) ?? 0) > since &&
+        (!selected ||
+          selected.has(id) ||
+          ['workspace', 'page', 'database', 'databaseView'].includes(
+            this.projections.get(id)!.projection.type,
+          )),
+    );
   }
   private selectEntries(select: (id: string) => boolean): WorkspaceSnapshot {
     return {
@@ -197,6 +247,10 @@ export class MemoryRepository implements WorkspaceRepository {
         throw new HostError('invalid', 'Missing asset');
     this.snapshot = { version: this.snapshot.version + 1, entries };
     for (const object of request.changes) this.changedAt.set(object.id, this.snapshot.version);
+    for (const object of request.changes) {
+      const entry = entries.find((e) => e.object.id === object.id)!;
+      this.projections.set(object.id, queryEntry(entry.object, entry.revision));
+    }
     this.assets = assets;
     this.recovery.push(...structuredClone(request.recovery ?? []));
     request.assetIds.forEach((id) => this.staged.delete(id));

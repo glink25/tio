@@ -123,7 +123,10 @@ export function useEditorController(props: EditorSurfaceProps) {
       : undefined;
   const nav = objects.filter((o) => ['page', 'database'].includes(o.type) && isVisible(o));
   const record = objects.find(
-    (o) => o.id === (recordId ?? (current?.type === 'record' ? current.id : null)) && !o.deleted,
+    (o) =>
+      o.id === (recordId ?? (current?.type === 'record' ? current.id : null)) &&
+      state.loads[o.id] === 'ready' &&
+      !o.deleted,
   );
   useEffect(() => {
     if (!recordId) return;

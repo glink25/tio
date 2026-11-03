@@ -38,7 +38,7 @@ await table.records.update(created.id, { amount: 40 }, created.version);
 
 查询默认 100、最多 1000 条，接受 cursor/viewId/filters/sorts；不指定视图时查询数据库全部记录，分页不是冻结快照。过滤为 `{fieldId, op: eq|contains|notEmpty, value?}`，排序为 `{fieldId, direction: asc|desc}`。日期使用 `{start,end?,timeZone?}`。公式、汇总及系统时间只读；SDK 不返回派生记录值缓存。
 
-更新/删除传入读取版本，冲突返回 CONFLICT，重新读取再决定修改。每次写入形成一个撤销项，提供方完成提交后才确认。请求 15 秒超时不等于取消；同运行会话内以相同 requestId 和载荷重试返回原结果，不能用新 ID 重试结果不明的创建。刷新后开始新会话，先检查持久化内容。每会话最多 10,000 个不同请求，消息与日志有大小/速率限制。
+更新/删除传入读取版本，冲突返回 CONFLICT，重新读取再决定修改。每次写入形成一个撤销项，提供方完成提交后才确认。请求 15 秒超时不等于取消；同运行会话内以相同 requestId 和载荷重试返回原结果，不能用新 ID 重试结果不明的创建。账本示例在超时后保持待确认状态和提交锁，使用原 requestId 与原载荷再次等待结果，不把超时当作保存失败后新增一笔。刷新后开始新会话，先检查持久化内容。每会话最多 10,000 个不同请求，消息与日志有大小/速率限制。
 
 错误包括 PERMISSION_DENIED、RESOURCE_REMOVED、CONFLICT、INVALID_INPUT、RATE_LIMITED、CLOSED、TIMEOUT。事件来源为 App Slice 块 ID 或远端的 null。
 
@@ -59,3 +59,27 @@ iframe 自身导航不能作为完整防外传边界，iframe 不保证 CPU/内�
 `page.appMode` 启用文档的应用展示；有编辑权限者从文档菜单开启、从宿主导航当前页面菜单关闭。正文按深度优先顺序的第一个 App Slice 填满展示区域，编辑器正文与块工具栏不挂载；无实例时显示空状态，不自动修改配置。全屏展示忽略固定高度与 `ui.resize`，应用自行滚动，沙箱及授权规则保持一致。
 
 `EditorSurfaceProps.renderHeader(actions, {appMode, navigationPageActions})` 提供布局状态与可直接放置的菜单项。App Mode 开启时，编辑器提供关闭菜单项，宿主仅将其放入导航树当前页面菜单；资格、阅读限制、权限与运行时命令均留在编辑器中。宿主不为此加载正文、查找 App Slice 或修改文档配置。宿主隐藏顶部栏，保留侧栏和收起时的展开入口。
+
+## 二进制附件
+
+[完整附件示例](examples/attachments.html)演示文件选择、生成二进制、文档和记录附件、预览、下载及移除引用。
+
+`tio.attachments` 通过原有读写授权访问目标当前引用的文件，不提供按任意附件 ID 访问工作空间的入口。文档目标为 `{kind:'page', pageId?, afterBlockId?}`，省略 pageId 表示当前页面；其他页面必须被直接提及。记录目标为 `{kind:'record', databaseId, recordId, fieldId}`，字段必须是可读写的 `files` 字段，数据库必须显式可访问。
+
+```js
+const target = { kind: 'page' };
+const { version } = await tio.attachments.list(target);
+const { ref } = await tio.attachments.write(
+  target,
+  { name: 'result.bin', mime: 'application/octet-stream', bytes: new Uint8Array([0, 128, 255]) },
+  { version, requestId: crypto.randomUUID() },
+);
+const file = await tio.attachments.read(target, ref); // {name, mime, bytes: Uint8Array}
+await tio.attachments.download(target, ref);
+```
+
+`write` 也接受用户通过 `<input type="file">` 选择的 `File`。一次调用将二进制、元数据和目标引用作为一个可恢复命令保存，确认后返回 `{ref,version}`；文档按 MIME 插入图片、音频、视频或文件块，记录附件字段追加引用。每个沙箱同时只允许一个二进制传输，超限返回 `RATE_LIMITED`；`context.get().attachmentPolicy` 给出提供方大小限制，超限返回 `ASSET_TOO_LARGE`。二进制保持原始字节，不经过 Base64、图片重编码或 JSON 数字数组。
+
+`list` 返回 `{version,attachments:[{ref,name,mime,byteSize,blockId?|fieldId?}]}`。图片、音频和视频可用 `const preview = await tio.attachments.preview(target, ref)` 获取本沙箱 Blob URL，将 `preview.url` 放入对应媒体元素，用完调用 `preview.release()`；其他文件通过 `download` 下载，不执行 HTML，不开放嵌套 iframe。下载由可信编辑器发起，沙箱无额外权限。
+
+`remove(target, ref, {version,requestId?})` 删除文档媒体块或字段引用，保留被其他位置使用的底层附件；移除后不能再借该目标读取文件。修改采用读取版本并支持撤销重做。写入超时后用相同 requestId、目标、版本、文件元数据和字节重试；SDK 重用该会话的上传凭据，宿主返回同一次提交结果。更改载荷会返回 `INVALID_INPUT`。重新打开 App Slice 后应先 list 确认现有内容。

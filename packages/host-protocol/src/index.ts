@@ -18,11 +18,14 @@ import {
   type PageQuery,
   type NavigationPage,
   type RecordQuery,
+  type ProjectionQuery,
+  type QueryPage,
   type SearchQuery,
   type SearchPage,
   type RepositoryCapabilities,
 } from '@tio/core';
 
+import { projectionPage } from './projections';
 import { relationPage, searchPage } from './relations';
 import {
   envelope,
@@ -78,6 +81,14 @@ export class BridgeRepository implements WorkspaceRepository {
   storageCapabilities?: RepositoryCapabilities;
   automation?: AutomationProvider;
   relations?: RelationsProvider;
+  queryIndexState?: import('@tio/core').QueryIndexState;
+  private indexListeners = new Set<() => void>();
+  subscribeQueryIndex = (fn: () => void) => {
+    this.indexListeners.add(fn);
+    return () => {
+      this.indexListeners.delete(fn);
+    };
+  };
   private relationListeners = new Set<Parameters<RelationsProvider['subscribe']>[0]>();
   private automationRuns: AutomationRun[] = [];
   private automationListeners = new Set<() => void>();
@@ -96,6 +107,17 @@ export class BridgeRepository implements WorkspaceRepository {
         return;
       if (message.kind === 'extensionChanged') {
         const payload = message.payload;
+        if (
+          payload?.name === 'tio.query-index' &&
+          payload.version === 1 &&
+          ['building', 'ready', 'error'].includes(payload.state?.status)
+        ) {
+          this.queryIndexState = {
+            status: payload.state.status,
+            ...(typeof payload.state.error === 'string' ? { error: payload.state.error } : {}),
+          };
+          this.indexListeners.forEach((fn) => fn());
+        }
         if (
           payload?.name === 'tio.relations' &&
           payload.version === 1 &&
@@ -147,6 +169,11 @@ export class BridgeRepository implements WorkspaceRepository {
       throw new HostError('invalid');
     this.capabilities = response.capabilities;
     this.storageCapabilities = response.storageCapabilities;
+    if (response.queryIndexState) {
+      if (!['building', 'ready', 'error'].includes(response.queryIndexState.status))
+        throw new HostError('invalid');
+      this.queryIndexState = response.queryIndexState;
+    }
     const policy = response.attachmentPolicy;
     if (
       !policy ||
@@ -308,11 +335,27 @@ export class BridgeRepository implements WorkspaceRepository {
       throw new HostError('invalid');
     return value;
   }
-  async queryRecords(query: RecordQuery): Promise<ObjectPage> {
-    const page = await this.request('queryRecords', query);
-    const snapshot = parseSnapshot(page);
-    if (page.next !== undefined && typeof page.next !== 'string') throw new HostError('invalid');
-    return { ...snapshot, next: page.next };
+  async queryRecordWindow(
+    query: import('@tio/core').RecordWindowQuery,
+  ): Promise<import('@tio/core').RecordWindow> {
+    const result = await this.request('queryRecordWindow', query);
+    projectionPage(result, this.context.workspaceId);
+    if (
+      !Number.isSafeInteger(result.offset) ||
+      result.offset !== query.offset ||
+      !Number.isSafeInteger(result.total) ||
+      result.total < 0 ||
+      result.entries.length > query.limit ||
+      result.entries.length > Math.max(0, result.total - result.offset)
+    )
+      throw new HostError('invalid');
+    return result;
+  }
+  async queryRecords(query: RecordQuery): Promise<QueryPage> {
+    return projectionPage(await this.request('queryRecords', query), this.context.workspaceId);
+  }
+  async readProjection(query: ProjectionQuery): Promise<QueryPage> {
+    return projectionPage(await this.request('readProjection', query), this.context.workspaceId);
   }
   async scan(query: PageQuery): Promise<ObjectPage> {
     const page = await this.request('scan', query);
@@ -332,8 +375,8 @@ export class BridgeRepository implements WorkspaceRepository {
   acknowledgeCommits(clientId: string, sequence: number): Promise<void> {
     return this.request('acknowledgeCommits', { clientId, sequence });
   }
-  async readChanges(since: number): Promise<WorkspaceSnapshot> {
-    return parseSnapshot(await this.request('readChanges', { since }));
+  async readChanges(since: number, ids?: string[]): Promise<WorkspaceSnapshot> {
+    return parseSnapshot(await this.request('readChanges', { since, ids }));
   }
   async commit(request: CommitRequest): Promise<CommitResult> {
     return parseResult(await this.request('commit', request));
@@ -385,6 +428,7 @@ export class BridgeRepository implements WorkspaceRepository {
   dispose() {
     this.closed = true;
     this.relationListeners.clear();
+    this.indexListeners.clear();
     this.unsubscribe();
     this.listeners.clear();
     this.automation?.dispose();
@@ -460,6 +504,7 @@ export function serveHost(
             ],
             storageCapabilities: repository.storageCapabilities,
             attachmentPolicy: repository.attachmentPolicy,
+            queryIndexState: repository.queryIndexState,
           };
         } else {
           if (!ready) throw new HostError('unsupported', 'Handshake required');
@@ -478,9 +523,11 @@ export function serveHost(
               if (!repository.relations) throw new HostError('unsupported');
               result = await repository.relations[request.method](p);
               break;
+            case 'readProjection':
             case 'queryMentions':
             case 'queryNavigation':
             case 'queryRecords':
+            case 'queryRecordWindow':
             case 'search':
             case 'scan': {
               const method: ((query: any) => Promise<unknown>) | undefined =
@@ -513,7 +560,7 @@ export function serveHost(
               break;
             case 'readChanges':
               result = repository.readChanges
-                ? await repository.readChanges(p.since)
+                ? await repository.readChanges(p.since, p.ids)
                 : await repository.readSnapshot();
               break;
             case 'getCommitResult':
@@ -570,6 +617,16 @@ export function serveHost(
       }
     })();
   });
+  const stopIndex = repository.subscribeQueryIndex?.(() => {
+    if (ready && !disposed)
+      transport.send({
+        ...context,
+        protocol: PROTOCOL_VERSION,
+        kind: 'extensionChanged',
+        id: crypto.randomUUID(),
+        payload: { name: 'tio.query-index', version: 1, state: repository.queryIndexState },
+      });
+  });
   const stopRelations = repository.relations?.subscribe((reason) => {
     if (ready && !disposed)
       transport.send({
@@ -609,6 +666,7 @@ export function serveHost(
   });
   return () => {
     stopRelations?.();
+    stopIndex?.();
     stopAutomation?.();
     disposed = true;
     unsubscribe();

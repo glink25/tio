@@ -29,7 +29,7 @@ export function RelationPicker({
         after,
         limit: 100,
       });
-      return { items: result.entries.map((e) => e.object), next: result.next };
+      return { items: result.entries.map((e) => e.projection), next: result.next };
     },
   });
   useEffect(() => {

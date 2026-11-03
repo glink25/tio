@@ -4,6 +4,7 @@ import { useTheme } from '@tio/ui';
 import { useEffect, useMemo, useRef } from 'react';
 
 import type { EditorController } from '../controller';
+import { download } from '../page-export/shared';
 import { AppSliceBroker } from './broker';
 import { runnerDocument } from './runner';
 import { defaultPermission, MAX_MESSAGE, type AppSlicePermission } from './types';
@@ -96,6 +97,8 @@ export function Frame({
         locale: i18n.language,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       }),
+      download: (file) =>
+        download(new Blob([file.bytes as BlobPart], { type: file.mime }), file.name),
       resize: (h) => {
         if (!live.current.fullscreen) live.current.onHeight(h);
       },
@@ -108,6 +111,7 @@ export function Frame({
     const stop = broker.subscribe((payload) => {
       if (!disposed) port?.postMessage({ kind: 'changed', payload });
     });
+    let binaryRequest: string | undefined;
     const receive = (event: MessageEvent) => {
       if (
         disposed ||
@@ -130,7 +134,7 @@ export function Frame({
         const msg = event.data;
         let size: number;
         try {
-          size = JSON.stringify(msg).length;
+          size = JSON.stringify({ ...msg, binary: undefined }).length;
         } catch {
           close();
           return;
@@ -155,8 +159,8 @@ export function Frame({
           typeof msg.method !== 'string'
         )
           return;
-        const reply = (data: unknown) => {
-          if (!disposed) port?.postMessage(data);
+        const reply = (data: unknown, transfer: Transferable[] = []) => {
+          if (!disposed) port?.postMessage(data, transfer);
         };
         if (++requests > 100) {
           reply({
@@ -165,19 +169,64 @@ export function Frame({
           });
           return;
         }
+        const hasBinary = msg.binary !== undefined;
+        if (
+          hasBinary &&
+          (!(msg.binary instanceof ArrayBuffer) || msg.method !== 'attachments.write')
+        ) {
+          reply({
+            id: msg.id,
+            error: { code: 'INVALID_INPUT', message: 'Invalid binary payload' },
+          });
+          return;
+        }
+        if (hasBinary && msg.binary.byteLength > m.runtime.attachmentPolicy.maxFileBytes) {
+          reply({
+            id: msg.id,
+            error: { code: 'ASSET_TOO_LARGE', message: 'Attachment exceeds provider limit' },
+          });
+          return;
+        }
+        const transferRequest =
+          hasBinary || msg.method === 'attachments.read' || msg.method === 'attachments.download';
+        if (transferRequest && binaryRequest !== undefined) {
+          reply({
+            id: msg.id,
+            error: { code: 'RATE_LIMITED', message: 'One binary transfer at a time' },
+          });
+          return;
+        }
+        if (transferRequest) binaryRequest = msg.id;
         void broker
-          .invoke(msg.method, msg.payload, msg.id)
+          .invoke(
+            msg.method,
+            msg.payload,
+            msg.id,
+            hasBinary ? new Uint8Array(msg.binary) : undefined,
+          )
           .then((result) => {
-            if (JSON.stringify(result ?? null).length > MAX_MESSAGE)
-              throw new Error('Response too large; use pagination');
-            reply({ id: msg.id, result });
+            if (msg.method === 'attachments.read') {
+              const file = result as { name: string; mime: string; bytes: Uint8Array };
+              const bytes = file.bytes;
+              reply(
+                { id: msg.id, result: { name: file.name, mime: file.mime }, binary: bytes.buffer },
+                [bytes.buffer as ArrayBuffer],
+              );
+            } else {
+              if (JSON.stringify(result ?? null).length > MAX_MESSAGE)
+                throw new Error('Response too large; use pagination');
+              reply({ id: msg.id, result });
+            }
           })
           .catch((error) =>
             reply({
               id: msg.id,
               error: { code: error.code ?? 'INVALID_INPUT', message: error.message },
             }),
-          );
+          )
+          .finally(() => {
+            if (transferRequest && binaryRequest === msg.id) binaryRequest = undefined;
+          });
       };
       ref.current?.contentWindow?.postMessage({ kind: 'tio-connect', token, html }, '*', [
         channel.port2,

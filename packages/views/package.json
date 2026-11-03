@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@glideapps/glide-data-grid": "6.0.4-alpha24",
+    "@tanstack/react-virtual": "^3.14.23",
     "@tio/core": "workspace:*",
     "@tio/database": "workspace:*",
     "@tio/i18n": "workspace:*",

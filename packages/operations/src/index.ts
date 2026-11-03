@@ -478,7 +478,7 @@ export class WorkspaceOperations {
       });
       this.live(check);
       return {
-        objects: result.entries.map((e) => this.output(e.object)),
+        objects: result.entries.map((e) => this.output(e.projection)),
         nextCursor: result.next ?? null,
       };
     }

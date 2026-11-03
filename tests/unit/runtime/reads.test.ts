@@ -80,15 +80,22 @@ it('queues writes to unloaded records and retains the complete object', async ()
     databaseId: 'db',
     properties: { name: 'old' },
     blocks: [textBlock('retain body')],
+    opaque: { payload: ['retain extension'] },
   });
   await host.commit({ id: 'seed', expectedVersion: 0, changes: [db, record], assetIds: [] });
   const runtime = await WorkspaceRuntime.open(host);
+  // Query projections used to enter the editable baseline; editing a listed record must hydrate its entire envelope.
+  const queried = await runtime.records({ databaseId: 'db', limit: 100 });
+  expect(queried.entries[0].projection.blocks).toBeUndefined();
+  expect(queried.entries[0].projection.opaque).toBeUndefined();
+  expect(runtime.state.getState().loads.r).toBeUndefined();
   runtime.cell('r', 'name', 'new');
   runtime.append('r', textBlock('append'));
   await runtime.flush();
   const result = (await host.readObjects(['r'])).entries[0].object;
   expect(result.properties?.name).toBe('new');
   expect(result.blocks).toHaveLength(2);
+  expect(result.opaque).toEqual({ payload: ['retain extension'] });
   runtime.undo();
   await runtime.flush();
   expect((await host.readObjects(['r'])).entries[0].object.blocks).toHaveLength(1);
@@ -147,4 +154,63 @@ it('keeps unknown targets pending until acquisition completes and preserves edit
     runtime.dispose(true);
     host.close();
   }
+});
+
+it('queries absolute record windows with consistent totals and releases view projections', async () => {
+  const host = new MemoryRepository();
+  const db = object('database', 'w', {
+    id: 'db',
+    fields: [{ id: 'name', name: 'Name', type: 'title' }],
+  });
+  const records = Array.from({ length: 240 }, (_, index) =>
+    object('record', 'w', {
+      id: `r${String(index).padStart(3, '0')}`,
+      databaseId: 'db',
+      properties: { name: 'Same' },
+      blocks: [textBlock('private body')],
+      opaque: { keep: true },
+    }),
+  );
+  await host.commit({
+    id: 'seed-window',
+    expectedVersion: 0,
+    changes: [db, ...records],
+    assetIds: [],
+  });
+  const runtime = await WorkspaceRuntime.open(host);
+  const query = { databaseId: 'db', offset: 200, limit: 100 };
+  const page = await runtime.recordWindow(query);
+  expect(page.total).toBe(240);
+  expect(page.entries).toHaveLength(40);
+  expect(page.entries[0].projection.id).toBe('r200');
+  expect(page.entries[0].projection.blocks).toBeUndefined();
+  const scope = {};
+  await runtime.useQueryWindow(
+    scope,
+    page.entries.map((e) => e.projection),
+  );
+  expect(runtime.snapshot().some((o) => o.id === 'r200')).toBe(true);
+  runtime.releaseQueryWindow(scope);
+  expect(runtime.snapshot().some((o) => o.id === 'r200')).toBe(false);
+  const sorted = await runtime.recordWindow({
+    ...query,
+    view: object('databaseView', 'w', {
+      id: 'v',
+      databaseId: 'db',
+      sorts: [{ fieldId: 'name', direction: 'desc' }],
+    }),
+  });
+  expect(sorted.entries[0].projection.id).toBe('r200');
+  await host.commit({
+    id: 'remove-window',
+    expectedVersion: 1,
+    changes: [{ ...records[0], deleted: true }],
+    assetIds: [],
+  });
+  await expect(
+    runtime.recordWindow({ ...query, expectedVersion: page.version }),
+  ).rejects.toMatchObject({ code: 'conflict' });
+  expect((await runtime.recordWindow({ ...query, offset: 0 })).total).toBe(239);
+  expect((await host.readObjects(['r200'])).entries[0].object.opaque).toEqual({ keep: true });
+  runtime.dispose();
 });

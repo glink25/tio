@@ -1,5 +1,13 @@
 import type { Field, TioObject } from '@tio/core';
+export interface RowWindow {
+  key: string;
+  total: number;
+  getRow(index: number): TioObject | undefined;
+  indexOf(id: string): number;
+  onVisibleRange(start: number, end: number): void;
+}
 export interface ViewProps {
+  rowWindow?: RowWindow;
   queriedRows?: TioObject[];
   queryText?: string;
   onQueryText?: (text: string) => void;

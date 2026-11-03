@@ -2,6 +2,7 @@ import type { AutomationProvider, MutationSource } from './automation';
 import { DomainError } from './diagnostics';
 import type { TioObject } from './index';
 import type { MentionPage, MentionQuery } from './mentions';
+import type { ProjectionQuery, QueryPage, QueryIndexState } from './query-index';
 import type { RelationsProvider, SearchHit } from './references';
 export interface WorkspaceEvent {
   version: number;
@@ -92,11 +93,19 @@ export interface WorkspaceRepository extends AssetStore {
   readMetadata?(ids: string[]): Promise<WorkspaceSnapshot>;
   queryMentions?(query: MentionQuery): Promise<MentionPage>;
   queryNavigation?(query: NavigationQuery): Promise<NavigationPage>;
-  queryRecords?(query: RecordQuery): Promise<ObjectPage>;
+  queryRecords?(query: RecordQuery): Promise<QueryPage>;
+  queryRecordWindow?(query: RecordWindowQuery): Promise<RecordWindow>;
+  /** Provider-local compact, readable live record IDs; never record bodies. */
+  queryAccessVersion?(): Promise<string>;
+  readRecordOrder?(databaseId: string): Promise<{ version: number; ids: string[] }>;
+  readProjection?(query: ProjectionQuery): Promise<QueryPage>;
+  readonly queryIndexState?: QueryIndexState;
+  subscribeQueryIndex?(listener: () => void): () => void;
+  refreshExternal?(): Promise<void>;
   search?(query: SearchQuery): Promise<SearchPage>;
   scan?(query: PageQuery): Promise<ObjectPage>;
   readObjects?(ids: string[]): Promise<WorkspaceSnapshot>;
-  readChanges?(since: number): Promise<WorkspaceSnapshot>;
+  readChanges?(since: number, ids?: string[]): Promise<WorkspaceSnapshot>;
   acknowledgeCommits?(clientId: string, sequence: number): Promise<void>;
   commit(request: CommitRequest): Promise<CommitResult>;
   getCommitResult(id: string): Promise<CommitResult | undefined>;
@@ -157,6 +166,14 @@ export interface RecordQuery extends PageQuery {
   text?: string;
   databaseId: string;
   view?: TioObject;
+}
+export interface RecordWindowQuery extends Omit<RecordQuery, 'after'> {
+  offset: number;
+  expectedVersion?: number;
+}
+export interface RecordWindow extends QueryPage {
+  offset: number;
+  total: number;
 }
 export interface SearchQuery extends PageQuery {
   text: string;

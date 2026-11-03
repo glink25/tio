@@ -112,6 +112,7 @@ export class AutomationRunner implements AutomationProvider {
   private working?: Promise<void>;
   private closed = false;
   private unsubscribe: () => void;
+  private stopState: () => void;
   constructor(
     private runtime: WorkspaceRuntime,
     private workspaceId: string,
@@ -127,6 +128,7 @@ export class AutomationRunner implements AutomationProvider {
       )
         throw new AutomationError('invalid');
     }
+    this.stopState = runtime.state.subscribe(() => this.schedule());
     this.unsubscribe =
       options.observe === false
         ? () => {}
@@ -155,10 +157,24 @@ export class AutomationRunner implements AutomationProvider {
     this.schedule();
   }
   private schedule() {
-    if (this.working || this.closed) return;
+    const state = this.runtime.state.getState();
+    if (
+      this.working ||
+      this.closed ||
+      !this.queue.length ||
+      !state.contentReady ||
+      state.queryIndexState.status !== 'ready'
+    )
+      return;
     this.working = Promise.resolve()
       .then(async () => {
-        while (this.queue.length && !this.closed) await this.process(this.queue.shift()!);
+        while (
+          this.queue.length &&
+          !this.closed &&
+          this.runtime.state.getState().contentReady &&
+          this.runtime.state.getState().queryIndexState.status === 'ready'
+        )
+          await this.process(this.queue.shift()!);
       })
       .finally(() => {
         this.working = undefined;
@@ -445,6 +461,7 @@ export class AutomationRunner implements AutomationProvider {
     this.closed = true;
     this.queue = [];
     this.unsubscribe();
+    this.stopState();
     for (const run of this.runs)
       if (run.status === 'running') {
         run.status = 'interrupted';

@@ -1,5 +1,6 @@
 import { object, textBlock } from '@tio/core';
 import { FileWorkspaceContent } from '@tio/file-storage';
+import { IndexedRepositoryState } from '@tio/local-store';
 import { MemoryProvider } from '@tio/provider-memory';
 import { pathFor } from '@tio/serialization';
 import { expect, it, vi } from 'vitest';
@@ -125,10 +126,11 @@ it('applies the file provider attachment policy to direct repository and content
   const files = new MemoryProvider();
   Object.assign(files.attachmentPolicy, { maxFileBytes: 8, maxImageBytes: 4 });
   const content = new FileWorkspaceContent(files, 'w');
-  const repository = new FileRepository(content, 'w', {
-    load: async () => undefined,
-    save: async () => {},
-  });
+  const repository = new FileRepository(
+    content,
+    'w',
+    new IndexedRepositoryState(crypto.randomUUID()),
+  );
   const asset = object('asset', 'w', {
     id: 'asset',
     filename: 'a.bin',

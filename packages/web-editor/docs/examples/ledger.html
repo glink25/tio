@@ -64,6 +64,11 @@
       const el = (id) => document.getElementById(id);
       el('date').value = new Date().toISOString().slice(0, 10);
       function report(e) {
+        if (busy && e.code === 'TIMEOUT') {
+          el('status').textContent =
+            '正在确认保存结果，请勿重复提交 / Confirming save; do not submit again';
+          return;
+        }
         console.error(e.message || String(e));
         el('status').textContent = e.message || String(e);
       }
@@ -75,11 +80,13 @@
         if (generation !== refreshGeneration) return;
         db = database;
         el('init').hidden = !!db;
-        el('init').disabled = !writable;
+        el('init').disabled = !writable || busy;
         el('entry').querySelector('button').disabled = !db || !writable || busy;
-        el('status').textContent = writable
-          ? '数据保存在页面表格 / Saved in the page database'
-          : '请开启读写权限 / Enable read & write';
+        el('status').textContent = busy
+          ? '正在保存 / Saving'
+          : writable
+            ? '数据保存在页面表格 / Saved in the page database'
+            : '请开启读写权限 / Enable read & write';
         if (!db) return;
         let rows = [],
           cursor;
@@ -120,10 +127,24 @@
             .join(' '),
         );
       }
+      async function write(method, payload) {
+        const requestId = crypto.randomUUID();
+        for (;;) {
+          try {
+            return await tio.request(method, payload, { requestId });
+          } catch (error) {
+            if (error.code !== 'TIMEOUT') throw error;
+            report(error);
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+        }
+      }
       el('init').onclick = async () => {
+        if (busy) return;
+        busy = true;
         el('init').disabled = true;
         try {
-          await tio.databases.create({
+          await write('databases.create', {
             name: 'App Slice Ledger',
             fields: [
               { id: 'note', name: '备注 / Note', type: 'title' },
@@ -134,20 +155,26 @@
           await refresh();
         } catch (e) {
           report(e);
-          el('init').disabled = false;
+        } finally {
+          busy = false;
+          await refresh().catch(report);
         }
       };
       el('entry').querySelector('button').onclick = async () => {
         if (busy || !db || !el('entry').reportValidity()) return;
         busy = true;
+        const amountDraft = el('amount').value;
         el('entry').querySelector('button').disabled = true;
         try {
-          await tio.databases.get(db.id).records.create({
-            note: el('note').value,
-            amount: Number(el('amount').value),
-            date: { start: el('date').value },
+          await write('records.create', {
+            databaseId: db.id,
+            properties: {
+              note: el('note').value,
+              amount: Number(amountDraft),
+              date: { start: el('date').value },
+            },
           });
-          el('amount').value = '';
+          if (el('amount').value === amountDraft) el('amount').value = '';
           await refresh();
         } catch (e) {
           report(e);

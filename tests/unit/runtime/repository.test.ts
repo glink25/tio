@@ -374,3 +374,84 @@ it('relationship queries preserve workspace and access boundaries across the bri
     repository.relations.close();
   }
 });
+
+it('record windows preserve positions, access totals and bridge validation for each local host', async () => {
+  for (const host of [
+    new MemoryRepository(),
+    new LocalStore('window-contract', crypto.randomUUID()),
+  ]) {
+    const context = { sessionId: crypto.randomUUID(), workspaceId: 'w' };
+    const pair = createLoopback();
+    const stop = serveHost(pair.host, context, host);
+    const bridge = new BridgeRepository(pair.client, context);
+    try {
+      await host.commit({
+        id: 'window-seed',
+        expectedVersion: 0,
+        assetIds: [],
+        changes: [
+          object('database', 'w', {
+            id: 'db',
+            fields: [{ id: 'name', name: 'Name', type: 'title' }],
+          }),
+          ...Array.from({ length: 12 }, (_, i) =>
+            object('record', 'w', {
+              id: `r${String(i).padStart(2, '0')}`,
+              databaseId: 'db',
+              properties: { name: `Row ${i}` },
+              blocks: [],
+            }),
+          ),
+        ],
+      });
+      await bridge.connect();
+      const result = await bridge.queryRecordWindow({ databaseId: 'db', offset: 10, limit: 100 });
+      expect(result.total).toBe(12);
+      expect(result.entries.map((e) => e.projection.id)).toEqual(['r10', 'r11']);
+      await expect(
+        bridge.queryRecordWindow({ databaseId: 'db', offset: -1, limit: 100 }),
+      ).rejects.toMatchObject({ code: 'invalid' });
+      await host.commit({
+        id: 'window-delete',
+        expectedVersion: 1,
+        assetIds: [],
+        changes: [
+          object('record', 'w', {
+            id: 'r00',
+            databaseId: 'db',
+            properties: { name: 'Row 0' },
+            blocks: [],
+            deleted: true,
+          }),
+        ],
+      });
+      await expect(
+        bridge.queryRecordWindow({ databaseId: 'db', offset: 0, limit: 100, expectedVersion: 1 }),
+      ).rejects.toMatchObject({ code: 'conflict' });
+      expect(
+        (await bridge.queryRecordWindow({ databaseId: 'db', offset: 0, limit: 100 })).total,
+      ).toBe(11);
+    } finally {
+      bridge.dispose();
+      stop();
+      if (host instanceof LocalStore) host.close();
+    }
+  }
+  const policy = {
+    version: 'a',
+    allows: (resource: { id: string }) => policy.version === 'a' || resource.id !== 'hidden',
+  };
+  const host = new MemoryRepository(policy);
+  await host.commit({
+    id: 'seed-access',
+    expectedVersion: 0,
+    assetIds: [],
+    changes: [
+      object('database', 'w', { id: 'db', fields: [] }),
+      object('record', 'w', { id: 'hidden', databaseId: 'db', properties: {}, blocks: [] }),
+    ],
+  });
+  expect((await host.queryRecordWindow({ databaseId: 'db', offset: 0, limit: 100 })).total).toBe(1);
+  policy.version = 'b';
+  expect((await host.queryRecordWindow({ databaseId: 'db', offset: 0, limit: 100 })).total).toBe(0);
+});

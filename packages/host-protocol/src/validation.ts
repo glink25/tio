@@ -58,6 +58,18 @@ export function requestPayload(method: string | undefined, p: any) {
   )
     throw new HostError('invalid');
   if (
+    method === 'readProjection' &&
+    ((p.ids !== undefined &&
+      (!Array.isArray(p.ids) ||
+        p.ids.length > 1000 ||
+        !p.ids.every((id: unknown) => typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id)))) ||
+      (p.type !== undefined && typeof p.type !== 'string') ||
+      (p.databaseId !== undefined && typeof p.databaseId !== 'string') ||
+      (p.after !== undefined && typeof p.after !== 'string') ||
+      (p.limit !== undefined && (!integer(p.limit) || p.limit < 1 || p.limit > 1001)))
+  )
+    throw new HostError('invalid');
+  if (
     method === 'queryObjects' &&
     (!record(p.scope) ||
       (typeof p.scope.type === 'string') === (typeof p.scope.databaseId === 'string') ||
@@ -75,6 +87,7 @@ export function requestPayload(method: string | undefined, p: any) {
       'queryMentions',
       'queryNavigation',
       'queryRecords',
+      'queryRecordWindow',
       'search',
       'scan',
     ].includes(method ?? '') &&
@@ -85,10 +98,17 @@ export function requestPayload(method: string | undefined, p: any) {
   )
     throw new HostError('invalid');
   if (
-    method === 'queryRecords' &&
+    ['queryRecords', 'queryRecordWindow'].includes(method ?? '') &&
     (typeof p.databaseId !== 'string' ||
       (p.view !== undefined && !record(p.view)) ||
       (p.text !== undefined && typeof p.text !== 'string'))
+  )
+    throw new HostError('invalid');
+  if (
+    method === 'queryRecordWindow' &&
+    (!integer(p.offset) ||
+      p.after !== undefined ||
+      (p.expectedVersion !== undefined && !integer(p.expectedVersion)))
   )
     throw new HostError('invalid');
   if (
@@ -97,7 +117,8 @@ export function requestPayload(method: string | undefined, p: any) {
   )
     throw new HostError('invalid');
   if (
-    ['readObjects', 'readMetadata'].includes(method ?? '') &&
+    (['readObjects', 'readMetadata'].includes(method ?? '') ||
+      (method === 'readChanges' && p.ids !== undefined)) &&
     (!Array.isArray(p.ids) ||
       p.ids.length > 1000 ||
       !p.ids.every((id: unknown) => typeof id === 'string' && /^[a-zA-Z0-9_-]+$/.test(id)))

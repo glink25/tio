@@ -462,7 +462,9 @@ export function QueryToolbar(p: RowsProps) {
               <X size={12} />
             </Button>
           )}
-          <span className="ml-auto">{t('database.count', { count: rows.length })}</span>
+          <span className="ml-auto">
+            {t('database.count', { count: p.rowWindow?.total ?? rows.length })}
+          </span>
           <Button
             disabled={readOnly}
             className="text-xs"

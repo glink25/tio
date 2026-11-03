@@ -9,6 +9,7 @@ import {
   resourceOf,
   assertAccess,
   readableObject,
+  navigationObject,
   preservePrivateFields,
   type AccessPolicy,
   type WorkspaceEvent,
@@ -21,8 +22,9 @@ import {
   type ObjectPage,
   type TioObject,
 } from '@tio/core';
+import { queryEntry } from '@tio/database/query-entry';
 import { ScanningRelations } from '@tio/database/relations';
-import { ScanningQueries } from '@tio/database/repository';
+import { ProjectionQueries } from '@tio/database/repository';
 import { canonical } from '@tio/serialization';
 import type { IDBPDatabase, IDBPObjectStore } from 'idb';
 
@@ -49,7 +51,7 @@ export class LocalStore {
     offline: true,
     prefetch: 'none',
   };
-  private queries = new ScanningQueries(this);
+  private queries = new ProjectionQueries(this);
   private relationQueries?: ScanningRelations;
   get relations() {
     return (this.relationQueries ??= new ScanningRelations(this, () => this.relationsReady()));
@@ -66,6 +68,9 @@ export class LocalStore {
   }
   queryNavigation(query: import('@tio/core').NavigationQuery) {
     return this.queries.navigation(query);
+  }
+  async queryRecordWindow(query: import('@tio/core').RecordWindowQuery) {
+    return this.queries.window(query);
   }
   queryRecords(query: RecordQuery) {
     return this.queries.records(query);
@@ -105,6 +110,104 @@ export class LocalStore {
   private emit(event: WorkspaceEvent, broadcast = true) {
     for (const fn of this.listeners) fn(event);
     if (broadcast) this.channel?.postMessage({ instanceId: this.instanceId, event });
+  }
+  async readProjection(
+    query: import('@tio/core').ProjectionQuery,
+  ): Promise<import('@tio/core').QueryPage> {
+    const tx = (await this.db).transaction(['projections', 'settings']);
+    const store = tx.objectStore('projections');
+    const version = (await tx.objectStore('settings').get(this.key('$version'))) ?? 0;
+    let entries: import('@tio/core').QueryEntry[];
+    if (query.ids) {
+      entries = (
+        await Promise.all([...new Set(query.ids)].map((id) => store.get(this.key(id))))
+      ).filter(Boolean);
+    } else {
+      const scope = query.type ?? query.databaseId;
+      const source =
+        scope === undefined ? store : store.index(query.type === undefined ? 'database' : 'type');
+      const lower =
+        scope === undefined
+          ? this.key(query.after ?? '')
+          : [this.instanceId, scope, query.after ?? ''];
+      const upper = scope === undefined ? this.key('\uffff') : [this.instanceId, scope, '\uffff'];
+      const range = IDBKeyRange.bound(lower, upper, !!query.after);
+      entries = [];
+      if (query.limit === undefined) entries = await source.getAll(range);
+      else {
+        let cursor = await source.openCursor(range);
+        while (cursor && entries.length < query.limit) {
+          entries.push(cursor.value);
+          cursor = await cursor.continue();
+        }
+      }
+    }
+    await tx.done;
+    const missing = query.ids?.filter((id) => !entries.some((e) => e.projection.id === id));
+    const denied: string[] = [];
+    return {
+      version,
+      next:
+        query.limit !== undefined && entries.length === query.limit
+          ? entries.at(-1)!.projection.id
+          : undefined,
+      missing,
+      denied,
+      entries: entries.flatMap((entry) => {
+        if (
+          (query.type && entry.projection.type !== query.type) ||
+          (query.databaseId && entry.projection.databaseId !== query.databaseId)
+        )
+          return [];
+        const projection = readableObject(this.access, entry.projection);
+        if (!projection) {
+          denied.push(entry.projection.id);
+          return [];
+        }
+        return [{ projection, revision: entry.revision, references: entry.references }];
+      }),
+    };
+  }
+  async queryAccessVersion() {
+    return this.access.version;
+  }
+  async readRecordOrder(databaseId: string) {
+    const db = await this.db;
+    const prefix = this.key(`$record-order/${databaseId}/`);
+    const range = IDBKeyRange.bound(prefix, prefix + '\uffff');
+    // This secondary index is derived from projections, not another content replica.
+    const ready =
+      (await db.get('settings', this.key('$record-order-ready'))) ||
+      (await db.get('settings', this.key('$record-order-ready/' + databaseId)));
+    if (!ready) {
+      const tx = db.transaction(['projections', 'settings'], 'readwrite');
+      const rows = IDBKeyRange.bound(
+        [this.instanceId, databaseId, ''],
+        [this.instanceId, databaseId, '\uffff'],
+      );
+      let cursor = await tx.objectStore('projections').index('database').openCursor(rows);
+      while (cursor) {
+        const o = cursor.value.projection;
+        if (o.type === 'record' && !o.deleted)
+          await tx.objectStore('settings').put(navigationObject(o), prefix + o.id);
+        cursor = await cursor.continue();
+      }
+      await tx.objectStore('settings').put(true, this.key('$record-order-ready/' + databaseId));
+      await tx.done;
+    }
+    const tx = db.transaction('settings');
+    const version = (await tx.store.get(this.key('$version'))) ?? 0;
+    const ids =
+      this.access === fullAccess
+        ? (await tx.store.getAllKeys(range)).map((key) => {
+            if (typeof key !== 'string') throw new HostError('invalid');
+            return key.slice(prefix.length);
+          })
+        : (await tx.store.getAll(range))
+            .filter((o) => this.access.allows(resourceOf(o), 'read'))
+            .map((o) => o.id as string);
+    await tx.done;
+    return { version, ids };
   }
   async entries(): Promise<Entry[]> {
     const db = await this.db;
@@ -202,7 +305,7 @@ export class LocalStore {
     received?: { endpoint: string; remote: TioObject; clean: boolean },
   ): Promise<CommitResult> {
     const tx = (await this.db).transaction(
-      ['objects', 'assets', 'settings', 'recovery'],
+      ['objects', 'projections', 'assets', 'settings', 'recovery'],
       'readwrite',
     );
     try {
@@ -298,6 +401,25 @@ export class LocalStore {
           this.key(object.id),
         );
       }
+      for (const object of request.changes) {
+        const entry = byId.get(object.id)!;
+        const derived = queryEntry(entry.object, entry.revision);
+        await tx
+          .objectStore('projections')
+          .put(
+            { ...derived, instanceId: this.instanceId, version: version + 1 },
+            this.key(object.id),
+          );
+        const old = originals.get(object.id)?.object;
+        if (old?.databaseId)
+          await settings.delete(this.key(`$record-order/${old.databaseId}/${old.id}`));
+        if (entry.object.type === 'record' && entry.object.databaseId && !entry.object.deleted)
+          await settings.put(
+            navigationObject(derived.projection),
+            this.key(`$record-order/${entry.object.databaseId}/${entry.object.id}`),
+          );
+      }
+      if (version === 0) await settings.put(true, this.key('$record-order-ready'));
       const changed = request.changes.map((object) => byId.get(object.id)!);
       const result: CommitResult = { status: 'committed', version: version + 1, entries: changed };
       if (!workspaceId && request.changes.length)
@@ -342,22 +464,37 @@ export class LocalStore {
     }
     await tx.done;
   }
-  async readChanges(since: number): Promise<WorkspaceSnapshot> {
-    const tx = (await this.db).transaction(['objects', 'settings']);
+  async readChanges(since: number, ids?: string[]): Promise<WorkspaceSnapshot> {
+    const tx = (await this.db).transaction(['objects', 'projections', 'settings']);
     const version = (await tx.objectStore('settings').get(this.key('$version'))) ?? 0;
-    const changed: Entry[] = await tx
-      .objectStore('objects')
+    const selected = ids ? new Set(ids) : undefined;
+    const projections: import('@tio/core').QueryEntry[] = await tx
+      .objectStore('projections')
       .index('version')
       .getAll(IDBKeyRange.bound([this.instanceId, since], [this.instanceId, Infinity], true));
+    const changed = await Promise.all(
+      projections
+        .filter(({ projection: o }) => !selected || selected.has(o.id))
+        .map(({ projection: o }) => tx.objectStore('objects').get(this.key(o.id))),
+    );
     await tx.done;
-    return {
-      version,
-      entries: changed.flatMap((entry) => {
-        const object = readableObject(this.access, entry.object);
-        return object ? [{ object, revision: entry.revision }] : [];
-      }),
-    };
+    const entries = changed.flatMap((entry: Entry) => {
+      const object = readableObject(this.access, entry.object);
+      return object ? [{ object, revision: entry.revision }] : [];
+    });
+    if (selected)
+      for (const { projection, revision } of projections) {
+        if (
+          selected.has(projection.id) ||
+          !['workspace', 'page', 'database', 'databaseView'].includes(projection.type)
+        )
+          continue;
+        const object = readableObject(this.access, navigationObject(projection));
+        if (object) entries.push({ object, revision });
+      }
+    return { version, entries };
   }
+
   async stageAsset(id: string, asset: AssetData) {
     validateAssetSize(asset.bytes.byteLength, this.attachmentPolicy.maxFileBytes);
     if (!/^[a-zA-Z0-9_-]+$/.test(id)) throw new HostError('invalid');
@@ -539,6 +676,7 @@ export class LocalStore {
   }
   close() {
     this.relationQueries?.close();
+    this.queries.close();
     void this.db.then((db) => db.close());
     this.channel?.close();
     this.listeners.clear();
@@ -553,9 +691,13 @@ export { RemoteFileCache } from './remote-cache';
 export async function deleteLocalWorkspace(instanceId: string) {
   const db = await openHostDatabase('tio-workspaces');
   try {
-    const tx = db.transaction(['objects', 'assets', 'settings', 'recovery'], 'readwrite');
+    const tx = db.transaction(
+      ['objects', 'projections', 'assets', 'settings', 'recovery'],
+      'readwrite',
+    );
     const range = IDBKeyRange.bound(instanceId + '/', instanceId + '/\uffff');
-    for (const name of ['objects', 'assets', 'settings']) await tx.objectStore(name).delete(range);
+    for (const name of ['objects', 'projections', 'assets', 'settings'])
+      await tx.objectStore(name).delete(range);
     let cursor = await tx.objectStore('recovery').index('instance').openCursor(instanceId);
     while (cursor) {
       await cursor.delete();
@@ -566,3 +708,5 @@ export async function deleteLocalWorkspace(instanceId: string) {
     db.close();
   }
 }
+
+export { IndexedRepositoryState } from './repository-state';

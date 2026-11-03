@@ -11,6 +11,7 @@ export class WorkerSearch {
   private worker?: Worker;
   private closed = false;
   private sequence = 0;
+  private navigation?: { version: number; work: Promise<TioObject[]> };
   private pending = new Map<
     number,
     { resolve: (items: SearchHit[]) => void; reject: (error: Error) => void }
@@ -41,13 +42,24 @@ export class WorkerSearch {
     if (!this.repository.scan || !this.repository.queryNavigation)
       throw new HostError('unsupported');
     const page = await this.repository.scan(query);
-    const navigation: TioObject[] = [];
-    let after: string | undefined;
-    do {
-      const result = await this.repository.queryNavigation({ after, limit: 1000 });
-      navigation.push(...result.items);
-      after = result.next;
-    } while (after);
+    if (this.navigation?.version !== page.version) {
+      const work = (async () => {
+        const navigation: TioObject[] = [];
+        let after: string | undefined;
+        do {
+          const result = await this.repository.queryNavigation!({ after, limit: 1000 });
+          if (result.version !== page.version) throw new HostError('conflict');
+          navigation.push(...result.items);
+          after = result.next;
+        } while (after);
+        return navigation;
+      })();
+      this.navigation = { version: page.version, work };
+      void work.catch(() => {
+        if (this.navigation?.work === work) this.navigation = undefined;
+      });
+    }
+    const navigation = await this.navigation.work;
     const items = await this.match(
       page.entries.map((e) => e.object),
       navigation,

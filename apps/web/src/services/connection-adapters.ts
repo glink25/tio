@@ -11,9 +11,9 @@ import {
 import type { WorkspaceContentPort } from '@tio/core';
 import type { WorkspaceRepository } from '@tio/core';
 import { WorkerSearch } from '@tio/database/search-browser';
-import { FileWorkspaceContent, FileRepository, type FileJournalState } from '@tio/file-storage';
+import { FileWorkspaceContent, FileRepository } from '@tio/file-storage';
 import { t } from '@tio/i18n';
-import { LocalStore, RecoveryJournal, deleteLocalWorkspace } from '@tio/local-store';
+import { LocalStore, IndexedRepositoryState, deleteLocalWorkspace } from '@tio/local-store';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
 import type { WorkspaceRuntime } from '@tio/workspace';
 
@@ -103,7 +103,7 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
         t('workspace.deleteFolder', { path: `workspaces/${workspaceId}/` }),
         async () => {
           await adapter.deleteWorkspace(workspaceId);
-          const journal = new RecoveryJournal(connection.id + '_' + workspaceId);
+          const journal = new IndexedRepositoryState(connection.id + '_' + workspaceId);
           try {
             await journal.delete();
           } finally {
@@ -115,15 +115,19 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
     automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
     repository(workspaceId, instanceId) {
       if (!provider) throw new Error('Folder unavailable');
-      const journal = new RecoveryJournal<FileJournalState>(instanceId);
+      const journal = new IndexedRepositoryState(instanceId);
       const repository = new FileRepository(
         new FileWorkspaceContent(provider, workspaceId),
         workspaceId,
         journal,
         (work) => (navigator.locks ? navigator.locks.request('tio-' + instanceId, work) : work()),
       );
+      const stop = journal.subscribe(() => {
+        void repository.notifyChanges();
+      });
       const close = repository.close.bind(repository);
       repository.close = () => {
+        stop();
         close();
         journal.close();
       };
@@ -132,12 +136,8 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
     async discover() {
       if (!provider) return [];
       const workspaces: TioObject[] = [];
-      for (const file of await provider.list('workspaces/')) {
-        const match = /^workspaces\/([a-zA-Z0-9_-]+)\/objects\/([a-zA-Z0-9_-]+)\.json$/.exec(
-          file.path,
-        );
-        if (!match || match[1] !== match[2]) continue;
-        const workspace = await new FileWorkspaceContent(provider, match[1]).read(match[2]);
+      for (const workspaceId of await provider.workspaceIds()) {
+        const workspace = await new FileWorkspaceContent(provider, workspaceId).read(workspaceId);
         if (workspace?.type === 'workspace') workspaces.push(workspace);
       }
       return workspaces;

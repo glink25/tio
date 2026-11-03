@@ -12,7 +12,12 @@ function bootstrap(token: string) {
     }
   >();
   const listeners = new Set<(event: unknown) => void>();
-  const call = (method: string, payload: unknown = {}, options?: { requestId?: string }) =>
+  const call = (
+    method: string,
+    payload: unknown = {},
+    options?: { requestId?: string },
+    binary?: ArrayBuffer,
+  ) =>
     new Promise<any>((resolve, reject) => {
       const id = options?.requestId ?? `${++sequence}`;
       if (pending.has(id)) {
@@ -29,7 +34,16 @@ function bootstrap(token: string) {
         );
       }, 15000);
       pending.set(id, { resolve, reject, timer });
-      port.postMessage({ protocol: 1, kind: 'request', id, method, payload });
+      try {
+        port.postMessage(
+          { protocol: 1, kind: 'request', id, method, payload, binary },
+          binary ? [binary] : [],
+        );
+      } catch (error) {
+        clearTimeout(timer);
+        pending.delete(id);
+        reject(error);
+      }
     });
   const table = (databaseId: string) => ({
     get: () => call('databases.get', { databaseId }),
@@ -69,9 +83,108 @@ function bootstrap(token: string) {
       delete: (id: string, version: string) => call('views.delete', { databaseId, id, version }),
     },
   });
+  const previews = new Set<string>();
+  const uploads = new Map<string, string>();
+  let binaryBusy = false;
+  const transfer = async (work: () => Promise<any>) => {
+    if (binaryBusy)
+      throw Object.assign(new Error('One binary transfer at a time'), { code: 'RATE_LIMITED' });
+    binaryBusy = true;
+    try {
+      return await work();
+    } finally {
+      binaryBusy = false;
+    }
+  };
+  const attachments = {
+    list: (target: unknown) => call('attachments.list', { target }),
+    write: (
+      target: unknown,
+      file: File | { name: string; mime: string; bytes: Uint8Array },
+      options: { version: string; requestId?: string },
+    ) =>
+      transfer(async () => {
+        const requestId = options.requestId ?? crypto.randomUUID();
+        const policy = (await call('context.get')).attachmentPolicy;
+        if (file instanceof Blob && file.size > policy.maxFileBytes)
+          throw Object.assign(new Error('Attachment exceeds provider limit'), {
+            code: 'ASSET_TOO_LARGE',
+          });
+        const bytes = file instanceof Blob ? new Uint8Array(await file.arrayBuffer()) : file.bytes;
+        if (!(bytes instanceof Uint8Array))
+          throw Object.assign(new Error('Expected binary bytes'), { code: 'INVALID_INPUT' });
+        if (bytes.byteLength > policy.maxFileBytes)
+          throw Object.assign(new Error('Attachment exceeds provider limit'), {
+            code: 'ASSET_TOO_LARGE',
+          });
+        const digest = Array.from(
+          new Uint8Array(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>)),
+          (b) => b.toString(16).padStart(2, '0'),
+        ).join('');
+        const payload = {
+          target,
+          file: {
+            name: file.name,
+            mime: file instanceof Blob ? file.type : file.mime,
+            byteSize: bytes.byteLength,
+            digest,
+          },
+          version: options.version,
+        };
+        const signature = JSON.stringify(payload);
+        const previous = uploads.get(requestId);
+        if (previous && previous !== signature)
+          throw Object.assign(new Error('Request payload changed'), { code: 'INVALID_INPUT' });
+        uploads.set(requestId, signature);
+        try {
+          return await call(
+            'attachments.write',
+            payload,
+            { requestId },
+            previous ? undefined : bytes.slice().buffer,
+          );
+        } catch (error) {
+          if ((error as { code?: string }).code !== 'TIMEOUT') uploads.delete(requestId);
+          throw error;
+        }
+      }),
+    read: (target: unknown, ref: string) =>
+      transfer(async () => {
+        const result = await call('attachments.read', { target, ref });
+        return { ...result, bytes: new Uint8Array(result.bytes) };
+      }),
+    download: (target: unknown, ref: string) =>
+      transfer(() => call('attachments.download', { target, ref })),
+    remove: (target: unknown, ref: string, options: { version: string; requestId?: string }) =>
+      call('attachments.remove', { target, ref, version: options.version }, options),
+    preview: async (target: unknown, ref: string) => {
+      const file = await attachments.read(target, ref);
+      if (!/^(image|audio|video)\//.test(file.mime))
+        throw Object.assign(new Error('Use download for this file type'), {
+          code: 'INVALID_INPUT',
+        });
+      const url = URL.createObjectURL(new Blob([file.bytes], { type: file.mime }));
+      previews.add(url);
+      return {
+        url,
+        name: file.name,
+        mime: file.mime,
+        release: () => {
+          URL.revokeObjectURL(url);
+          previews.delete(url);
+        },
+      };
+    },
+  };
+  window.addEventListener('pagehide', () => {
+    previews.forEach((url) => URL.revokeObjectURL(url));
+    previews.clear();
+    uploads.clear();
+  });
   const tio = {
     apiVersion: 1,
     request: call,
+    attachments,
     context: { get: () => call('context.get') },
     page: {
       get: () => call('page.get'),
@@ -138,7 +251,12 @@ function bootstrap(token: string) {
         request.reject(
           Object.assign(new Error(message.error.message), { code: message.error.code }),
         );
-      else request.resolve(message.result);
+      else
+        request.resolve(
+          message.binary instanceof ArrayBuffer
+            ? { ...message.result, bytes: message.binary }
+            : message.result,
+        );
     };
     Object.defineProperty(window, 'tio', { value: tio, writable: false });
     const log = (message: unknown) =>

@@ -365,7 +365,7 @@ export function queryRecords(
             );
       if (c) return sort.direction === 'asc' ? c : -c;
     }
-    return a.id.localeCompare(b.id);
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
 }
 export function groups(records: TioObject[], field: Field | undefined) {

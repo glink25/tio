@@ -69,8 +69,12 @@ export class FileWorkspaceContent implements WorkspaceContentPort {
     this.tree = new ChunkTree(files, `workspaces/${workspaceId}/chunks`, this.maxFileBytes);
   }
   async authorize(): Promise<AccessPolicy> {
+    const readable = this.files.canRead ? await this.files.canRead() : true;
     const allowed = this.files.canWrite ? await this.files.canWrite() : true;
-    return { ...fullAccess, allows: (_resource, operation) => operation === 'read' || allowed };
+    return {
+      ...fullAccess,
+      allows: (_resource, operation) => (operation === 'read' ? readable : readable && allowed),
+    };
   }
   async list() {
     const ids: string[] = [];
@@ -161,4 +165,4 @@ export class FileWorkspaceContent implements WorkspaceContentPort {
   }
 }
 
-export { FileRepository, type FileJournal, type FileJournalState } from './repository';
+export { FileRepository } from './repository';

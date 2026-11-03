@@ -19,6 +19,10 @@ import { extractReferences, targetOf, titleOfContent } from './content-index';
 export class ScanningRelations implements RelationsProvider {
   private listeners = new Set<Parameters<RelationsProvider['subscribe']>[0]>();
   private stop?: () => void;
+  private stopIndex?: () => void;
+  private indexed = new Map<string, import('@tio/core').QueryEntry>();
+  private changed = new Set<string>();
+  private full = true;
   private generation = 0;
   private version = '';
   private dirty = true;
@@ -33,14 +37,19 @@ export class ScanningRelations implements RelationsProvider {
   private graphItems?: GraphItem[];
   private closed = false;
   constructor(
-    private repository: Pick<WorkspaceRepository, 'readSnapshot' | 'subscribeChanges'>,
+    private repository: Pick<
+      WorkspaceRepository,
+      'readProjection' | 'subscribeChanges' | 'subscribeQueryIndex' | 'queryIndexState'
+    >,
     private isReady: () => boolean = () => true,
   ) {}
   invalidate(reason: 'content' | 'access' | 'ready' = 'content') {
     this.generation++;
     this.dirty = true;
     this.graphItems = undefined;
+    if (reason !== 'content') this.full = true;
     if (reason === 'access') {
+      this.indexed.clear();
       this.nodes.clear();
       this.sources.clear();
       this.occurrences = [];
@@ -55,11 +64,18 @@ export class ScanningRelations implements RelationsProvider {
     };
   };
   private listen() {
-    this.stop ??= this.repository.subscribeChanges(() => this.invalidate());
+    this.stop ??= this.repository.subscribeChanges((event) => {
+      if (!event.changedIds.length) this.full = true;
+      for (const id of event.changedIds) this.changed.add(id);
+      this.invalidate();
+    });
+    this.stopIndex ??= this.repository.subscribeQueryIndex?.(() => this.invalidate('ready'));
   }
   close() {
     this.closed = true;
     this.stop?.();
+    this.stopIndex?.();
+    this.indexed.clear();
     this.stop = undefined;
     this.generation++;
     this.listeners.clear();
@@ -78,7 +94,35 @@ export class ScanningRelations implements RelationsProvider {
     }
     const generation = this.generation;
     this.job = (async () => {
-      const snapshot = await this.repository.readSnapshot();
+      if (!this.repository.readProjection) throw new HostError('unsupported');
+      const full = this.full;
+      const changed = [...this.changed];
+      const entries: import('@tio/core').QueryEntry[] = [];
+      let version = 0;
+      if (full) {
+        const page = await this.repository.readProjection({});
+        entries.push(...page.entries);
+        version = page.version;
+      } else {
+        for (let offset = 0; offset < changed.length; offset += 1000) {
+          const page = await this.repository.readProjection({
+            ids: changed.slice(offset, offset + 1000),
+          });
+          entries.push(...page.entries);
+          version = Math.max(version, page.version);
+        }
+      }
+      if (generation !== this.generation) return;
+      if (full) this.indexed.clear();
+      else for (const id of changed) this.indexed.delete(id);
+      for (const entry of entries) this.indexed.set(entry.projection.id, entry);
+      const snapshot = {
+        version,
+        entries: [...this.indexed.values()].map((e) => ({
+          object: e.projection,
+          revision: e.revision,
+        })),
+      };
       const objects = snapshot.entries.map((e) => e.object);
       const visible = visibility(objects);
       const byId = new Map(objects.map((o) => [o.id, o]));
@@ -90,7 +134,13 @@ export class ScanningRelations implements RelationsProvider {
       let count = 0;
       for (const { object: o, revision } of snapshot.entries) {
         if (!visible(o) || !['page', 'database', 'record'].includes(o.type)) continue;
-        nodes.set(o.id, { target: targetOf(o), title: titleOfContent(o, objects) });
+        nodes.set(o.id, {
+          target: targetOf(o),
+          title: titleOfContent(
+            o,
+            o.type === 'record' ? [byId.get(o.databaseId ?? '')!].filter(Boolean) : [],
+          ),
+        });
         const db = byId.get(o.databaseId ?? '');
         const fields = JSON.stringify(db?.fields ?? []);
         const cached = this.sources.get(o.id);
@@ -98,7 +148,14 @@ export class ScanningRelations implements RelationsProvider {
           o.id,
           cached?.revision === revision && cached.fields === fields
             ? cached
-            : { revision, fields, occurrences: extractReferences(o, db) },
+            : {
+                revision,
+                fields,
+                occurrences: [
+                  ...(this.indexed.get(o.id)?.references ?? []),
+                  ...extractReferences(o, db),
+                ],
+              },
         );
         if (++count % 200 === 0) await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
@@ -106,7 +163,9 @@ export class ScanningRelations implements RelationsProvider {
       this.nodes = nodes;
       this.sources = sources;
       this.occurrences = [...sources.values()].flatMap((s) => s.occurrences);
-      this.complete = this.isReady();
+      this.complete = this.isReady() && this.repository.queryIndexState?.status !== 'building';
+      this.full = false;
+      this.changed.clear();
       this.version = `${snapshot.version}:${generation}:${this.complete}`;
       this.dirty = false;
     })().finally(() => {

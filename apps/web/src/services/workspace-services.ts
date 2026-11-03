@@ -595,7 +595,10 @@ export class WorkspaceServices {
       await this.refreshRemote();
       if (active !== this.active) return;
       await this.runner?.sync();
-      if (!this.runner && active) await active.runtime.poll();
+      if (!this.runner && active) {
+        await this.repositories.get(active.session.id)?.repository.refreshExternal?.();
+        await active.runtime.poll();
+      }
     })().finally(() => {
       this.syncing = undefined;
     });

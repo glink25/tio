@@ -22,6 +22,13 @@ import type { RowsProps } from './types';
 import '@glideapps/glide-data-grid/dist/index.css';
 export function GridView(props: RowsProps) {
   const { fields, rows, objects, onCell, onOpen, canEdit, view, onView, readOnly } = props;
+  const rowAt = useCallback(
+    (index: number) => (props.rowWindow ? props.rowWindow.getRow(index) : rows[index]),
+    [props.rowWindow, rows],
+  );
+  const rowIndex = (record: (typeof rows)[number]) =>
+    props.rowWindow ? props.rowWindow.indexOf(record.id) : rows.indexOf(record);
+  const rowCount = props.rowWindow?.total ?? rows.length;
   const displayValue = useDisplayValue();
   const t = useT();
   const [cellSelection, setCellSelection] = useState<GridSelection>();
@@ -31,12 +38,17 @@ export function GridView(props: RowsProps) {
     setSelectedIds([]);
   });
   const [deleting, setDeleting] = useState(false);
-  const selectionKey = JSON.stringify([view, props.searchQuery, rows.map((r) => r.id)]);
+  const selectionKey = JSON.stringify([view, props.searchQuery]);
   useEffect(() => {
     setSelectedIds([]);
     setCellSelection(undefined);
   }, [selectionKey]);
-  const selected = rows.filter((r) => selectedIds.includes(r.id));
+  const selectionRecords = useRef(new Map<string, (typeof rows)[number]>());
+  for (const row of rows)
+    if (selectedIds.includes(row.id)) selectionRecords.current.set(row.id, row);
+  const selected = selectedIds.flatMap((id) =>
+    selectionRecords.current.has(id) ? [selectionRecords.current.get(id)!] : [],
+  );
   const blocked =
     readOnly ||
     !props.onDeleteRecords ||
@@ -52,13 +64,18 @@ export function GridView(props: RowsProps) {
   const selection: GridSelection = {
     current: cellSelection?.current,
     rows: rows.reduce(
-      (selection, record, i) => (selectedIds.includes(record.id) ? selection.add(i) : selection),
+      (selection, record) =>
+        selectedIds.includes(record.id) ? selection.add(rowIndex(record)) : selection,
       CompactSelection.empty(),
     ),
     columns: cellSelection?.columns ?? CompactSelection.empty(),
   };
-  const [editing, setEditing] = useState<{ recordId: string; fieldId: string } | null>(null);
-  const editingRecord = rows.find((r) => r.id === editing?.recordId);
+  const [editing, setEditing] = useState<{
+    recordId: string;
+    fieldId: string;
+    record: (typeof rows)[number];
+  } | null>(null);
+  const editingRecord = rows.find((r) => r.id === editing?.recordId) ?? editing?.record;
   const editingField = fields.find((f) => f.id === editing?.fieldId);
   const gridRef = useRef<DataEditorRef>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -78,7 +95,9 @@ export function GridView(props: RowsProps) {
       setHeader(null);
       if (!editing) return;
       const col = fields.findIndex((field) => field.id === editing.fieldId);
-      const row = rows.findIndex((record) => record.id === editing.recordId);
+      const row = props.rowWindow
+        ? props.rowWindow.indexOf(editing.recordId)
+        : rows.findIndex((record) => record.id === editing.recordId);
       if (col < 0 || row < 0) return;
       const bounds = gridRef.current?.getBounds(col, row);
       if (bounds) setAnchor({ x: bounds.x, y: bounds.y + bounds.height });
@@ -100,7 +119,7 @@ export function GridView(props: RowsProps) {
       window.removeEventListener('resize', reposition);
       window.removeEventListener('scroll', scroll, true);
     };
-  }, [editing, fields, rows]);
+  }, [editing, fields, rows, props.rowWindow]);
   const dark = useTheme() === 'dark';
   const [colors, setColors] = useState<Record<string, string>>({});
   useEffect(() => {
@@ -127,7 +146,7 @@ export function GridView(props: RowsProps) {
   const getCell = useCallback(
     ([col, row]: Item): GridCell => {
       const field = fields[col],
-        record = rows[row];
+        record = rowAt(row);
       const value = record?.properties?.[field?.id];
       const readonly =
         readOnly ||
@@ -135,6 +154,7 @@ export function GridView(props: RowsProps) {
         !field ||
         (field && isDerivedField(field)) ||
         canEdit?.(record, field) === false;
+      if (!record) return { kind: GridCellKind.Loading, allowOverlay: false };
       if (!field)
         return {
           kind: GridCellKind.Text,
@@ -175,11 +195,11 @@ export function GridView(props: RowsProps) {
         themeOverride: isFieldError(value) ? { textDark: '#c4554d' } : undefined,
       };
     },
-    [fields, rows, objects, displayValue, canEdit, readOnly],
+    [fields, objects, displayValue, canEdit, readOnly, rowAt],
   );
   const edit = ([col, row]: Item, cell: EditableGridCell) => {
     const field = fields[col],
-      record = rows[row];
+      record = rowAt(row);
     if (
       field &&
       record &&
@@ -252,13 +272,18 @@ export function GridView(props: RowsProps) {
             )}
           </section>
         )}
+        {props.rowWindow && (
+          <div className="px-3 py-1 text-xs text-muted">
+            {t('database.totalRows', { count: rowCount })} · {t('database.selectLoadedRows')}
+          </div>
+        )}
         <div ref={containerRef} className="w-full overflow-hidden">
           <DataEditor
             ref={gridRef}
             headerIcons={fieldHeaderIcons}
             cellActivationBehavior="double-click"
             width="100%"
-            height={Math.min(460, Math.max(160, rows.length * 42 + 40))}
+            height={Math.min(460, Math.max(160, rowCount * 42 + 40))}
             columns={[
               ...fields.map((f) => ({
                 id: f.id,
@@ -292,7 +317,10 @@ export function GridView(props: RowsProps) {
                   },
                 });
             }}
-            rows={rows.length}
+            rows={rowCount}
+            onVisibleRegionChanged={(range) =>
+              props.rowWindow?.onVisibleRange(range.y, range.y + range.height)
+            }
             getCellContent={getCell}
             drawCell={({ ctx, rect, col, row, theme }, drawContent) => {
               const field = fields[col];
@@ -300,7 +328,7 @@ export function GridView(props: RowsProps) {
                 drawContent();
                 return;
               }
-              const raw = rows[row]?.properties?.[field.id];
+              const raw = rowAt(row)?.properties?.[field.id];
               const ids = Array.isArray(raw) ? raw : raw ? [raw] : [];
               ctx.save();
               ctx.beginPath();
@@ -332,11 +360,12 @@ export function GridView(props: RowsProps) {
             }}
             onCellEdited={edit}
             onCellActivated={([col, row]) => {
-              if (!rows[row] || !fields[col]) return;
+              const record = rowAt(row);
+              if (!record || !fields[col]) return;
               const bounds = gridRef.current?.getBounds(col, row);
               if (!bounds) return;
               setAnchor({ x: bounds.x, y: bounds.y + bounds.height });
-              setEditing({ recordId: rows[row].id, fieldId: fields[col].id });
+              setEditing({ recordId: record.id, fieldId: fields[col].id, record });
             }}
             rowHeight={42}
             headerHeight={38}
@@ -346,7 +375,12 @@ export function GridView(props: RowsProps) {
             gridSelection={selection}
             onGridSelectionChange={(next) => {
               setCellSelection(next);
-              setSelectedIds(next.rows.toArray().flatMap((i) => (rows[i] ? [rows[i].id] : [])));
+              const selected = rows.filter((record) => {
+                const i = rowIndex(record);
+                return i >= 0 && next.rows.hasIndex(i);
+              });
+              selectionRecords.current = new Map(selected.map((record) => [record.id, record]));
+              setSelectedIds(selected.map((record) => record.id));
             }}
             onDelete={(next) => {
               if (next.rows.length) removeSelected();

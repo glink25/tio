@@ -83,7 +83,10 @@ it('waits for in-flight work and blocks queued calls after deletion starts', asy
     started.resolve();
     await gate.promise;
   });
-  const repository = lifecycle.guard(id, { mutate });
+  const unsubscribe = vi.fn();
+  const repository = lifecycle.guard(id, { mutate, subscribeQueryIndex: () => unsubscribe });
+  // Subscriptions must remain synchronous through lifecycle guarding so disposal can unsubscribe.
+  expect(repository.subscribeQueryIndex()).toBe(unsubscribe);
   try {
     const write = repository.mutate();
     await started.promise;
@@ -325,7 +328,7 @@ it('initializes a manual remote replica progressively through the shared host an
     await runtime.flush();
     blocked.resolve();
     await vi.waitFor(() => expect(services.contentReady).toBe(true));
-    expect(automation).toHaveBeenCalled();
+    await vi.waitFor(() => expect(automation).toHaveBeenCalled());
     expect(write).not.toHaveBeenCalled();
     expect((await read(first.id))!.title).toBe(first.title);
     expect((await repository.get(first.id))!.object.title).toBe(

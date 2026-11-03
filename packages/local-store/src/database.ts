@@ -6,6 +6,10 @@ export const openHostDatabase = (name: string) =>
       objects.createIndex('version', ['instanceId', 'version']);
       objects.createIndex('database', ['instanceId', 'object.databaseId', 'object.id']);
       objects.createIndex('type', ['instanceId', 'object.type', 'object.id']);
+      const projections = db.createObjectStore('projections');
+      projections.createIndex('version', ['instanceId', 'version']);
+      projections.createIndex('database', ['instanceId', 'projection.databaseId', 'projection.id']);
+      projections.createIndex('type', ['instanceId', 'projection.type', 'projection.id']);
       db.createObjectStore('assets');
       db.createObjectStore('sessions');
       db.createObjectStore('recovery', { autoIncrement: true }).createIndex(

@@ -36,6 +36,7 @@ export function createMentionService(
     const state = runtime.state.getState();
     return JSON.stringify([
       state.version,
+      state.queryIndexState.status,
       state.status,
       state.objects
         .filter((o) => ['page', 'database', 'record'].includes(o.type))

@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+  <head>
+    <style>
+      body {
+        font: 14px system-ui;
+        color: #334155;
+        padding: 12px;
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+        padding: 8px;
+        margin: 4px;
+      }
+      button {
+        cursor: pointer;
+      }
+      #items {
+        display: grid;
+        gap: 12px;
+      }
+      article {
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        padding: 12px;
+      }
+      img,
+      video {
+        display: block;
+        max-width: 100%;
+        max-height: 220px;
+      }
+      #status {
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h3>附件记账体验</h3>
+    <p>
+      将选取的文件或生成的二进制保存到当前文档，或保存到 Attachment ledger 第一笔记录的附件字段。
+    </p>
+    <label
+      >保存位置
+      <select id="target">
+        <option value="page">当前文档</option>
+        <option value="record">记账记录</option>
+      </select></label
+    >
+    <input id="file" type="file" />
+    <button id="upload">保存所选文件</button>
+    <button id="generate">生成二进制并保存</button>
+    <button id="refresh">读取附件</button>
+    <p id="status" role="status"></p>
+    <div id="items"></div>
+    <script>
+      const el = (id) => document.getElementById(id);
+      const previews = [];
+      let busy = false;
+      let writable = false;
+      const report = (e) => {
+        el('status').textContent = `${e.code || 'ERROR'}: ${e.message}`;
+      };
+      const run = async (work) => {
+        if (busy) return;
+        busy = true;
+        el('upload').disabled = el('generate').disabled = true;
+        try {
+          await work();
+        } catch (e) {
+          report(e);
+        } finally {
+          busy = false;
+          el('upload').disabled = el('generate').disabled = !writable;
+        }
+      };
+      async function target() {
+        if (el('target').value === 'page') return { kind: 'page' };
+        const table = await tio.databases.find('Attachment ledger');
+        const { records } = await table.records.query({ limit: 1 });
+        if (!records.length) throw new Error('请先在 Attachment ledger 新增一笔记录');
+        const field = await table.fields.find('Attachments');
+        return {
+          kind: 'record',
+          databaseId: records[0].databaseId,
+          recordId: records[0].id,
+          fieldId: field.id,
+        };
+      }
+      async function refresh() {
+        previews.splice(0).forEach((preview) => preview.release());
+        const owner = await target();
+        const list = await tio.attachments.list(owner);
+        el('items').replaceChildren();
+        for (const item of list.attachments) {
+          const card = document.createElement('article');
+          const title = document.createElement('div');
+          title.textContent = `${item.name} · ${item.byteSize} bytes`;
+          card.append(title);
+          if (/^(image|audio|video)\//.test(item.mime)) {
+            const preview = await tio.attachments.preview(owner, item.ref);
+            previews.push(preview);
+            const media = document.createElement(
+              item.mime.startsWith('image/')
+                ? 'img'
+                : item.mime.startsWith('audio/')
+                  ? 'audio'
+                  : 'video',
+            );
+            media.src = preview.url;
+            if ('controls' in media) media.controls = true;
+            card.append(media);
+          }
+          const download = document.createElement('button');
+          download.textContent = '下载';
+          download.onclick = () => run(() => tio.attachments.download(owner, item.ref));
+          card.append(download);
+          const remove = document.createElement('button');
+          remove.textContent = '移除引用';
+          remove.disabled = !writable;
+          remove.onclick = () =>
+            run(async () => {
+              const current = await tio.attachments.list(owner);
+              await tio.attachments.remove(owner, item.ref, { version: current.version });
+              await refresh();
+            });
+          card.append(remove);
+          el('items').append(card);
+        }
+        el('status').textContent = `已读取 ${list.attachments.length} 个附件`;
+      }
+      async function save(file) {
+        const owner = await target();
+        const current = await tio.attachments.list(owner);
+        const options = { version: current.version, requestId: crypto.randomUUID() };
+        for (;;) {
+          try {
+            await tio.attachments.write(owner, file, options);
+            break;
+          } catch (e) {
+            if (e.code !== 'TIMEOUT') throw e;
+            el('status').textContent = '正在确认保存…';
+          }
+        }
+        await refresh();
+      }
+      el('upload').onclick = () =>
+        run(async () => {
+          const file = el('file').files[0];
+          if (!file) throw new Error('请先选择文件');
+          await save(file);
+          el('file').value = '';
+        });
+      el('generate').onclick = () =>
+        run(() =>
+          save({
+            name: 'generated.bin',
+            mime: 'application/octet-stream',
+            bytes: new Uint8Array(Array.from({ length: 65536 }, (_, i) => i % 256)),
+          }),
+        );
+      el('refresh').onclick = () => run(refresh);
+      el('target').onchange = () => run(refresh);
+      (async () => {
+        writable = (await tio.context.get()).permissions.data === 'readWrite';
+        el('upload').disabled = el('generate').disabled = !writable;
+        await refresh();
+      })().catch(report);
+    </script>
+  </body>
+</html>

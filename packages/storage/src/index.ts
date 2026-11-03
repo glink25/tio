@@ -1,6 +1,7 @@
 export interface FileStorageProvider {
   readonly attachmentPolicy: { readonly maxFileBytes: number; readonly maxImageBytes: number };
   snapshot?(): Promise<FileSnapshot>;
+  canRead?(): Promise<boolean>;
   canWrite?(): Promise<boolean>;
   list(prefix: string): Promise<{ path: string; fingerprint?: string }[]>;
   read(path: string): Promise<Uint8Array | null>;
