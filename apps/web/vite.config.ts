@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, searchForWorkspaceRoot } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 import { editorCss } from '../../scripts/editor-css.mjs';
 export default defineConfig({
+  resolve: { dedupe: ['react', 'react-dom', 'sonner', 'zustand', 'zod'] },
   css: { postcss: { plugins: [editorCss()] } },
   plugins: [
     {
@@ -48,5 +50,13 @@ export default defineConfig({
       },
     }),
   ],
-  server: { port: 6789 },
+  server: {
+    port: 6789,
+    fs: {
+      allow: [
+        searchForWorkspaceRoot(process.cwd()),
+        fileURLToPath(new URL('..', import.meta.resolve('@glink25/chaty'))),
+      ],
+    },
+  },
 });

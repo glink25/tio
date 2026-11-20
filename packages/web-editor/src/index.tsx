@@ -99,6 +99,7 @@ function Ready({ children, onReady }: { children: ReactNode; onReady?: () => voi
 export interface EditorOptions {
   contentLinks?: EditorSurfaceProps['contentLinks'];
   onOpenGraph?: EditorSurfaceProps['onOpenGraph'];
+  onAskAssistant?: EditorSurfaceProps['onAskAssistant'];
   mentions?: import('@tio/core').MentionService;
   appSlice?: AppSliceOptions;
   domain?: Domain;
@@ -149,6 +150,7 @@ export async function mountEditor(
         <EditorSurface
           contentLinks={options.contentLinks}
           onOpenGraph={options.onOpenGraph}
+          onAskAssistant={options.onAskAssistant}
           mentions={options.mentions}
           appSlice={options.appSlice}
           views={options.views}

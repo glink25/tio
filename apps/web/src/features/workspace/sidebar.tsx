@@ -23,6 +23,7 @@ import {
   MoreHorizontal,
   Star,
   PanelLeftClose,
+  Sparkles,
   FileText,
   Database,
   Pencil,
@@ -149,9 +150,11 @@ export function ObjectMenu({
 export function Sidebar({
   model: m,
   pageActions,
+  onOpenAssistant,
 }: {
   model: WorkspaceController;
   pageActions?: ReactNode;
+  onOpenAssistant?: () => void;
 }) {
   const mobile = useMobile();
   const content = (
@@ -235,38 +238,55 @@ export function Sidebar({
           />
         </nav>
       </div>
-      <div className="mt-3 border-t border-line pt-2">
-        <Menu
-          align="start"
-          collisionPadding={8}
-          label={t('ui.settings')}
-          trigger={
-            <Button
-              data-settings-entry
-              className="w-full justify-start text-sm"
-              aria-label={t('ui.settings')}
+      <div className="mt-3 flex items-center gap-1 border-t border-line pt-2">
+        <div className="min-w-0 flex-1">
+          <Menu
+            align="start"
+            collisionPadding={8}
+            label={t('ui.settings')}
+            trigger={
+              <Button
+                data-settings-entry
+                className="w-full justify-start text-sm"
+                aria-label={t('ui.settings')}
+              >
+                <Identity identity={m.identity} />
+              </Button>
+            }
+          >
+            <div className="max-w-72 px-2.5 py-3">
+              <ConnectionInfo identity={m.identity} />
+            </div>
+            <MenuSeparator />
+            <MenuItem
+              disabled={!m.runtime || !m.session}
+              onSelect={() => m.setAutomationOpen(true)}
             >
-              <Identity identity={m.identity} />
-            </Button>
-          }
-        >
-          <div className="max-w-72 px-2.5 py-3">
-            <ConnectionInfo identity={m.identity} />
-          </div>
-          <MenuSeparator />
-          <MenuItem disabled={!m.runtime || !m.session} onSelect={() => m.setAutomationOpen(true)}>
-            <Zap size={16} />
-            {t('ui.automation')}
-          </MenuItem>
-          <MenuItem onSelect={() => m.setTrashOpen(true)}>
-            <Trash2 size={16} />
-            {t('ui.trash')}
-          </MenuItem>
-          <MenuItem onSelect={() => m.setSettingsOpen(true)}>
-            <Settings size={16} />
-            {t('ui.settings')}
-          </MenuItem>
-        </Menu>
+              <Zap size={16} />
+              {t('ui.automation')}
+            </MenuItem>
+            <MenuItem onSelect={() => m.setTrashOpen(true)}>
+              <Trash2 size={16} />
+              {t('ui.trash')}
+            </MenuItem>
+            <MenuItem onSelect={() => m.setSettingsOpen(true)}>
+              <Settings size={16} />
+              {t('ui.settings')}
+            </MenuItem>
+          </Menu>
+        </div>
+        {onOpenAssistant && (
+          <IconButton
+            label={t('assistant.title')}
+            onClick={() => {
+              m.setSidebar(false);
+              onOpenAssistant();
+            }}
+            className="shrink-0 p-2"
+          >
+            <Sparkles size={18} />
+          </IconButton>
+        )}
       </div>
     </div>
   );

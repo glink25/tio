@@ -51,3 +51,7 @@ GitHub App 凭据在请求时检查 access token，有效期剩余不超过 4 �
 `@tio/operations` 为共享无界面操作服务，复用当前 WorkspaceRuntime；纯操作构造与 App Slice broker 共享，自动化表单和 agent 共享规则校验。宿主负责当前空间绑定、授权和传输，编辑器不注册外部工具。Web 宿主在顶层页面按需提供 Site tools，权限保存在浏览器 localStorage，不进入业务对象或同步。
 
 外部写入通过运行时的用户输入保护、版本检查、命令时间维护、仓库确认及撤销历史，并标记可信 `source: ai`。缺少 WebMCP 时保留普通编辑能力。相同操作核心可由未来原生宿主绑定不同通道；本阶段没有原生适配或常驻后台。使用、能力及验收边界见[Site tools](../development/site-tools.md)。
+
+## 内置 AI 助手
+
+工作空间提供全局 Chaty 助手，桌面右栏、移动弹窗；API 配置及 Base64 遮掩密钥随空间同步，会话留在本机。助手和 Site tools 共用操作核心，内置默认读写，删除和权限扩大需确认，外部授权独立。详见[助手接入](../development/assistant.md)。

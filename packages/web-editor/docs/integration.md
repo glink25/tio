@@ -74,3 +74,7 @@ App Slice broker 复用操作层的纯修改函数，但继续执行自身页面
 `onOpenGraph(id)` 请求宿主打开关系图；编辑器只负责页脚内容和临时 UI，App Mode 在导航菜单保留该入口。未实现 repository.relations 时展示不支持状态。mountEditor 和直接 EditorSurface 均可接入这些选项。
 
 Web 宿主 URL：`#/w/<workspaceId>/p/<id>?block=<blockId>` 或 `?field=<fieldId>`；全空间图为 `#/w/<workspaceId>/graph?focus=<id>`。URL 不承载凭据，也不建立跨空间内容关系。
+
+## AI 选区引用
+
+`EditorSurface` 和 `mountEditor` 接受可选 `onAskAssistant({workspaceId, objectId, text, blockIds})`。提供回调后，富文本选区工具栏显示 AI 图标；仅在选中非空文本时出现。正文、预览与数据库记录正文共用该回调，记录抽屉在引用时收起。编辑器只交付选择时的文本快照和来源，不加载 AI 服务或存储聊天；宿主负责打开助手、保存引用、权限校验与模型调用。未提供回调时不显示按钮。

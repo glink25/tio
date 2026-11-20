@@ -1,3 +1,12 @@
+import { prepareAsset } from '@tio/assets';
+import { validateAssetSize, type AssetData } from '@tio/core';
+import { convertColumn } from '@tio/database/conversion';
+import { importZip } from '@tio/serialization';
+import { projectNavigationMove } from '@tio/workspace';
+
+import { operationChange, publicObject, type ApproveOperation } from './safety';
+export { operationChange, publicObject } from './safety';
+export type { ApproveOperation, OperationChange } from './safety';
 import { createFlowModel } from '@tio/automation/model';
 import {
   assertJson,
@@ -110,7 +119,7 @@ export class WorkspaceOperations {
       this.versions.set(token, { id: o.id, signature });
     }
     if (this.versions.size > 10000) this.versions.delete(this.versions.keys().next().value!);
-    return { object: structuredClone(readable), version: token };
+    return { object: publicObject(readable), version: token };
   }
   private async get(objectId: string, check: () => void) {
     await this.options.runtime.ensure([objectId]);
@@ -152,6 +161,8 @@ export class WorkspaceOperations {
     input: unknown,
     requestId: string | undefined,
     check: () => void,
+    approve?: ApproveOperation,
+    file?: (index: number) => Promise<AssetData>,
   ): Promise<OperationResult> {
     try {
       this.live(check);
@@ -161,7 +172,7 @@ export class WorkspaceOperations {
       if (canonical(input).length > 2_000_000) throw new OperationError('limit');
       const parsed = parseInput(name as OperationName, input);
       if (!def.write) {
-        const value = await this.execute(name as OperationName, parsed, check);
+        const value = await this.execute(name as OperationName, parsed, check, approve, file);
         this.live(check);
         return { status: 'completed', value };
       }
@@ -183,7 +194,7 @@ export class WorkspaceOperations {
         .then(async (): Promise<OperationResult> => {
           try {
             this.live(check);
-            const value = await this.execute(name as OperationName, parsed, check);
+            const value = await this.execute(name as OperationName, parsed, check, approve, file);
             this.live(check);
             return { status: 'completed', value };
           } catch (error) {
@@ -227,6 +238,9 @@ export class WorkspaceOperations {
     changes: TioObject[],
     check: () => void,
     expectedWorkspaceVersion?: number,
+    approve?: ApproveOperation,
+    convertField = false,
+    assets?: ReadonlyMap<string, AssetData>,
   ) {
     const runtime = this.options.runtime;
     const dependencies = new Map(expected.map((o) => [o.id, o]));
@@ -250,7 +264,9 @@ export class WorkspaceOperations {
       for (const field of next.fields ?? [])
         if (field.targetDatabaseId) need.add(field.targetDatabaseId);
       if (next.type === 'record') {
-        const db = await this.get(next.databaseId!, check);
+        const db =
+          changes.find((o) => o.id === next.databaseId) ??
+          (await this.get(next.databaseId!, check));
         for (const field of db.fields ?? []) {
           const value = next.properties?.[field.id];
           const before = expected.find((o) => o.id === next.id)?.properties?.[field.id];
@@ -269,9 +285,13 @@ export class WorkspaceOperations {
         if (!runtime.automation) throw new OperationError('unsupported');
         if ((next as AutomationRule).trigger?.parentId)
           need.add((next as AutomationRule).trigger.parentId!);
-        const dbs = await runtime.queryObjects({ type: 'database' });
+        const existingDbs = await runtime.queryObjects({ type: 'database' });
+        const dbs = [
+          ...existingDbs.filter((db) => !changes.some((o) => o.id === db.id)),
+          ...changes.filter((o) => o.type === 'database'),
+        ];
         this.live(check);
-        for (const db of dbs) dependencies.set(db.id, db);
+        for (const db of existingDbs) dependencies.set(db.id, db);
         const issues = flow.flowIssues(
           flow.editFlow(next as AutomationRule),
           dbs,
@@ -377,6 +397,10 @@ export class WorkspaceOperations {
         )
           throw new OperationError('invalid', 'Invalid database embed');
       }
+    const proposal = operationChange(expected, changes);
+    if (proposal.reasons.length && approve && !(await approve(proposal)))
+      throw new OperationError('permission');
+    this.live(check);
     // Both dependencies and edited objects are checked again at the authoritative commit boundary.
     const originals = [...dependencies.values()];
     await runtime.externalWrite(
@@ -384,6 +408,7 @@ export class WorkspaceOperations {
       changes,
       () => this.live(check),
       expectedWorkspaceVersion,
+      { convertField, assets },
     );
     return {
       objects: changes.map((next) =>
@@ -397,6 +422,8 @@ export class WorkspaceOperations {
     name: OperationName,
     p: Record<string, any>,
     check: () => void,
+    approve?: ApproveOperation,
+    file?: (index: number) => Promise<AssetData>,
   ): Promise<unknown> {
     const { runtime, workspaceId } = this.options;
     this.live(check);
@@ -409,6 +436,83 @@ export class WorkspaceOperations {
         writable: runtime.state.getState().writable,
         automation: runtime.automation?.capabilities ?? null,
       };
+    }
+    if (name === 'assets.read') {
+      const asset = await this.get(p.id, check);
+      if (asset.type !== 'asset' || asset.deleted) throw new OperationError('invalid');
+      const data = await runtime.readAsset(asset.id);
+      this.live(check);
+      if (!data) throw new OperationError('unavailable');
+      if (data.bytes.length > 5 * 1024 * 1024) throw new OperationError('limit');
+      return { metadata: this.output(asset), mimeType: data.mime, bytes: Array.from(data.bytes) };
+    }
+    if (name === 'assets.upload' || name === 'content.import') {
+      if (!file) throw new OperationError('unsupported');
+      const data = await file(p.fileIndex);
+      this.live(check);
+      if (name === 'assets.upload') {
+        validateAssetSize(data.bytes.byteLength, runtime.attachmentPolicy.maxFileBytes);
+        const prepared = prepareAsset(workspaceId, data);
+        return this.commit(
+          [],
+          [prepared.metadata],
+          check,
+          undefined,
+          approve,
+          false,
+          prepared.assets,
+        );
+      }
+      const imported = await importZip(data.bytes);
+      this.live(check);
+      const source = imported.objects.find((o) => o.type === 'workspace');
+      if (!source) throw new OperationError('invalid');
+      const mapWorkspace = (value: unknown): unknown => {
+        if (Array.isArray(value)) return value.map(mapWorkspace);
+        if (value && typeof value === 'object')
+          return Object.fromEntries(
+            Object.entries(value).map(([key, v]) => [
+              key,
+              key === 'workspaceId' && v === source.workspaceId ? workspaceId : mapWorkspace(v),
+            ]),
+          );
+        return value;
+      };
+      const objects = imported.objects
+        .filter((o) => o.type !== 'workspace')
+        .map((o) => mapWorkspace(o) as TioObject);
+      const assets = new Map<string, AssetData>();
+      for (const [id, bytes] of imported.assets) {
+        const metadata = objects.find((o) => o.id === id && o.type === 'asset');
+        if (!metadata) throw new OperationError('invalid');
+        validateAssetSize(bytes.byteLength, runtime.attachmentPolicy.maxFileBytes);
+        assets.set(id, {
+          name: metadata.filename ?? '',
+          mime: metadata.mime ?? 'application/octet-stream',
+          bytes,
+        });
+      }
+      await runtime.ensure(objects.map((o) => o.id));
+      this.live(check);
+      if (runtime.snapshot().some((o) => objects.some((n) => n.id === o.id)))
+        throw new OperationError('conflict');
+      return this.commit([], objects, check, undefined, approve, false, assets);
+    }
+    if (name === 'fields.convert') {
+      const snapshot = await runtime.databaseSnapshot(p.id);
+      this.live(check);
+      this.checkVersion(snapshot.database, p.version);
+      const source = snapshot.database.fields?.find((f) => f.id === p.field.id);
+      if (!source) throw new OperationError('invalid');
+      const result = convertColumn(snapshot.database, source, p.field, snapshot.objects);
+      return this.commit(
+        [snapshot.database, ...snapshot.records],
+        result.changes,
+        check,
+        snapshot.version,
+        approve,
+        true,
+      );
     }
     if (name === 'objects.get') return this.output(await this.get(p.id, check));
     if (name === 'objects.list') {
@@ -521,7 +625,28 @@ export class WorkspaceOperations {
       changes = [changeView(db, p.changes)];
     } else if (target) {
       let next = structuredClone(target);
-      if (name === 'objects.delete') next.deleted = true;
+      if (name === 'objects.move') {
+        if (!['page', 'database'].includes(target.type)) throw new OperationError('invalid');
+        const pages = [
+          ...(await runtime.queryObjects({ type: 'page' })),
+          ...(await runtime.queryObjects({ type: 'database' })),
+        ];
+        this.live(check);
+        const projected = projectNavigationMove(pages, {
+          type: 'place',
+          id: target.id,
+          parentId: p.parentId,
+          beforeId: p.beforeId,
+        });
+        const moved = projected.filter(
+          (n) =>
+            !same(
+              n,
+              pages.find((o) => o.id === n.id),
+            ),
+        );
+        return this.commit(pages, moved, check, undefined, approve);
+      } else if (name === 'objects.delete') next.deleted = true;
       else if (name === 'objects.restore') next.deleted = false;
       else if (name === 'pages.update') {
         if (
@@ -532,7 +657,8 @@ export class WorkspaceOperations {
         next = { ...next, ...p.changes };
       } else if (name.startsWith('blocks.')) {
         if (!['page', 'record'].includes(target.type)) throw new OperationError('invalid');
-        if (name === 'blocks.update')
+        if (name === 'blocks.replace') next.blocks = p.blocks;
+        else if (name === 'blocks.update')
           next.blocks = updateBlock(next.blocks ?? [], p.blockId, p.changes);
         else if (name === 'blocks.remove') next.blocks = updateBlock(next.blocks ?? [], p.blockId);
         else {
@@ -637,6 +763,6 @@ export class WorkspaceOperations {
           throw new OperationError('invalid', 'Invalid parent');
       }
     }
-    return this.commit(expected, changes, check, expectedWorkspaceVersion);
+    return this.commit(expected, changes, check, expectedWorkspaceVersion, approve);
   }
 }

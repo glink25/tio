@@ -2,7 +2,7 @@ import { HostError, type ReferenceNode } from '@tio/core';
 import { useT } from '@tio/i18n';
 import { Button, IconButton, LoadingIndicator, ObjectIcon, useTheme } from '@tio/ui';
 import cytoscape, { type Core } from 'cytoscape';
-import { ArrowLeft, ArrowUpRight, Maximize, Minus, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Maximize, Minus, Plus, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
 import type { WorkspaceController } from '../workspace/use-workspace';
@@ -18,7 +18,13 @@ function fitGraph(graph: Core) {
   }
 }
 
-export default function RelationshipGraph({ model: m }: { model: WorkspaceController }) {
+export default function RelationshipGraph({
+  model: m,
+  onOpenAssistant,
+}: {
+  model: WorkspaceController;
+  onOpenAssistant?: () => void;
+}) {
   const t = useT();
   const theme = useTheme();
   const container = useRef<HTMLDivElement>(null);
@@ -268,6 +274,11 @@ export default function RelationshipGraph({ model: m }: { model: WorkspaceContro
           {t('links.back')}
         </Button>
         <h1 className="font-medium">{t('links.graph')}</h1>
+        {onOpenAssistant && (
+          <IconButton label={t('assistant.title')} onClick={onOpenAssistant}>
+            <Sparkles size={18} />
+          </IconButton>
+        )}
         <input
           disabled={!graphVisible}
           aria-label={t('links.search')}

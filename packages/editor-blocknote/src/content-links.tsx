@@ -6,6 +6,7 @@ import { useNotify } from '@tio/ui';
 import { Link } from 'lucide-react';
 import { createContext, useContext } from 'react';
 export interface ContentLinks {
+  askAssistant?: (selection: import('./assistant-selection').SelectedText) => void;
   acceptsContentLink?: (url: string) => boolean;
   copyBlockLink?: (blockId: string) => Promise<void>;
   parseContentLink?: (url: string) => Promise<ContentTarget | undefined>;

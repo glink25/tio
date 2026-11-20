@@ -419,3 +419,20 @@ body,
     var(--color-surface-hover) 33% 100%
   );
 }
+
+.tio-workspace[data-assistant-open='true'] {
+  padding-right: min(400px, 48vw);
+}
+.tio-assistant-panel,
+.tio-assistant-mobile,
+.chaty-root {
+  --chaty-background: var(--color-panel);
+  --chaty-foreground: var(--color-ink);
+  --chaty-muted: var(--color-surface);
+  --chaty-muted-foreground: var(--color-secondary);
+  --chaty-border: var(--color-line);
+}
+
+.tio-workspace[data-assistant-open='true'] .tio-graph {
+  right: min(400px, 48vw);
+}

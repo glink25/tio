@@ -11,6 +11,7 @@ import { Palette, HardDrive, ArrowRightLeft, Sparkles } from 'lucide-react';
 import { useId } from 'react';
 
 import { ConnectionInfo } from '../components/identity';
+import { AssistantSettingsPanel } from '../features/assistant/settings';
 import { AgentPermissionSettings } from '../features/site-tools/permission-ui';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { usePresentation, setPresentation } from '../services/browser-presentation';
@@ -83,6 +84,7 @@ export function SettingsDialog({ model: m }: { model: WorkspaceController }) {
           </section>
           <section id={`${id}-ai`} className="scroll-mt-4 space-y-4">
             <h2 className="text-lg font-semibold">{label('ai')}</h2>
+            <AssistantSettingsPanel model={m} />
             <AgentPermissionSettings />
           </section>
           <section id={`${id}-storage`} className="scroll-mt-4 space-y-4">

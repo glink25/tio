@@ -60,6 +60,16 @@ export function RecordContent({ model: m }: { model: EditorController }) {
   return (
     <ContentLinksContext.Provider
       value={{
+        askAssistant: m.onAskAssistant
+          ? (selection) => {
+              m.setRecordId(null);
+              m.onAskAssistant!({
+                ...selection,
+                workspaceId: record.workspaceId,
+                objectId: record.id,
+              });
+            }
+          : undefined,
         parseContentLink: m.contentLinks?.parse,
         acceptsContentLink: m.contentLinks?.accepts,
         copyBlockLink: m.contentLinks

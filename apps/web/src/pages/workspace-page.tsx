@@ -1,57 +1,64 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useState, useEffect, useCallback } from 'react';
+const AssistantHost = lazy(() => import('../features/assistant/host'));
 const RelationshipGraph = lazy(() => import('../features/relations/graph'));
 import { titleOf, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
 import { OverlayPresence } from '@tio/ui';
 import { SelectInput } from '@tio/ui';
 import { Button, IconButton, MenuItem, Modal, LoadingSkeleton, cn, useMobile } from '@tio/ui';
-import { EditorSurface, type AppSlicePermissionStore } from '@tio/web-editor';
+import { EditorSurface } from '@tio/web-editor';
 import { PanelLeft, Star, Move, Maximize2 } from 'lucide-react';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
 import { SyncStatus } from '../components/sync-status';
+import {
+  assistantScope,
+  selectionReference,
+  type AssistantReference,
+  type SelectionQuote,
+} from '../features/assistant/references';
 import { Breadcrumbs } from '../features/workspace/breadcrumbs';
 import { Sidebar, WorkspaceSwitcher } from '../features/workspace/sidebar';
 import { statusLabel } from '../features/workspace/status';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
+import { appSlice } from '../services/app-slice-permissions';
 import { setPresentation, usePresentation } from '../services/browser-presentation';
 
-const appSlicePermissions: AppSlicePermissionStore = {
-  subscribe(key, listener) {
-    const local = (event: Event) => {
-      if ((event as CustomEvent).detail === key) listener();
-    };
-    const remote = (event: StorageEvent) => {
-      if (event.key === 'tio.app-slice.' + key || event.key === null) listener();
-    };
-    window.addEventListener('tio-app-slice-permission', local);
-    window.addEventListener('storage', remote);
-    return () => {
-      window.removeEventListener('tio-app-slice-permission', local);
-      window.removeEventListener('storage', remote);
-    };
-  },
-  get(key) {
-    try {
-      const value = JSON.parse(localStorage.getItem('tio.app-slice.' + key) ?? 'null');
-      if (
-        value &&
-        ['read', 'readWrite'].includes(value.data) &&
-        typeof value.allowExternalResources === 'boolean'
-      )
-        return value;
-    } catch {
-      /* Missing or damaged preferences use read-only defaults. */
-    }
-    return undefined;
-  },
-  set(key, value) {
-    localStorage.setItem('tio.app-slice.' + key, JSON.stringify(value));
-    window.dispatchEvent(new CustomEvent('tio-app-slice-permission', { detail: key }));
-  },
-};
-const appSlice = { permissionStore: appSlicePermissions, namespace: 'browser-profile' };
 export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
+  const [references, setReferences] = useState<AssistantReference[]>([]);
+  const consumeReferences = useCallback(() => setReferences([]), []);
+  const openAssistant = () => {
+    setAssistantLoaded(true);
+    setAssistantOpen(true);
+  };
+  const quoteSelection = (selection: SelectionQuote) => {
+    if (!m.connection || selection.workspaceId !== m.session?.workspaceId) return;
+    const object = m.objects.find((o) => o.id === selection.objectId);
+    const database = object?.databaseId
+      ? m.objects.find((o) => o.id === object.databaseId)
+      : undefined;
+    const titleField = database?.fields?.find((f) => f.type === 'title');
+    const recordTitle = titleField ? object?.properties?.[titleField.id] : undefined;
+    const title =
+      object?.type === 'record' && typeof recordTitle === 'string'
+        ? recordTitle
+        : object
+          ? titleOf(object)
+          : '';
+    const scope = assistantScope(m.connection.id, selection.workspaceId);
+    setReferences((refs) => [...refs, selectionReference(scope, selection, title)]);
+    if (m.previewId) m.setPreviewId(null);
+    openAssistant();
+  };
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantLoaded, setAssistantLoaded] = useState(false);
+  useEffect(() => {
+    if (m.openingWorkspace) {
+      setReferences([]);
+      setAssistantLoaded(false);
+      setAssistantOpen(false);
+    }
+  }, [m.openingWorkspace]);
   const layoutRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = layoutRef.current;
@@ -125,10 +132,21 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
     );
   const preview = m.objects.find((o) => o.id === m.previewId && !o.deleted);
   return (
-    <div className="tio-workspace">
+    <div className="tio-workspace" data-assistant-open={assistantOpen && !mobile}>
+      {assistantLoaded && m.runtime && m.connection && !m.openingWorkspace && (
+        <Suspense fallback={null}>
+          <AssistantHost
+            model={m}
+            open={assistantOpen}
+            close={() => setAssistantOpen(false)}
+            references={references}
+            onReferencesConsumed={consumeReferences}
+          />
+        </Suspense>
+      )}
       {m.graph && m.runtime && (
         <Suspense fallback={<output>{t('links.updating')}</output>}>
-          <RelationshipGraph model={m} />
+          <RelationshipGraph model={m} onOpenAssistant={openAssistant} />
         </Suspense>
       )}
       <div
@@ -144,6 +162,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
       >
         {m.runtime ? (
           <EditorSurface
+            onAskAssistant={quoteSelection}
             contentLinks={m.contentLinks}
             onOpenGraph={(id) => void m.openGraph(id)}
             mentions={m.mentions}
@@ -183,7 +202,11 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
             }
             renderHeader={(actions, layout) => (
               <>
-                <Sidebar model={m} pageActions={layout.navigationPageActions} />
+                <Sidebar
+                  model={m}
+                  pageActions={layout.navigationPageActions}
+                  onOpenAssistant={openAssistant}
+                />
                 {header(actions, layout)}
               </>
             )}
@@ -204,7 +227,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
           />
         ) : (
           <>
-            <Sidebar model={m} />
+            <Sidebar model={m} onOpenAssistant={openAssistant} />
             {header(null, { appMode: false })}
           </>
         )}
@@ -245,6 +268,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
           >
             <div className="page-preview md:min-h-[78dvh]">
               <EditorSurface
+                onAskAssistant={quoteSelection}
                 contentLinks={m.contentLinks}
                 onOpenGraph={(id) => void m.openGraph(id)}
                 mentions={m.mentions}

@@ -210,6 +210,9 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.3.1)
+      '@glink25/chaty':
+        specifier: link:../../../cent-one/cent/packages/chaty
+        version: link:../../../cent-one/cent/packages/chaty
       '@tio/adapter-github':
         specifier: workspace:*
         version: link:../../packages/adapter-github
@@ -474,12 +477,21 @@ importers:
 
   packages/operations:
     dependencies:
+      '@tio/assets':
+        specifier: workspace:*
+        version: link:../assets
       '@tio/automation':
         specifier: workspace:*
         version: link:../automation
       '@tio/core':
         specifier: workspace:*
         version: link:../core
+      '@tio/database':
+        specifier: workspace:*
+        version: link:../database
+      '@tio/serialization':
+        specifier: workspace:*
+        version: link:../serialization
       '@tio/workspace':
         specifier: workspace:*
         version: link:../workspace
