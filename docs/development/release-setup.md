@@ -23,4 +23,10 @@ Google Play 使用 Actions 构建并签署 AAB，由 Google Play Developer API �
 
 Play 已接受使用正式上传证书签名的 0.1.0／1001 首包，并保存为内部测试草稿。Tio 专用服务账号 `tio-play-publisher@cent-play.iam.gserviceaccount.com` 已绑定该应用的读取及测试轨道发布权限。访问令牌和应用级权限已通过 Play API 验证。发布工作流使用 `android-play-publish` 环境中的凭据。
 
-Xcode Cloud 工作流 `Tio iOS Host` 已启用宿主标签自动归档。App Store Connect 中的 macOS 平台草稿未提交，macOS 分发使用 GitHub Actions。`macos-direct-build` 已配置 Developer ID 证书与公证凭据。Pages 已关闭旧的 main 自动构建，保留当前生产部署。
+`v0.1.0-rc.3` 的 Actions 构建自动将 1004 号 AAB 上传 Play。Play API 确认内容库和 `internal` 轨道均有该构建，轨道状态为 `completed`。正式发布仍需账号取得生产权限。
+
+Xcode Cloud 工作流 `Tio iOS Host` 已启用宿主标签自动归档。App Store Connect 中的 macOS 平台草稿未提交，macOS 分发使用 GitHub Actions。`macos-direct-build` 已配置 Developer ID 证书与公证凭据。`v0.1.0-rc.5` 已通过应用与通用 DMG 的公证验证，[可从 GitHub Release 下载](https://github.com/glink25/tio/releases/tag/dist/0.1.0-rc.5/macos-direct)。
+
+`host/ios-store/v0.1.0-rc.6` 自动触发 Xcode Cloud Build 5。App Store Connect 已接收 `0.1.0 (5)` 并标记上传完成。TestFlight 分发前需完成应用加密声明。iOS 原生 HTTPS 请求使用 Rustls，按 App Store Connect 表单选择标准加密并据实际分发地区填报。法国分发需要上传相应声明文件。参见 [Apple 出口合规说明](https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption/)。
+
+Pages 已关闭旧的 main 自动构建，保留当前生产部署。
