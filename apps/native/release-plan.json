@@ -1,8 +1,8 @@
 {
   "format": 1,
-  "revision": 1006,
-  "hostBuild": 1006,
-  "targets": ["macos-direct"],
+  "revision": 1007,
+  "hostBuild": 1007,
+  "targets": ["ios-store"],
   "web": {
     "deployment": "tag"
   },
@@ -24,7 +24,7 @@
       "zh-Hans": "首个原生客户端版本。"
     }
   },
-  "forceHost": ["macos-direct"],
+  "forceHost": ["ios-store"],
   "apple": {
     "intent": "review-required",
     "reason": "Initial native release includes new system integrations."
