@@ -55,6 +55,18 @@ jobs:
         run: |
           node apps/native/release/select-target.mjs "$RUNNER_TEMP/source-plan/release-plan.json" "$RUNNER_TEMP/plan.json"
           if [ '${{ fromJSON(inputs.target).mode }}' = host ]; then node apps/native/version.mjs --prepare-host; fi
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && endsWith(fromJSON(inputs.target).channel, '-direct')
+        name: Configure the updater key for the desktop bundler
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          const file = 'apps/native/src-tauri/tauri.conf.json';
+          const config = JSON.parse(readFileSync(file, 'utf8'));
+          const pubkey = process.env.TIO_UPDATER_PUBLIC_KEY?.trim();
+          if (!pubkey) throw new Error('Configure TIO_UPDATER_PUBLIC_KEY');
+          config.plugins.updater.pubkey = pubkey;
+          writeFileSync(file, JSON.stringify(config));
+          JS
       - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).channel == 'linux-direct' && fromJSON(inputs.target).mode == 'host'
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
       - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).channel == 'windows-direct' && fromJSON(inputs.target).mode == 'host'
