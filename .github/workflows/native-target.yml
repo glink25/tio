@@ -97,7 +97,7 @@ jobs:
           set +o pipefail
           yes | "$tio_sdkmanager" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
           set -o pipefail
-          "$tio_sdkmanager" --sdk_root="$ANDROID_HOME" 'platform-tools' 'platforms;android-37' 'build-tools;37.0.0' 'ndk;28.2.13676358'
+          "$tio_sdkmanager" --sdk_root="$ANDROID_HOME" 'platform-tools' 'platforms;android-37.0' 'build-tools;37.0.0' 'ndk;28.2.13676358'
           printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\nNDK_HOME=%s\n' "$ANDROID_HOME" "$ANDROID_HOME" "$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
           umask 077
