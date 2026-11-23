@@ -1,0 +1,21 @@
+{
+  "build": {
+    "beforeBuildCommand": "node version.mjs --prepare-apple && node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && VITE_TIO_PLATFORM=ios VITE_TIO_CHANNEL=ios-store corepack pnpm --filter @tio/native build --emptyOutDir --outDir dist/ios",
+    "beforeDevCommand": "node version.mjs --prepare-apple && node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && VITE_TIO_PLATFORM=ios VITE_TIO_CHANNEL=ios-store corepack pnpm --filter @tio/native dev",
+    "frontendDist": "../dist/ios"
+  },
+  "bundle": {
+    "iOS": {
+      "minimumSystemVersion": "16.0"
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Tio",
+        "create": false
+      }
+    ]
+  }
+}

@@ -1,40 +1,19 @@
 # Cloudflare Pages 部署
 
-前端由 Cloudflare Pages 项目 `tio` 托管，连接 GitHub 仓库 `glink25/tio`。推送 `main` 自动构建并发布生产环境，其他分支不自动生成预览部署。
+前端继续使用 Cloudflare Pages 项目 `tio`，与原生平台共用 [Release 工作流](releases.md)。不迁移现有域名，也不将站点改成 Workers 静态资源托管。
 
-## 构建配置
+## 发布方式
 
-在 Pages 的 Settings > Build 中维护以下配置，工作目录为仓库根目录：
+在 `apps/native/release-plan.json` 中配置 `web.deployment`：
 
-| 配置                      | 值                                                               |
-| ------------------------- | ---------------------------------------------------------------- |
-| Build command             | `corepack pnpm install --frozen-lockfile && corepack pnpm build` |
-| Build output directory    | `apps/web/dist`                                                  |
-| Build image               | v3                                                               |
-| `NODE_VERSION`            | `24.22.1`（与根目录 `.node-version` 同步）                       |
-| `SKIP_DEPENDENCY_INSTALL` | `true`，由构建命令使用仓库锁定的 pnpm 安装依赖                   |
-| `VITE_GITHUB_AUTH_URL`    | `https://tio-api.linkai.work`                                    |
+- `tag`：默认策略。受影响的 Web 随正式版本标签自动部署到 Pages 生产分支；RC 标签部署预览分支。
+- `manual`：自动标签发布跳过 Web；在同一个 `Release` 工作流选择源码标签、指定 `targets=web` 并启用 `publish`。
 
-根目录构建命令依次构建独立编辑器与 Web，并检查编辑器 CSS 作用域。不能只运行 Web 子包构建。
+平台也可通过 `targets` 数组单独选择或排除 Web。未受影响的平台不重建。工作流按锁文件安装 npm 依赖，执行根目录完整构建，保留独立编辑器构建与 CSS 作用域检查。
 
-## 触发路径
+部署使用已经构建并校验摘要的站点归档，Cloudflare token 和 account ID 存放在 `web-release` 环境。启用标签发布前应先关闭现有 main 自动构建；新部署任务也通过 API 关闭 Pages Git 集成的生产和预览自动构建，避免第二条生产发布链；生产分支取自现有项目设置。也可以由项目所有者先在 Pages 设置中关闭自动构建。
 
-Build watch paths 的 Include 为 `*`，Exclude 为：
-
-```text
-docs/*
-apps/auth/*
-.github/*
-.vscode/*
-*.md
-tests/e2e/*
-tests/unit/*
-tests/fixtures/*
-```
-
-仅修改上述路径时跳过部署；同时包含其他文件变更时仍部署。Pages 的 `*` 匹配路径分隔符，覆盖嵌套目录。保留 `tests/scripts/*` 的触发，因为生产构建调用其中的 CSS 检查脚本。锁文件、工作区配置、共享包、构建脚本变更仍会触发构建。
-
-这些是 Pages 项目的云端配置，不由 Wrangler 配置文件管理。规则详见 [Build watch paths](https://developers.cloudflare.com/pages/configuration/build-watch-paths/)。空推送或超大推送可能绕过路径过滤，按 Cloudflare 平台规则构建。
+此前 main 自动部署是云端设置。本次仅修改发布代码与文档，尚未连接 Cloudflare 修改该设置或部署站点。正式启用前应确认 `web-release` 环境具备 Pages 编辑与部署权限，详见[发布环境配置](releases.md#发布环境配置)。
 
 ## 域名与鉴权
 

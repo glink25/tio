@@ -161,6 +161,7 @@ export class WorkspaceRuntime {
     changes: TioObject[],
     authorize: () => void,
     expectedWorkspaceVersion?: number,
+    options: { convertField?: boolean; assets?: ReadonlyMap<string, AssetData> } = {},
   ) {
     const ids = new Set([...expected, ...changes].map((o) => o.id));
     const guard = () => {
@@ -190,6 +191,7 @@ export class WorkspaceRuntime {
     };
     return this.checked(expected, changes, guard, {
       source: { kind: 'ai' },
+      ...options,
       remember: true,
       workspaceVersion: expectedWorkspaceVersion,
     });
@@ -1238,6 +1240,7 @@ export class WorkspaceRuntime {
       remember?: boolean;
       workspaceVersion?: number;
       assets?: ReadonlyMap<string, AssetData>;
+      convertField?: boolean;
     } = {},
   ): Promise<void> {
     return new Promise((resolve, reject) => {
@@ -1245,7 +1248,7 @@ export class WorkspaceRuntime {
         guard();
         this.dispatch(
           {
-            type: 'checked',
+            type: options.convertField ? 'convertField' : 'checked',
             expected,
             changes,
             source: options.source,
@@ -1389,7 +1392,45 @@ export class WorkspaceRuntime {
     this.breakHistoryGroup();
     this.store.setState({ canUndo: this.history.length > 0, canRedo: this.redos.length > 0 });
   }
-  private travelHistory(source: HistoryEntry[], target: HistoryEntry[]) {
+  /** Inspect the next history change without touching the user's history or pending input. */
+  async previewHistory(direction: 'undo' | 'redo') {
+    if (this.disposed || this.closing) throw new HostError('closed');
+    if (this.hasPendingChanges(this.snapshot().map((o) => o.id))) throw new HostError('conflict');
+    const source = direction === 'undo' ? this.history : this.redos;
+    const entry = source.at(-1);
+    if (!entry) throw new HostError('unavailable');
+    if (entry.draft) throw new HostError('conflict');
+    await this.ensure(entry.steps.flatMap((step) => step.after.map((o) => o.id)));
+    const before = this.commandObjects();
+    const next = [...entry.steps]
+      .reverse()
+      .reduce((state, step) => executeCommand(step, state, undefined, this.domain), before);
+    const after = next.filter(
+      (o) => JSON.stringify(o) !== JSON.stringify(before.find((old) => old.id === o.id)),
+    );
+    const version = this.version;
+    return {
+      before: before.filter((o) => after.some((n) => n.id === o.id)),
+      after,
+      apply: (authorize: () => void) => {
+        authorize();
+        if (
+          source.at(-1) !== entry ||
+          this.version !== version ||
+          this.hasPendingChanges(this.snapshot().map((o) => o.id))
+        )
+          throw new HostError('conflict');
+        const guard = () => {
+          authorize();
+          if (this.version !== version || [...this.history, ...this.redos].some((e) => e.draft))
+            throw new HostError('conflict');
+        };
+        this.travelHistory(source, direction === 'undo' ? this.redos : this.history, guard);
+        return this.flush();
+      },
+    };
+  }
+  private travelHistory(source: HistoryEntry[], target: HistoryEntry[], guard?: () => void) {
     if (this.disposed || this.closing) throw new HostError('closed');
     if (!this.store.getState().writable) throw new HostError('permission');
     this.breakHistoryGroup();
@@ -1415,7 +1456,7 @@ export class WorkspaceRuntime {
         },
         false,
         new Map(),
-        undefined,
+        guard ? { guard } : undefined,
         false,
         { target, entry },
       );

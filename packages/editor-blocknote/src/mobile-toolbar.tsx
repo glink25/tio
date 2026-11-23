@@ -46,6 +46,7 @@ import {
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { AskAssistantButton } from './assistant-selection';
 import { CopyBlockLink } from './content-links';
 import { EditorFileReplaceButton } from './file-panel';
 
@@ -177,6 +178,7 @@ function TouchToolbar() {
     <div className="tio-touch-toolbar">
       <div className="tio-touch-toolbar-scroll">
         <FormattingToolbar>
+          <AskAssistantButton />
           <Button
             label={t('editor.insert')}
             icon={<Plus size={18} />}

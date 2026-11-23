@@ -1,4 +1,4 @@
-import { HostError, object, textBlock } from '@tio/core';
+import { HostError, object, textBlock, type TioObject } from '@tio/core';
 import { MemoryRepository } from '@tio/provider-memory';
 import { WorkspaceRuntime } from '@tio/workspace';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -444,4 +444,100 @@ it('checks schema query baselines without rejecting consecutive confirmed operat
   ).rejects.toMatchObject({ code: 'conflict' });
   expect(runtime.state.getState().error).toBeNull();
   service.dispose();
+});
+
+// Existing external-write cases do not cover host confirmation delays or workspace credentials.
+it('filters AI settings and rechecks confirmed changes against concurrent edits', async () => {
+  const { WorkspaceOperations } = await import('@tio/operations');
+  const { runtime } = await setup();
+  const workspace = object('workspace', 'w', {
+    id: 'w',
+    name: 'Private',
+    assistant: {
+      configs: [
+        {
+          id: 'model',
+          name: 'AI',
+          apiType: 'open-ai-compatible',
+          apiUrl: 'https://example.test',
+          model: 'model',
+          apiKey: 'c2VjcmV0',
+          customParams: { private: 'secret' },
+        },
+      ],
+      defaultConfigId: 'model',
+    },
+  });
+  runtime.create([workspace]);
+  await runtime.flush();
+  const service = new WorkspaceOperations({ runtime, workspaceId: 'w' });
+  const context = await service.invoke('context.get', {}, undefined, () => {});
+  expect(JSON.stringify(context)).not.toContain('c2VjcmV0');
+  expect(JSON.stringify(context)).not.toContain('customParams');
+  const read = await service.invoke('objects.get', { id: 'p' }, undefined, () => {});
+  if (read.status !== 'completed') throw new Error('read failed');
+  const version = (read.value as { version: string }).version;
+  let asked = 0;
+  const result = await service.invoke(
+    'objects.delete',
+    { id: 'p', version },
+    'delete-after-review',
+    () => {},
+    async (change) => {
+      asked++;
+      expect(change.reasons).toContain('content.delete');
+      runtime.patch('p', { title: 'changed during review' });
+      await runtime.flush();
+      return true;
+    },
+  );
+  expect(asked).toBe(1);
+  expect(result).toMatchObject({ status: 'failed', error: { code: 'conflict' } });
+  expect(runtime.snapshot().find((o) => o.id === 'p')?.deleted).not.toBe(true);
+  service.dispose();
+  runtime.dispose();
+});
+
+it('detects deletes inside replacement content, rejects denial, and deduplicates approval', async () => {
+  const { WorkspaceOperations, operationChange } = await import('@tio/operations');
+  const { runtime } = await setup();
+  const service = new WorkspaceOperations({
+    runtime,
+    workspaceId: 'w',
+    validateBlocks: async () => {},
+  });
+  const read = await service.invoke('objects.get', { id: 'p' }, undefined, () => {});
+  if (read.status !== 'completed') throw new Error('read failed');
+  const before = read.value as { object: TioObject; version: string };
+  expect(operationChange([before.object], [{ ...before.object, blocks: [] }]).reasons).toContain(
+    'blocks.delete',
+  );
+  let count = 0;
+  const args = { id: 'p', version: before.version, blocks: [] };
+  const deny = async () => {
+    count++;
+    return false;
+  };
+  const denied = await service.invoke('blocks.replace', args, 'denied', () => {}, deny);
+  expect(denied).toMatchObject({ status: 'failed', error: { code: 'permission' } });
+  await service.invoke('blocks.replace', args, 'denied', () => {}, deny);
+  expect(count).toBe(1);
+  expect(runtime.snapshot().find((o) => o.id === 'p')?.blocks).toEqual(before.object.blocks);
+  service.dispose();
+  runtime.dispose();
+});
+
+it('previews shared undo without mutating history and expires review after a new edit', async () => {
+  const { runtime } = await setup();
+  runtime.patch('p', { title: 'Edited' });
+  await runtime.flush();
+  const preview = await runtime.previewHistory('undo');
+  expect(runtime.snapshot().find((o) => o.id === 'p')?.title).toBe('Edited');
+  expect(preview.after.find((o) => o.id === 'p')?.title).toBe('Original');
+  await preview.apply(() => {});
+  expect(runtime.snapshot().find((o) => o.id === 'p')?.title).toBe('Original');
+  const redo = await runtime.previewHistory('redo');
+  runtime.patch('p', { title: 'New user input' });
+  await runtime.flush();
+  expect(() => redo.apply(() => {})).toThrow();
 });

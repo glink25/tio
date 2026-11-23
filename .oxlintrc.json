@@ -19,6 +19,8 @@
   },
   "ignorePatterns": [
     "**/dist/**",
+    "apps/native/src-tauri/target/**",
+    "apps/native/src-tauri/gen/**",
     "**/node_modules/**",
     ".tmp/**",
     "tests/test-results/**",

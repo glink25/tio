@@ -10,5 +10,5 @@ custom_domain = true
 
 [vars]
 GITHUB_APP_SLUG = "tio-personal-editor"
-FRONTEND_ORIGIN = "https://tio.linkai.work,http://localhost:6789"
-REDIRECT_URI_ALLOWLIST = "https://tio.linkai.work/,http://localhost:6789/"
+FRONTEND_ORIGIN = "https://tio.linkai.work,http://localhost:6789,http://localhost:6790,tauri://localhost,http://tauri.localhost,https://tauri.localhost"
+REDIRECT_URI_ALLOWLIST = "https://tio.linkai.work/,http://localhost:6789/,tio://auth/github"

@@ -29,6 +29,12 @@ export interface EditorTarget {
   mode?: 'page' | 'preview';
 }
 export interface EditorSurfaceProps {
+  onAskAssistant?: (
+    selection: import('@tio/editor-blocknote').SelectedText & {
+      workspaceId: string;
+      objectId: string;
+    },
+  ) => void;
   contentLinks?: {
     accepts: (url: string) => boolean;
     create: (target: import('@tio/core').ContentTarget) => string;
@@ -272,6 +278,7 @@ export function useEditorController(props: EditorSurfaceProps) {
     mentions,
     contentLinks: props.contentLinks,
     onOpenGraph: props.onOpenGraph,
+    onAskAssistant: props.onAskAssistant,
     appSlice,
     hostReadOnly: readOnly,
     runtime,

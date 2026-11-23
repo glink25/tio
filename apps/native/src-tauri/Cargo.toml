@@ -1,0 +1,60 @@
+[package]
+name = "tio-native"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "tio_native"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+sha2 = "0.10"
+tauri-build = { version = "2", features = [] }
+serde_json = "1"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+rusqlite = { version = "0.37", features = ["bundled", "serde_json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+sha2 = "0.10"
+uuid = { version = "1", features = ["v4"] }
+flate2 = "1"
+fs2 = "0.4"
+tar = "0.4"
+mime_guess = "2"
+percent-encoding = "2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+cap-std = "4"
+rfd = "0.17"
+
+[dependencies.ed25519-dalek]
+version = "2"
+
+[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
+keyring = { version = "3.6", features = ["apple-native"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring = { version = "3.6", features = ["sync-secret-service", "crypto-rust"] }
+
+[dependencies.tauri-plugin-deep-link]
+version = "2"
+
+[dependencies.tauri-plugin-opener]
+version = "2"
+
+[dependencies.reqwest]
+version = "0.12"
+default-features = false
+features = ["rustls-tls"]
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies.tauri-plugin-updater]
+version = "2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"

@@ -87,4 +87,4 @@ export { executeBasic, type BasicCommand } from './basic';
 
 export { executeCommand, type WorkspaceCommand } from './commands';
 
-export { navigationOrder, navigationTree } from './navigation';
+export { navigationOrder, navigationTree, projectNavigationMove } from './navigation';

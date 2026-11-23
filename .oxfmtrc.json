@@ -4,11 +4,13 @@
   "printWidth": 100,
   "sortImports": {},
   "sortTailwindcss": {
-    "stylesheet": "./apps/web/src/styles/tailwind.css",
+    "stylesheet": "./packages/app/src/styles/tailwind.css",
     "functions": ["cn", "clsx"]
   },
   "ignorePatterns": [
     "**/dist/**",
+    "apps/native/src-tauri/target/**",
+    "apps/native/src-tauri/gen/**",
     "**/node_modules/**",
     "pnpm-lock.yaml",
     ".tmp/**",

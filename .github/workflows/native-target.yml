@@ -1,0 +1,210 @@
+name: Platform release
+on:
+  workflow_call:
+    inputs:
+      target:
+        required: true
+        type: string
+      publish:
+        required: true
+        type: boolean
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ fromJSON(inputs.target).track }}-${{ fromJSON(inputs.target).channel }}
+  cancel-in-progress: false
+jobs:
+  build:
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ${{ fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'windows-direct' && 'windows-latest' || fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'macos-direct' && 'macos-latest' || 'ubuntu-24.04' }}
+    environment: ${{ inputs.publish && fromJSON(inputs.target).channel == 'android-play' && fromJSON(inputs.target).mode == 'host' && 'android-play-publish' || format('{0}-build', fromJSON(inputs.target).channel) }}
+    env:
+      TIO_TARGET: ${{ inputs.target }}
+      VITE_TIO_CHANNEL: ${{ fromJSON(inputs.target).channel }}
+      TIO_RESOURCE_PUBLIC_KEY: ${{ vars.TIO_RESOURCE_PUBLIC_KEY }}
+      TIO_UPDATER_PUBLIC_KEY: ${{ vars.TIO_UPDATER_PUBLIC_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      reuse: ${{ steps.reuse.outputs.reuse }}
+      published: ${{ steps.reuse.outputs.published }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ fromJSON(inputs.target).sourceCommit }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: release-plan
+          path: ${{ runner.temp }}/source-plan
+      - id: reuse
+        run: node apps/native/release/reuse.mjs "$RUNNER_TEMP/release"
+      - if: steps.reuse.outputs.reuse != 'true'
+        run: corepack enable && node scripts/install-ci.mjs
+      - if: steps.reuse.outputs.reuse != 'true'
+        name: Prepare the exact platform plan
+        run: |
+          node apps/native/release/select-target.mjs "$RUNNER_TEMP/source-plan/release-plan.json" "$RUNNER_TEMP/plan.json"
+          if [ '${{ fromJSON(inputs.target).mode }}' = host ]; then node apps/native/version.mjs --prepare-host; fi
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).channel == 'linux-direct' && fromJSON(inputs.target).mode == 'host'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libssl-dev
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).channel == 'windows-direct' && fromJSON(inputs.target).mode == 'host'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_CERTIFICATE_SHA256: ${{ vars.WINDOWS_CERTIFICATE_SHA256 }}
+        run: ./apps/native/release/windows-sign.ps1
+      - if: steps.reuse.outputs.reuse != 'true' && startsWith(fromJSON(inputs.target).channel, 'android-') && fromJSON(inputs.target).mode == 'host'
+        name: Prepare Android SDK and signing key
+        env:
+          TIO_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -eu
+          sdkmanager 'platforms;android-37' 'build-tools;37.0.0' 'ndk;28.2.13676358'
+          rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
+          umask 077
+          printf '%s' "${TIO_KEYSTORE_BASE64:?}" | base64 --decode > "$RUNNER_TEMP/tio-release.jks"
+          printf 'TIO_KEYSTORE=%s\n' "$RUNNER_TEMP/tio-release.jks" >> "$GITHUB_ENV"
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && startsWith(fromJSON(inputs.target).channel, 'android-')
+        name: Build Android host
+        env:
+          TIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          TIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          TIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: corepack pnpm --filter @tio/native exec tauri android build --aab --ci
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'macos-direct'
+        name: Build signed and notarized universal macOS disk image
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE_SHA256: ${{ vars.APPLE_CERTIFICATE_SHA256 }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          node apps/native/release/macos-sign.mjs
+          corepack pnpm --filter @tio/native exec tauri build --target universal-apple-darwin --bundles dmg,app --config "$RUNNER_TEMP/tio-macos.json" --ci
+          node apps/native/release/macos-verify.mjs apps/native/src-tauri/target/universal-apple-darwin/release/bundle
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'windows-direct'
+        run: corepack pnpm --filter @tio/native exec tauri build --bundles nsis --config "$RUNNER_TEMP/tio-windows-sign.json" --ci
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'linux-direct'
+        run: corepack pnpm --filter @tio/native exec tauri build --bundles deb,appimage --ci
+      - if: steps.reuse.outputs.reuse != 'true' && (fromJSON(inputs.target).mode == 'runtime' || (fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'ios-store'))
+        name: Build the platform application bundle
+        run: |
+          corepack pnpm --filter @tio/native build:kernel
+          case "$VITE_TIO_CHANNEL" in
+            ios-store) platform=ios ;;
+            android-*) platform=android ;;
+            *) platform=desktop ;;
+          esac
+          corepack pnpm --filter @tio/native build --outDir "dist/$platform"
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'web'
+        run: corepack pnpm build
+      - if: steps.reuse.outputs.reuse != 'true'
+        name: Validate and stage unsigned release artifacts
+        run: |
+          case "$VITE_TIO_CHANNEL" in
+            macos-direct) source=apps/native/src-tauri/target/universal-apple-darwin/release/bundle ;;
+            android-*) source=apps/native/src-tauri/gen/android/app/build/outputs ;;
+            *) source=apps/native/src-tauri/target/release/bundle ;;
+          esac
+          node apps/native/release/stage.mjs --plan "$RUNNER_TEMP/plan.json" --channel "$VITE_TIO_CHANNEL" --out "$RUNNER_TEMP/release" --input "$source"
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).channel == 'android-play' && fromJSON(inputs.target).mode == 'host'
+        name: Validate Play signing and publish directly from the runner
+        env:
+          TIO_PUBLISH_PLAY: ${{ inputs.publish }}
+          TIO_SOURCE_COMMIT: ${{ fromJSON(inputs.target).sourceCommit }}
+          TIO_ANDROID_PLAY_UPLOAD_CERT_SHA256: ${{ vars.TIO_ANDROID_PLAY_UPLOAD_CERT_SHA256 }}
+          ANDROID_PLAY_SERVICE_ACCOUNT_BASE64: ${{ inputs.publish && secrets.ANDROID_PLAY_SERVICE_ACCOUNT_BASE64 || '' }}
+        run: node apps/native/release/store.mjs "$RUNNER_TEMP/release"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-${{ fromJSON(inputs.target).channel }}
+          path: ${{ runner.temp }}/release/*
+          if-no-files-found: error
+          retention-days: 14
+      - if: always() && runner.os == 'Windows' && env.TIO_WINDOWS_THUMBPRINT != ''
+        shell: pwsh
+        run: Remove-Item "Cert:\CurrentUser\My\$env:TIO_WINDOWS_THUMBPRINT"
+      - if: always() && startsWith(fromJSON(inputs.target).channel, 'android-')
+        run: node --input-type=module -e 'import {rmSync} from "node:fs"; rmSync(process.env.RUNNER_TEMP+"/tio-release.jks",{force:true});'
+  candidate:
+    needs: [build]
+    if: ${{ always() && inputs.publish && needs.build.result == 'success' && needs.build.outputs.published != 'true' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TIO_SOURCE_COMMIT: ${{ fromJSON(inputs.target).sourceCommit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ fromJSON(inputs.target).sourceCommit }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: release-${{ fromJSON(inputs.target).channel }}
+          path: ${{ runner.temp }}/candidate
+      - run: node apps/native/release/candidate.mjs "$RUNNER_TEMP/candidate"
+  publish:
+    needs: [build, candidate]
+    if: ${{ always() && inputs.publish && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped') && needs.build.result == 'success' }}
+    runs-on: ubuntu-24.04
+    environment: ${{ fromJSON(inputs.target).channel == 'web' && 'web-release' || 'release-publish' }}
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TIO_RESOURCE_PUBLIC_KEY: ${{ vars.TIO_RESOURCE_PUBLIC_KEY }}
+      TIO_SOURCE_COMMIT: ${{ fromJSON(inputs.target).sourceCommit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ fromJSON(inputs.target).sourceCommit }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: release-${{ fromJSON(inputs.target).channel }}
+          path: ${{ runner.temp }}/download
+      - name: Prepare signing key and exact source metadata
+        env:
+          TIO_RESOURCE_PRIVATE_KEY_BASE64: ${{ secrets.TIO_RESOURCE_PRIVATE_KEY_BASE64 }}
+        run: |
+          set -eu
+          umask 077
+          printf '%s' "${TIO_RESOURCE_PRIVATE_KEY_BASE64:?}" | base64 --decode > "$RUNNER_TEMP/tio-release-key.pem"
+          printf 'TIO_RELEASE_KEY_FILE=%s\n' "$RUNNER_TEMP/tio-release-key.pem" >> "$GITHUB_ENV"
+          if [ '${{ fromJSON(inputs.target).mode }}' = host ]; then node apps/native/version.mjs --prepare-host; fi
+      - if: needs.build.outputs.published != 'true'
+        run: node apps/native/release/finalize.mjs "$RUNNER_TEMP/download"
+      - if: fromJSON(inputs.target).channel == 'web'
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          corepack enable
+          node scripts/install-ci.mjs
+          node apps/native/release/deploy-web.mjs "$RUNNER_TEMP/download"
+      - run: node apps/native/release/publish.mjs --dir "$RUNNER_TEMP/download"
+      - if: always()
+        run: node --input-type=module -e 'import {rmSync} from "node:fs"; rmSync(process.env.RUNNER_TEMP+"/tio-release-key.pem",{force:true});'

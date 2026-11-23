@@ -1,0 +1,51 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Tio",
+  "version": "../package.json",
+  "identifier": "com.glink25.tio",
+  "build": {
+    "beforeDevCommand": "corepack pnpm --filter @tio/native dev",
+    "beforeBuildCommand": "node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && corepack pnpm --filter @tio/native build --emptyOutDir --outDir dist/desktop",
+    "devUrl": "http://localhost:6790",
+    "frontendDist": "../dist/desktop"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Tio",
+        "width": 1100,
+        "height": 800
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["tio"]
+      },
+      "mobile": [
+        {
+          "scheme": ["tio"],
+          "host": "auth",
+          "path": ["/github"],
+          "appLink": false
+        }
+      ]
+    },
+    "updater": {
+      "pubkey": "",
+      "requireSignedVersion": true
+    }
+  }
+}

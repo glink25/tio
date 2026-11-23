@@ -51,3 +51,15 @@ GitHub App 凭据在请求时检查 access token，有效期剩余不超过 4 �
 `@tio/operations` 为共享无界面操作服务，复用当前 WorkspaceRuntime；纯操作构造与 App Slice broker 共享，自动化表单和 agent 共享规则校验。宿主负责当前空间绑定、授权和传输，编辑器不注册外部工具。Web 宿主在顶层页面按需提供 Site tools，权限保存在浏览器 localStorage，不进入业务对象或同步。
 
 外部写入通过运行时的用户输入保护、版本检查、命令时间维护、仓库确认及撤销历史，并标记可信 `source: ai`。缺少 WebMCP 时保留普通编辑能力。相同操作核心可由未来原生宿主绑定不同通道；本阶段没有原生适配或常驻后台。使用、能力及验收边界见[Site tools](../development/site-tools.md)。
+
+## 内置 AI 助手
+
+工作空间提供全局 Chaty 助手，桌面右栏、移动弹窗；API 配置及 Base64 遮掩密钥随空间同步，会话留在本机。助手和 Site tools 共用操作核心，内置默认读写，删除和权限扩大需确认，外部授权独立。详见[助手接入](../development/assistant.md)。
+
+## 应用与平台入口
+
+`@tio/app` 负责共享导航、连接选择、设置、同步状态和编辑器编排。`AppPlatform` 在挂载前注入目录、设备仓库、文件夹绑定、GitHub 副本与远端缓存、凭据、系统回调、同步调度和宿主更新能力。共享应用不导入 Tauri 或 IndexedDB 存储实现，也不根据构建模式选择平台。
+
+`apps/web` 提供 IndexedDB、浏览器文件夹授权、浏览器凭据与前台可见性调度，独立构建 PWA。`apps/native` 提供 SQLite 桥接、安全凭据库、系统目录授权、深链与原生更新，拥有独立 HTML、Vite 入口和构建命令。两者复用共享应用的样式、品牌与公共资源。开发服务分别使用 6789 和 6790，端口被占用时拒绝启动，避免原生窗口连接到 Web 宿主。
+
+`@tio/native-core` 包含可脱离 DOM 的命令入口、原生仓库协议和一次后台同步执行。前台原生宿主、JavaScriptCore 和 QuickJS 使用同一实现；I/O、凭据、时钟及网络来自运行宿主。GitHub 凭据刷新语义位于 `@tio/provider-github/credentials`，前台与后台共同调用。边界检查阻止 Tauri、浏览器存储或 React 界面依赖进入无界面内核。

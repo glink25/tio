@@ -21,6 +21,8 @@ import { Button, FilePicker, useAssetPolicy } from '@tio/ui';
 import { FileUp, Image, Music, Video } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { AskAssistantButton } from './assistant-selection';
+
 function mediaKind(type?: string) {
   return type === 'image' || type === 'video' || type === 'audio' ? type : 'file';
 }
@@ -192,6 +194,7 @@ export function EditorFileReplaceButton() {
 export function EditorFormattingToolbar() {
   return (
     <FormattingToolbar>
+      <AskAssistantButton />
       {getFormattingToolbarItems().map((item) =>
         item.key === 'replaceFileButton' ? (
           <EditorFileReplaceButton key="replaceFileButton" />

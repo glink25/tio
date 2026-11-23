@@ -82,3 +82,7 @@ JSON ZIP 是可恢复备份。当前 Web 导入新建空间 ID，重写对象的
 反向引用和全空间图均是 provider 派生数据，不写入业务 JSON、备份或同步。
 引用来源包括页面/记录的已知正文内容容器及当前有效 mention 字段；不包含父子层级、数据库归属、relation、数据库嵌入、人员、外部 URL 或不透明载荷。
 同一来源到目标的多次提及聚合为一条有向边，保留出现次数和来源位置；自引用可在列表查看，图谱不绘制自环。
+
+## AI 配置
+
+工作空间对象可包含 `assistant: { configs, defaultConfigId?, extraPrompt? }`。每项配置包含稳定 `id`、`name`、`apiType`（`open-ai-compatible` 或 `google-ai-studio`）、`apiUrl`、`model`、Base64 `apiKey`，以及可选 `contextWindow`、`maxTokens`、`imageInput` 和 JSON `customParams`。密钥随工作空间同步、导出和分享；Base64 仅作遮掩。聊天记录、确认状态与 App Slice 权限不属于该对象。普通 AI 操作读取排除整个配置；宿主配置修改走统一命令与仓库。未知字段继续无损保留。

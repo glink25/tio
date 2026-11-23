@@ -1,3 +1,5 @@
+import { executeSyncBatch } from './batch';
+export { executeSyncBatch } from './batch';
 import { ConnectionAccessError } from '@tio/core';
 import type { ObjectRegistry, SyncRepository, WorkspaceContentPort } from '@tio/core';
 
@@ -173,20 +175,16 @@ export class HostSyncRunner {
         request.started = true;
         this.dirty = false;
         this.core.issues = [];
-        if (request.initializing) {
-          await this.core.pull(initialization?.targetId?.());
-          if (this.disposed) return;
-          if (!this.core.issues.length) {
-            await initialization!.complete();
-            // Re-read the downloaded shared policy before considering any publication.
+        await executeSyncBatch(this.core, {
+          initialization,
+          initializing: request.initializing,
+          automatic,
+          automaticEnabled: () => this.automatic,
+          initialized: async () => {
             if (this.host.beforeAutomaticSync) await this.host.beforeAutomaticSync();
-            if (this.disposed) return;
-            if (!automatic || this.automatic) {
-              request.initializing = false;
-              await this.core.run();
-            }
-          }
-        } else await this.core.run();
+            if (!this.disposed && (!automatic || this.automatic)) request.initializing = false;
+          },
+        });
         if (this.disposed) return;
         this.issues = this.core.issues;
         if (this.issues.length)

@@ -4,7 +4,7 @@ import { MemoryRepository } from '@tio/provider-memory';
 import { WorkspaceRuntime } from '@tio/workspace';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { WorkspaceLifecycle } from '../../../apps/web/src/services/workspace-lifecycle';
+import { WorkspaceLifecycle } from '../../../packages/app/src/services/workspace-lifecycle';
 import { LocalFolderProvider } from '../../../packages/provider-local-folder/src/index';
 
 function deferred() {
@@ -201,7 +201,8 @@ it('host deletion discards the active session, preserves retry after failure, an
     setItem: (key: string, value: string) => values.set(key, value),
     removeItem: (key: string) => values.delete(key),
   });
-  const { WorkspaceServices } = await import('../../../apps/web/src/services/workspace-services');
+  const { WorkspaceServices } =
+    await import('../../../packages/app/src/services/workspace-services');
   const repository = Object.assign(new MemoryRepository(), { close: vi.fn() });
   const execute = vi
     .fn()
@@ -263,7 +264,8 @@ it('initializes a manual remote replica progressively through the shared host an
     addEventListener() {},
     removeEventListener() {},
   });
-  const { WorkspaceServices } = await import('../../../apps/web/src/services/workspace-services');
+  const { WorkspaceServices } =
+    await import('../../../packages/app/src/services/workspace-services');
   const { FileWorkspaceContent } = await import('@tio/file-storage');
   const { MemoryProvider } = await import('@tio/provider-memory');
   const workspaceId = crypto.randomUUID();

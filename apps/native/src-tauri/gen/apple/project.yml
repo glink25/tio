@@ -1,0 +1,161 @@
+name: tio-native
+options:
+  bundleIdPrefix: com.glink25.tio
+  deploymentTarget:
+    iOS: 16.0
+fileGroups: [../../src]
+configs:
+  debug: debug
+  release: release
+configFiles:
+  debug: Version.xcconfig
+  release: Version.xcconfig
+settingGroups:
+  app:
+    base:
+      PRODUCT_NAME: Tio
+      PRODUCT_BUNDLE_IDENTIFIER: com.glink25.tio
+      DEVELOPMENT_TEAM: SQFK9H53PK
+      CODE_SIGN_STYLE: Automatic
+targetTemplates:
+  app:
+    type: application
+    sources:
+      - path: Sources
+    scheme:
+      environmentVariables:
+        RUST_BACKTRACE: full
+        RUST_LOG: info
+    settings:
+      groups: [app]
+targets:
+  tio-native_iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: ../../../apple/Sources/TioFolder/AuthorizedFolder.swift
+      - path: Assets.xcassets
+      # Exclude built static libs: regenerating with xcodegen after a build
+      # otherwise turns the per-configuration libapp.a copies into colliding
+      # resources ("Multiple commands produce …/libapp.a"). They are linked
+      # via LIBRARY_SEARCH_PATHS, never bundled as resources.
+      - path: Externals
+        excludes: ["**/*.a"]
+      - path: tio-native_iOS
+      - path: assets
+        buildPhase: resources
+        type: folder
+      - path: LaunchScreen.storyboard
+    info:
+      path: tio-native_iOS/Info.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: com.glink25.tio.oauth
+            CFBundleURLSchemes: [tio]
+        BGTaskSchedulerPermittedIdentifiers: [com.glink25.tio.sync]
+        UIBackgroundModes: [processing]
+        LSRequiresIPhoneOS: true
+        UILaunchStoryboardName: LaunchScreen
+        UIRequiredDeviceCapabilities: [arm64, metal]
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+    entitlements:
+      path: tio-native_iOS/tio-native_iOS.entitlements
+    scheme:
+      environmentVariables:
+        RUST_BACKTRACE: full
+        RUST_LOG: info
+    settings:
+      base:
+        SWIFT_VERSION: "5.0"
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/tio-native/ShortcutsBridge.h
+        ENABLE_BITCODE: false
+        ARCHS: [arm64]
+        VALID_ARCHS: arm64
+        LIBRARY_SEARCH_PATHS[arch=x86_64]: $(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)
+        LIBRARY_SEARCH_PATHS[arch=arm64]: $(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: true
+        EXCLUDED_ARCHS[sdk=iphoneos*]: x86_64
+      groups: [app]
+    dependencies:
+      - framework: libapp.a
+        embed: false
+      - sdk: CoreGraphics.framework
+      - sdk: Metal.framework
+      - sdk: MetalKit.framework
+      - sdk: QuartzCore.framework
+      - sdk: Security.framework
+      - sdk: UIKit.framework
+      - sdk: WebKit.framework
+    preBuildScripts:
+      - script: |
+          export PATH="$HOME/.cargo/bin:/opt/homebrew/opt/node@24/bin:/usr/local/opt/node@24/bin:$PATH"
+          corepack pnpm tauri ios xcode-script -v --platform "${PLATFORM_DISPLAY_NAME:?}" --sdk-root "${SDKROOT:?}" --framework-search-paths "${FRAMEWORK_SEARCH_PATHS:?}" --header-search-paths "${HEADER_SEARCH_PATHS:?}" --gcc-preprocessor-definitions "${GCC_PREPROCESSOR_DEFINITIONS:-}" --configuration "${CONFIGURATION:?}" ${FORCE_COLOR} ${ARCHS:?}
+        name: Build Rust Code
+        basedOnDependencyAnalysis: false
+        outputFiles:
+          - $(SRCROOT)/Externals/x86_64/${CONFIGURATION}/libapp.a
+          - $(SRCROOT)/Externals/arm64/${CONFIGURATION}/libapp.a
+  tio-native_macOS:
+    type: application
+    platform: macOS
+    deploymentTarget: "13.0"
+    sources:
+      - path: Mac/main.c
+      - path: ../../icons/icon.icns
+        buildPhase: resources
+    settings:
+      groups: [app]
+      base:
+        ARCHS: "$(ARCHS_STANDARD)"
+        ENABLE_HARDENED_RUNTIME: true
+        ENABLE_USER_SCRIPT_SANDBOXING: false
+        LIBRARY_SEARCH_PATHS: "$(inherited) $(PROJECT_DIR)/Externals/macos/$(CONFIGURATION)"
+        OTHER_LDFLAGS: ["$(inherited)", "-lc++", "-liconv"]
+      configs:
+        debug:
+          ONLY_ACTIVE_ARCH: true
+        release:
+          ONLY_ACTIVE_ARCH: false
+    info:
+      path: Mac/Info.plist
+      properties:
+        CFBundleIconFile: icon
+        NSHighResolutionCapable: true
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleURLTypes:
+          - CFBundleURLName: com.glink25.tio.oauth
+            CFBundleURLSchemes: [tio]
+    dependencies:
+      - framework: libapp_macos.a
+        embed: false
+      - sdk: OSAKit.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: ApplicationServices.framework
+      - sdk: Carbon.framework
+      - sdk: CoreVideo.framework
+      - sdk: AppKit.framework
+      - sdk: WebKit.framework
+      - sdk: Security.framework
+      - sdk: CoreFoundation.framework
+      - sdk: CoreGraphics.framework
+      - sdk: Foundation.framework
+      - sdk: QuartzCore.framework
+    preBuildScripts:
+      - name: Build Rust desktop host
+        script: /bin/bash "$PROJECT_DIR/Mac/build-rust.sh"
+        basedOnDependencyAnalysis: false
+    scheme:
+      archive:
+        config: release

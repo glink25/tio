@@ -3,7 +3,7 @@ import { MemoryRepository } from '@tio/provider-memory';
 import { WorkspaceRuntime } from '@tio/workspace';
 import { afterEach, expect, it, vi } from 'vitest';
 
-import { HostSaveRecovery } from '../../../apps/web/src/services/save-recovery';
+import { HostSaveRecovery } from '../../../packages/app/src/services/save-recovery';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {

@@ -137,6 +137,21 @@ const ruleChanges = z.strictObject({
     .optional(),
 });
 const operations = {
+  'assets.read': [
+    false,
+    'Read an attachment; binary bytes are returned for host media rendering.',
+    z.strictObject({ id: identifier }),
+  ],
+  'assets.upload': [
+    true,
+    'Save a user-provided conversation attachment. fileIndex is 1-based across user messages.',
+    z.strictObject({ fileIndex: z.number().int().min(1) }),
+  ],
+  'content.import': [
+    true,
+    'Import a Tio ZIP supplied by the user into this workspace. Existing IDs must not collide. Workspace settings are not imported.',
+    z.strictObject({ fileIndex: z.number().int().min(1) }),
+  ],
   'context.get': [
     false,
     'Read the current workspace and effective capabilities.',
@@ -146,7 +161,7 @@ const operations = {
     false,
     'List objects of one type, including deleted objects when requested. Page by nextCursor; IDs are stable.',
     z.strictObject({
-      type: z.enum(['page', 'database', 'record', 'databaseView', 'automation']),
+      type: z.enum(['page', 'database', 'record', 'databaseView', 'automation', 'asset']),
       databaseId: identifier.optional(),
       includeDeleted: z.boolean().optional(),
       cursor: identifier.optional(),
@@ -257,6 +272,25 @@ const operations = {
     'Add a database field, with optional stable field ID.',
     z.strictObject({ ...target, field }),
   ],
+  'fields.convert': [
+    true,
+    'Convert a field and all record values using native conversion. Read the database version first.',
+    z.strictObject({ ...target, field }),
+  ],
+  'objects.move': [
+    true,
+    'Move or reorder a page/database within this workspace.',
+    z.strictObject({
+      ...target,
+      parentId: identifier.nullable(),
+      beforeId: identifier.nullable().default(null),
+    }),
+  ],
+  'blocks.replace': [
+    true,
+    'Replace the complete page/record body. Preserve unknown blocks and stable IDs.',
+    z.strictObject({ ...target, blocks }),
+  ],
   'fields.update': [
     true,
     'Modify a field definition without changing its type or cardinality.',
@@ -303,6 +337,7 @@ const objectReadSchema = {
   required: ['object', 'version'],
 };
 function outputSchema(name: string, write: boolean): Record<string, unknown> {
+  if (name === 'assets.read') return { type: 'object' };
   if (write)
     return {
       type: 'object',

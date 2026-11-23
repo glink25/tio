@@ -1,3 +1,5 @@
+import { validateAssistant } from './assistant';
+export * from './assistant';
 export * from './query-index';
 import {
   validDocumentIcon,
@@ -102,6 +104,7 @@ export interface TioObject {
   blocks?: Block[];
   appMode?: boolean;
   manualSync?: boolean;
+  assistant?: import('./assistant').AssistantSettings;
   fields?: Field[];
   databaseId?: string;
   properties?: Record<string, unknown>;
@@ -175,6 +178,8 @@ export function validate(input: unknown): TioObject {
 }
 export function validateBuiltin(object: TioObject): TioObject {
   validateTimestamps(object);
+  if (object.type === 'workspace' && object.assistant !== undefined)
+    validateAssistant(object.assistant);
   if (object.type === 'automation') validateAutomation(object);
   const input = object as unknown as Record<string, unknown> & { type: string };
   if (input.deleted !== undefined && typeof input.deleted !== 'boolean')

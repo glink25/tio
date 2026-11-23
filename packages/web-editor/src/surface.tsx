@@ -185,6 +185,15 @@ export function EditorSurface(props: EditorSurfaceProps) {
     <EditHistoryContext.Provider value={m.history}>
       <ContentLinksContext.Provider
         value={{
+          askAssistant:
+            current && props.onAskAssistant
+              ? (selection) =>
+                  props.onAskAssistant!({
+                    ...selection,
+                    workspaceId: props.workspaceId,
+                    objectId: current.id,
+                  })
+              : undefined,
           parseContentLink: props.contentLinks?.parse,
           acceptsContentLink: props.contentLinks?.accepts,
           copyBlockLink:

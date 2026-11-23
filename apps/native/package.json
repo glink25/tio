@@ -1,0 +1,34 @@
+{
+  "name": "@tio/native",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "build": "vite build --mode native",
+    "dev": "vite --host 0.0.0.0 --mode native",
+    "build:kernel": "vite build --config vite.headless.ts && node kernel/distribute.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.4",
+    "@tauri-apps/plugin-deep-link": "^2.6.3",
+    "@tio/app": "workspace:*",
+    "@tio/core": "workspace:*",
+    "@tio/file-storage": "workspace:*",
+    "@tio/i18n": "workspace:*",
+    "@tio/native-core": "workspace:*",
+    "@tio/provider-github": "workspace:*",
+    "@tio/storage": "workspace:*",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.3",
+    "@tauri-apps/cli": "^2.10.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "tailwindcss": "4.3.3",
+    "vite": "8.3.5"
+  },
+  "buildNumber": 1001
+}

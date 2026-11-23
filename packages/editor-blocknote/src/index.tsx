@@ -599,3 +599,5 @@ export function operationContentSchema() {
 }
 
 export { ContentLinksContext } from './content-links';
+
+export type { SelectedText } from './assistant-selection';

@@ -7,6 +7,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 import { editorCss } from '../../scripts/editor-css.mjs';
 export default defineConfig({
+  publicDir: '../../packages/app/public',
+  resolve: { dedupe: ['react', 'react-dom', 'sonner', 'zustand', 'zod'] },
   css: { postcss: { plugins: [editorCss()] } },
   plugins: [
     {
@@ -14,7 +16,7 @@ export default defineConfig({
       transformIndexHtml(html) {
         return html.replace(
           '<!--tio-boot-logo-->',
-          readFileSync(new URL('./src/brand/logo.svg', import.meta.url), 'utf8'),
+          readFileSync(new URL('../../packages/app/src/brand/logo.svg', import.meta.url), 'utf8'),
         );
       },
     },
@@ -48,5 +50,5 @@ export default defineConfig({
       },
     }),
   ],
-  server: { port: 6789 },
+  server: { port: 6789, strictPort: true },
 });

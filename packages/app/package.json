@@ -1,0 +1,49 @@
+{
+  "name": "@tio/app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/mount.tsx",
+    "./platform": "./src/platform.ts",
+    "./services/*": "./src/services/*.ts",
+    "./styles.css": "./src/styles/tailwind.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@glink25/chaty": "0.3.0",
+    "@tio/adapter-github": "workspace:*",
+    "@tio/assets": "workspace:*",
+    "@tio/automation": "workspace:*",
+    "@tio/core": "workspace:*",
+    "@tio/database": "workspace:*",
+    "@tio/editor-blocknote": "workspace:*",
+    "@tio/file-storage": "workspace:*",
+    "@tio/i18n": "workspace:*",
+    "@tio/merge": "workspace:*",
+    "@tio/operations": "workspace:*",
+    "@tio/provider-github": "workspace:*",
+    "@tio/provider-memory": "workspace:*",
+    "@tio/serialization": "workspace:*",
+    "@tio/storage": "workspace:*",
+    "@tio/sync": "workspace:*",
+    "@tio/ui": "workspace:*",
+    "@tio/views": "workspace:*",
+    "@tio/web-editor": "workspace:*",
+    "@tio/workspace": "workspace:*",
+    "cytoscape": "^3.34.4",
+    "cytoscape-fcose": "^2.2.0",
+    "lucide-react": "1.61.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "zustand": "^5.0.16"
+  },
+  "devDependencies": {
+    "tailwindcss": "4.3.3"
+  }
+}
