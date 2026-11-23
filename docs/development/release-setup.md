@@ -21,6 +21,6 @@ Google Play 使用 Actions 构建并签署 AAB，由 Google Play Developer API �
 
 ## 接入状态
 
-原生源码分支的两项远程质量检查已通过。本地正式上传密钥签署的 AAB 已构建并校验；Play 已接受 0.1.0／1001 首包并保存为内部测试草稿。Tio 专用服务账号 `tio-play-publisher@cent-play.iam.gserviceaccount.com` 已创建；权限接入与 Cloud 首次归档仍在进行。尚未完成的流程不视为已发布。
+Play 已接受使用正式上传证书签名的 0.1.0／1001 首包，并保存为内部测试草稿。Tio 专用服务账号 `tio-play-publisher@cent-play.iam.gserviceaccount.com` 已绑定该应用的读取及测试轨道发布权限。访问令牌和应用级权限已通过 Play API 验证。发布工作流使用 `android-play-publish` 环境中的凭据。
 
-macOS 已导出指定团队的 Developer ID 证书并配置 Actions 签名密钥；公证 App 专用密码仍待配置。Pages 已关闭旧的 main 自动构建，保留当前生产部署。
+Xcode Cloud 工作流 `Tio iOS Host` 已启用宿主标签自动归档。App Store Connect 中的 macOS 平台草稿未提交，macOS 分发使用 GitHub Actions。`macos-direct-build` 已配置 Developer ID 证书与公证凭据。Pages 已关闭旧的 main 自动构建，保留当前生产部署。

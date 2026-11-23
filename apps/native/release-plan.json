@@ -1,8 +1,8 @@
 {
   "format": 1,
-  "revision": 1004,
-  "hostBuild": 1004,
-  "targets": ["ios-store", "android-play"],
+  "revision": 1005,
+  "hostBuild": 1005,
+  "targets": ["ios-store"],
   "web": {
     "deployment": "tag"
   },
