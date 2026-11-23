@@ -2,26 +2,16 @@ import { execFileSync } from 'node:child_process';
 import { readFile, mkdir, appendFile, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import { findRelease } from './index-github.mjs';
 import { hash } from './lib.mjs';
 const plan = JSON.parse(process.env.TIO_TARGET);
-const response = await fetch(
-  'https://api.github.com/repos/glink25/tio/releases/tags/' + encodeURIComponent(plan.distTag),
-  {
-    headers: {
-      Authorization: 'Bearer ' + process.env.GH_TOKEN,
-      Accept: 'application/vnd.github+json',
-    },
-    signal: AbortSignal.timeout(20000),
-  },
-);
+const release = await findRelease(plan.distTag);
 async function output(reuse, published = false) {
   if (process.env.GITHUB_OUTPUT)
     await appendFile(process.env.GITHUB_OUTPUT, `reuse=${reuse}\npublished=${published}\n`);
 }
-if (response.status === 404) await output(false);
+if (!release) await output(false);
 else {
-  if (!response.ok) throw new Error('Cannot inspect existing release');
-  const release = await response.json();
   const name = release.draft ? 'candidate-receipt.json' : 'receipt.json';
   if (!release.assets.some((a) => a.name === name)) {
     if (!release.draft) throw new Error('Published release has no receipt');

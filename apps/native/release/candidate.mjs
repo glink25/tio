@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFile, copyFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { api } from './index-github.mjs';
+import { api, findRelease } from './index-github.mjs';
 import { hash } from './lib.mjs';
 const directory = process.argv[2];
 const receipt = JSON.parse(await readFile(join(directory, 'receipt.json'), 'utf8'));
@@ -11,7 +11,7 @@ if (receipt.sourceCommit !== process.env.TIO_SOURCE_COMMIT)
 for (const [name, digest] of Object.entries(receipt.checksums))
   if (!/^[\w.-]+$/.test(name) || hash(await readFile(join(directory, name))) !== digest)
     throw new Error('Candidate changed');
-let release = await api('/releases/tags/' + encodeURIComponent(receipt.distTag));
+let release = await findRelease(receipt.distTag);
 if (!release)
   release = await api('/releases', {
     tag_name: receipt.distTag,

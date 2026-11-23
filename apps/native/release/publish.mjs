@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { api, changeIndex } from './index-github.mjs';
+import { api, changeIndex, findRelease } from './index-github.mjs';
 import { hash, signed, decoded, assetURL, canonical, distTag, channels } from './lib.mjs';
 const { values } = parseArgs({
   options: { dir: { type: 'string' } },
@@ -89,7 +89,7 @@ if (receipt.mode === 'host' && ['ios-store'].includes(receipt.channel)) {
 decoded(signed({ channel: receipt.channel }, key), process.env.TIO_RESOURCE_PUBLIC_KEY);
 // Each platform has its own immutable release. Published assets are reused only
 // when their server-side digests agree; a rerun never replaces a published file.
-let release = await api('/releases/tags/' + encodeURIComponent(receipt.distTag));
+let release = await findRelease(receipt.distTag);
 if (!release)
   release = await api('/releases', {
     tag_name: receipt.distTag,

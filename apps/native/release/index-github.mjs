@@ -17,6 +17,17 @@ export async function api(path, data, method = data ? 'POST' : 'GET') {
   if (!response.ok) throw new Error('GitHub ' + response.status + ' ' + path);
   return response.status === 204 ? null : response.json();
 }
+export async function findRelease(tag) {
+  const published = await api('/releases/tags/' + encodeURIComponent(tag));
+  if (published) return published;
+  // GitHub's tag endpoint excludes drafts, even for authenticated writers.
+  for (let page = 1; ; page++) {
+    const releases = await api('/releases?per_page=100&page=' + page);
+    const match = releases.find((release) => release.draft && release.tag_name === tag);
+    if (match) return match;
+    if (releases.length < 100) return null;
+  }
+}
 export async function changeIndex(track, channel, mutate) {
   if (!['stable', 'preview'].includes(track) || !channels.includes(channel))
     throw new Error('Invalid index target');
