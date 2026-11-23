@@ -27,6 +27,6 @@ Play 已接受使用正式上传证书签名的 0.1.0／1001 首包，并保存�
 
 Xcode Cloud 工作流 `Tio iOS Host` 已启用宿主标签自动归档。App Store Connect 中的 macOS 平台草稿未提交，macOS 分发使用 GitHub Actions。`macos-direct-build` 已配置 Developer ID 证书与公证凭据。`v0.1.0-rc.5` 已通过应用与通用 DMG 的公证验证，[可从 GitHub Release 下载](https://github.com/glink25/tio/releases/tag/dist/0.1.0-rc.5/macos-direct)。
 
-`host/ios-store/v0.1.0-rc.6` 自动触发 Xcode Cloud Build 5。App Store Connect 已接收 `0.1.0 (5)` 并标记上传完成。TestFlight 分发前需完成应用加密声明。iOS 原生 HTTPS 请求使用 Rustls，按 App Store Connect 表单选择标准加密并据实际分发地区填报。法国分发需要上传相应声明文件。参见 [Apple 出口合规说明](https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption/)。
+`host/ios-store/v0.1.0-rc.6` 的 Build 5 和随后重建的 Build 6 仍含 Rustls，App Store Connect 将两者标为缺少出口合规证明。自 RC7 起，iOS 更新下载使用 `URLSession`，更新签名由 CryptoKit 验证。TestFlight 按当前归档的实际依赖填写加密问卷。参见 [Apple 出口合规说明](https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption/)。
 
 Pages 已关闭旧的 main 自动构建，保留当前生产部署。
