@@ -37,7 +37,7 @@ export async function createNativePlatform(): Promise<AppPlatform> {
     console.warn('Resource pack unavailable', error);
     return undefined;
   });
-  const scheme = import.meta.env.VITE_TIO_CHANNEL === 'android-apk' ? 'tio-apk:' : 'tio:';
+  const scheme = 'tio:';
   return {
     deviceLabel: 'welcome.device',
     catalog: createHostCatalog,

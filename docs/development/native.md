@@ -11,9 +11,7 @@ macOS 安装 Xcode，Android 安装 Android SDK、NDK 与 JDK。Tauri CLI 会报
 - iOS 模拟器构建运行 `VITE_TIO_CHANNEL=ios-store corepack pnpm --filter @tio/native exec tauri ios build --debug --target aarch64-sim`。
 - Android 调试包构建运行 `VITE_TIO_CHANNEL=android-play corepack pnpm --filter @tio/native exec tauri android build --debug --apk --target aarch64`。
 
-Android Play 使用 `tio://auth/github`，独立 APK 使用 `tio-apk://auth/github`。Gradle 校验原生编译渠道与应用渠道一致，两个应用可并装且不会争抢 OAuth 回调。授权服务部署时须同步配置两个回调的精确允许列表。
-
-Android 独立 APK 渠道同时设置 `VITE_TIO_CHANNEL=android-apk` 和 `ORG_GRADLE_PROJECT_tioChannel=apk`。它使用独立应用 ID 与设备空间。各渠道产物位于 Tauri 的 `src-tauri/gen` 目录。前台构建输出按平台分开存放于 `apps/native/dist`。
+Android 仅保留 Google Play 渠道和 `com.glink25.tio` 应用 ID，授权回调为 `tio://auth/github`。不提供独立 APK 分发或安装权限。前端构建输出按平台存放于 `apps/native/dist`。
 
 ## 持久化与快捷指令
 
@@ -33,7 +31,7 @@ iOS 的读取、创建和追加 App Intent 调用 JavaScriptCore 中的共享无
 
 后台只执行已确认包中的内核。每次任务持有跨进程共享文件锁；前台切换版本需要独占锁，并通知可中断后台任务退出。五秒内未能取得锁时，前台使用已确认包并保留待启用版本。试运行期间阻止新后台任务进入，确认后释放独占锁。进程被终止时系统释放文件锁。这样一次任务执行期间使用同一份内核，前后台不会跨版本并发提交。Android 文件锁使用 `fs2` 的 Unix 实现，避免当前 Rust 标准库在 Android 上不支持文件锁的问题。
 
-Android Play 与 iOS 宿主更新走商店；独立 APK 渠道和桌面宿主更新分别处理。热更新包的发布仍需遵守对应商店对可下载内容的要求。
+Android 与 iOS 宿主更新走商店；macOS、Windows、Linux 使用已签名的桌面安装包更新。热更新包的发布仍需遵守对应商店对可下载内容的要求。
 
 ## 当前验收记录
 
@@ -63,37 +61,24 @@ iOS 模拟器还验证了跨进程版本切换：持有后台读锁时前台保�
 
 ## Apple 工程与构建版本
 
-Xcode 工程包含 `tio-native_iOS` 和 `tio-native_macOS` 两个共享 scheme。Xcode Cloud 按平台建立各自的工作流，克隆后脚本会为所选平台构建前端。macOS target 链接共享 Rust 宿主，归档配置支持 arm64 和 x86_64，调试配置构建当前架构。
+Xcode 工程包含 `tio-native_iOS` 和 `tio-native_macOS` 两个共享 scheme。Xcode Cloud 仅为 iOS 建立标签触发的工作流；macOS 的正式 DMG 在 Actions 构建、签名与公证。macOS target 链接共享 Rust 宿主，归档配置支持 arm64 和 x86_64，调试配置构建当前架构。
 
-产品版本取自根目录 `package.json`，构建号取自 `release-plan.json.hostBuild`。需要新宿主时，流水线执行 `node apps/native/version.mjs --prepare-host`，将该平台本次安装包信息写入原生 package 元数据；Apple 再以 `--prepare-apple` 生成 `Version.xcconfig`。Android 从准备后的原生元数据读取版本。Apple 展示版本去掉 RC 后缀，完整候选版本仍保留在 Tauri 包信息和签名中。源码标签对应产品版本，各平台无需同时更新宿主。
+产品版本取自根目录 `package.json`。Android 与桌面的构建号取自 `release-plan.json.hostBuild`；Cloud iOS 使用其自增的 `CI_BUILD_NUMBER`。需要新宿主时，流水线执行 `node apps/native/version.mjs --prepare-host`，将该平台本次安装包信息写入原生 package 元数据；Apple 再以 `--prepare-apple` 生成 `Version.xcconfig`。Android 从准备后的原生元数据读取版本。Apple 展示版本去掉 RC 后缀，完整候选版本仍保留在 Tauri 包信息和签名中。源码标签对应产品版本，各平台无需同时更新宿主。
 
 本地 Xcode 构建 macOS 前，先执行上述版本准备命令和 `corepack pnpm --filter @tio/native build --outDir dist/desktop`，再构建 `tio-native_macOS` scheme。调试产物使用内置资源协议，无需启动开发服务器。
 
 本地 arm64 Xcode 构建已通过，实际界面完成了设备空间创建、页面标题编辑、保存与退出重启验证。验收创建的本地空间为 `Native Xcode QA`，共享宿主重构后的页面标题为 `Native shared host persistence`。macOS 包和 Android 包均已核对版本 `0.1.0`、构建号 `1001`。另以 `ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO` 完成本地调试构建，实际可执行文件经 `lipo -archs` 核对包含两个架构。此结果不代替 Developer ID 签名、公证归档和 Xcode Cloud 验收。
 
-macOS 归档后脚本读取 Xcode Cloud 的 Developer ID 导出产物，检查实际版本与代码签名。若产物尚未装订公证票据，脚本使用 `TIO_NOTARY_KEY_BASE64`、`TIO_NOTARY_KEY_ID`、`TIO_NOTARY_ISSUER` 提交公证。票据装订并经 Gatekeeper 检查后，才生成直接下载 ZIP 和绑定版本签名的 Tauri 更新包。归档产物写入 `CI_WORKSPACE_PATH/tio-release`。这些密钥仅配置在受保护的 macOS 发布工作流中，尚未执行公证或发布演练。
+macOS 的正式构建使用 Actions 中的 Developer ID 证书与 App 专用公证密码，生成通用 DMG 和绑定版本签名的 Tauri 更新包。发布前核对应用版本、两种架构、实际证书、公证及 DMG 票据。本地 Xcode scheme 保留作为调试入口，不用于云端正式发行。
 
 ## 后续实现与验收
 
 - 共享应用已独立为 `@tio/app`，后续平台能力通过 `AppPlatform` 注入，不再从 Web 入口构建原生应用。
-- 独立 APK 的签名清单、下载校验和系统安装交接已实现；GitHub Release 实际下载与发布后的升级演练仍待验收。
 - Android 本地 SAF 已验证中断发布恢复；其他文档提供方、真实云端文件夹与多设备并发仍需验收。
 - 验证前台未确认输入与快捷指令并发、中文输入法、软键盘遮挡、选区、返回和预测返回手势。
 - 在真实授权的 iCloud 目录完成冷启动快捷指令读写、撤销授权、离线下载等待和多设备冲突；模拟器设备空间结果不能代替此验收。
 - Windows GNU 目标的 Rust 编译检查已通过，仍需对应系统上的 MSVC 构建、安装与运行；继续完成 Linux 构建运行、macOS 正式归档、签名更新升级演练及各渠道发布汇集。发布流水线已按独立平台策略改造；远程签名与发布尚待配置凭据后演练。Chaty 使用 npm 发布版。
 - 部署后的真实 GitHub OAuth、原身份恢复和远端后台同步仍待验收；本次未部署授权服务或发布产物。
-
-## 独立 APK 宿主更新
-
-独立 APK 使用 `tio-android-apk-host.json` 签名清单，绑定渠道、应用 ID、完整版本、构建号、SHA-256 和文件大小。清单与移动资源包使用同一 Ed25519 公钥，以签名类型区分用途。宿主拒绝版本降级和不递增的构建号；安装前再次核对 APK 中的应用 ID、版本、构建号、系统要求和签名证书。证书轮换使用 Android 提供的已验证签名历史，多个签名者须完全匹配。
-
-检查从签名渠道索引获取清单，APK 下载地址固定在签名清单中并绑定其哈希。下载采用有大小限制的流式文件写入，完成哈希校验后保存待安装清单。安装许可不足时返回 `permission-required`，由设置页引导用户进入系统许可设置，返回后可使用缓存继续。系统安装界面打开后仅返回 `install-requested`；安装结果以新宿主重启后的实际版本为准。更新入口同时位于欢迎页和空间设置中。
-
-只有独立 APK 的合并清单加入 `REQUEST_INSTALL_PACKAGES`，Play 包不含该权限。安装文件通过仅覆盖 `cache/host-updates/` 的 FileProvider 交接。应用升级后清理旧安装缓存。Gradle 通过文件输入 API 读取统一版本元数据，确保配置缓存失效时机正确。
-
-发布环境配置 `TIO_RESOURCE_PUBLIC_KEY` 和受保护的 `TIO_RESOURCE_PRIVATE_KEY_BASE64`。`apk-pack.mjs` 调用 Android 官方 `apksigner` 和 `apkanalyzer`，核对已签名 APK 的应用 ID、版本和构建号，再生成清单与按哈希命名的 APK。Actions 已接入此产物生成步骤，实际远程签名与发布尚未执行。
-
-本地 Pixel Tablet 模拟器（Android 15）验证了 `1001` 宿主读取预置的签名 `1002` 候选包并返回许可不足；另一个证书签名的候选 APK 即使有有效的 Tio 清单签名，也被拒绝并返回 `signature`。授予测试安装许可后，真实系统安装器显示了 Tio 更新确认界面，接口返回 `install-requested`。随后通过 ADB 安装候选包，核对实际版本为 `1002`、SQLite 中的验收标记保留、旧安装缓存被清理。此测试未通过系统确认按钮完成安装，也未覆盖 GitHub 网络下载。Play 包已核对构建号 `1001` 且不含安装权限。最新 APK 原生界面还验证了欢迎页展示缓存候选版本，以及点击安装后展示系统安装许可入口；测试结束已清理模拟器中的候选安装缓存并还原测试许可。
 
 ## Android 文件夹可恢复发布
 
@@ -136,3 +121,7 @@ macOS 本机 arm64 Xcode 构建通过。预置签名 revision 4001 缓存后，�
 iOS 使用固定的 Rust 1.93.1 完成新的模拟器构建，并安装到 iPhone 18 Pro（iOS 27.2）。实际界面恢复原有文档及此前快捷指令追加的段落，替换宿主前后的会话、空间、对象和回执数量一致。首次构建因官方 Rust 下载域名无法解析而失败，使用镜像安装相同版本的模拟器标准库后通过；未改变仓库工具链版本。这次没有重跑 iOS 动态包下载或系统快捷指令。
 
 本次没有运行云端发布、修改 Pages 项目、上传商店或公开 GitHub Release。真实 iCloud 授权、跨设备冲突、真实 OAuth、商店审核和各端安装升级仍按上述待验收项执行；配置步骤与边界见[发布与更新](releases.md)。
+
+## 云端接入
+
+2026-11-23 起采用 iOS Cloud／TestFlight、Android Actions／Play、macOS Actions／签名公证 DMG。旧的独立 APK 分发实现已移除；此前 Android 验收记录含当时的私有 QA 包，仅代表历史验证。当前配置与接入进展见[云端发布接入](release-setup.md)。

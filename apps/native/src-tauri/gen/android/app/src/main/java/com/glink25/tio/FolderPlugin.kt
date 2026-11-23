@@ -34,7 +34,6 @@ class FolderPlugin(private val activity: Activity) : Plugin(activity) {
             response.put("value", work() ?: JSONObject.NULL)
         } catch (e: Exception) {
             response.put("error", when (e) {
-                is HostUpdate.Failure -> e.code
                 is FolderWrites.Failure -> e.code
                 is SecurityException -> "permission"
                 is IllegalArgumentException -> "invalid"
@@ -50,14 +49,6 @@ class FolderPlugin(private val activity: Activity) : Plugin(activity) {
     fun credential(invoke: Invoke) {
         val args = invoke.getArgs()
         io.execute { answer(invoke) { credentials.perform(args.getString("action"), args.optString("value")) } }
-    }
-
-    private val hostUpdater = HostUpdate(activity)
-
-    @Command
-    fun hostUpdate(invoke: Invoke) {
-        val args = invoke.getArgs()
-        io.execute { answer(invoke) { hostUpdater.perform(args) } }
     }
 
     @Command

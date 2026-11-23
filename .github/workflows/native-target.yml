@@ -15,9 +15,11 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
-    if: ${{ !(fromJSON(inputs.target).mode == 'host' && (fromJSON(inputs.target).channel == 'ios-store' || fromJSON(inputs.target).channel == 'macos-direct')) }}
-    runs-on: ${{ fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'windows-direct' && 'windows-latest' || 'ubuntu-24.04' }}
-    environment: ${{ fromJSON(inputs.target).channel }}-build
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ${{ fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'windows-direct' && 'windows-latest' || fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'macos-direct' && 'macos-latest' || 'ubuntu-24.04' }}
+    environment: ${{ inputs.publish && fromJSON(inputs.target).channel == 'android-play' && fromJSON(inputs.target).mode == 'host' && 'android-play-publish' || format('{0}-build', fromJSON(inputs.target).channel) }}
     env:
       TIO_TARGET: ${{ inputs.target }}
       VITE_TIO_CHANNEL: ${{ fromJSON(inputs.target).channel }}
@@ -76,16 +78,30 @@ jobs:
       - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && startsWith(fromJSON(inputs.target).channel, 'android-')
         name: Build Android host
         env:
-          ORG_GRADLE_PROJECT_tioChannel: ${{ fromJSON(inputs.target).channel == 'android-apk' && 'apk' || 'play' }}
           TIO_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           TIO_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           TIO_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: corepack pnpm --filter @tio/native exec tauri android build --${{ fromJSON(inputs.target).channel == 'android-apk' && 'apk' || 'aab' }} --ci
+        run: corepack pnpm --filter @tio/native exec tauri android build --aab --ci
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'macos-direct'
+        name: Build signed and notarized universal macOS disk image
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_CERTIFICATE_SHA256: ${{ vars.APPLE_CERTIFICATE_SHA256 }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          node apps/native/release/macos-sign.mjs
+          corepack pnpm --filter @tio/native exec tauri build --target universal-apple-darwin --bundles dmg,app --config "$RUNNER_TEMP/tio-macos.json" --ci
+          node apps/native/release/macos-verify.mjs apps/native/src-tauri/target/universal-apple-darwin/release/bundle
       - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'windows-direct'
         run: corepack pnpm --filter @tio/native exec tauri build --bundles nsis --config "$RUNNER_TEMP/tio-windows-sign.json" --ci
       - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'linux-direct'
         run: corepack pnpm --filter @tio/native exec tauri build --bundles deb,appimage --ci
-      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'runtime'
+      - if: steps.reuse.outputs.reuse != 'true' && (fromJSON(inputs.target).mode == 'runtime' || (fromJSON(inputs.target).mode == 'host' && fromJSON(inputs.target).channel == 'ios-store'))
         name: Build the platform application bundle
         run: |
           corepack pnpm --filter @tio/native build:kernel
@@ -101,72 +117,33 @@ jobs:
         name: Validate and stage unsigned release artifacts
         run: |
           case "$VITE_TIO_CHANNEL" in
+            macos-direct) source=apps/native/src-tauri/target/universal-apple-darwin/release/bundle ;;
             android-*) source=apps/native/src-tauri/gen/android/app/build/outputs ;;
             *) source=apps/native/src-tauri/target/release/bundle ;;
           esac
           node apps/native/release/stage.mjs --plan "$RUNNER_TEMP/plan.json" --channel "$VITE_TIO_CHANNEL" --out "$RUNNER_TEMP/release" --input "$source"
+      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).channel == 'android-play' && fromJSON(inputs.target).mode == 'host'
+        name: Validate Play signing and publish directly from the runner
+        env:
+          TIO_PUBLISH_PLAY: ${{ inputs.publish }}
+          TIO_SOURCE_COMMIT: ${{ fromJSON(inputs.target).sourceCommit }}
+          TIO_ANDROID_PLAY_UPLOAD_CERT_SHA256: ${{ vars.TIO_ANDROID_PLAY_UPLOAD_CERT_SHA256 }}
+          ANDROID_PLAY_SERVICE_ACCOUNT_BASE64: ${{ inputs.publish && secrets.ANDROID_PLAY_SERVICE_ACCOUNT_BASE64 || '' }}
+        run: node apps/native/release/store.mjs "$RUNNER_TEMP/release"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: release-${{ fromJSON(inputs.target).channel }}
           path: ${{ runner.temp }}/release/*
           if-no-files-found: error
+          retention-days: 14
       - if: always() && runner.os == 'Windows' && env.TIO_WINDOWS_THUMBPRINT != ''
         shell: pwsh
         run: Remove-Item "Cert:\CurrentUser\My\$env:TIO_WINDOWS_THUMBPRINT"
       - if: always() && startsWith(fromJSON(inputs.target).channel, 'android-')
         run: node --input-type=module -e 'import {rmSync} from "node:fs"; rmSync(process.env.RUNNER_TEMP+"/tio-release.jks",{force:true});'
-  apple:
-    if: ${{ fromJSON(inputs.target).mode == 'host' && (fromJSON(inputs.target).channel == 'ios-store' || fromJSON(inputs.target).channel == 'macos-direct') }}
-    runs-on: macos-latest
-    timeout-minutes: 300
-    environment: ${{ fromJSON(inputs.target).channel }}-build
-    permissions:
-      contents: write
-    outputs:
-      reuse: ${{ steps.reuse.outputs.reuse }}
-      published: ${{ steps.reuse.outputs.published }}
-    env:
-      TIO_TARGET: ${{ inputs.target }}
-      GH_TOKEN: ${{ github.token }}
-      TIO_RESOURCE_PUBLIC_KEY: ${{ vars.TIO_RESOURCE_PUBLIC_KEY }}
-      TIO_UPDATER_PUBLIC_KEY: ${{ vars.TIO_UPDATER_PUBLIC_KEY }}
-      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
-      ASC_SCM_REPOSITORY_ID: ${{ vars.ASC_SCM_REPOSITORY_ID }}
-      ASC_IOS_WORKFLOW_ID: ${{ vars.ASC_IOS_WORKFLOW_ID }}
-      ASC_MACOS_WORKFLOW_ID: ${{ vars.ASC_MACOS_WORKFLOW_ID }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ fromJSON(inputs.target).sourceCommit }}
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version-file: .node-version
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: release-plan
-          path: ${{ runner.temp }}/source-plan
-      - id: reuse
-        run: node apps/native/release/reuse.mjs "$RUNNER_TEMP/release"
-      - if: steps.reuse.outputs.reuse != 'true'
-        run: |
-          corepack enable
-          node scripts/install-ci.mjs
-          node apps/native/release/select-target.mjs "$RUNNER_TEMP/source-plan/release-plan.json" "$RUNNER_TEMP/plan.json"
-          node apps/native/release/apple.mjs --plan "$RUNNER_TEMP/plan.json" --channel '${{ fromJSON(inputs.target).channel }}' --out "$RUNNER_TEMP/apple"
-          node apps/native/release/apple-extract.mjs "$RUNNER_TEMP/apple" '${{ fromJSON(inputs.target).channel }}'
-          node apps/native/release/stage.mjs --plan "$RUNNER_TEMP/plan.json" --channel '${{ fromJSON(inputs.target).channel }}' --out "$RUNNER_TEMP/release" --input "$RUNNER_TEMP/apple"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: release-${{ fromJSON(inputs.target).channel }}
-          path: ${{ runner.temp }}/release/*
-          if-no-files-found: error
   candidate:
-    needs: [build, apple]
-    if: ${{ always() && inputs.publish && (needs.build.result == 'success' || needs.apple.result == 'success') && needs.build.outputs.published != 'true' && needs.apple.outputs.published != 'true' }}
+    needs: [build]
+    if: ${{ always() && inputs.publish && needs.build.result == 'success' && needs.build.outputs.published != 'true' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -186,19 +163,17 @@ jobs:
           name: release-${{ fromJSON(inputs.target).channel }}
           path: ${{ runner.temp }}/candidate
       - run: node apps/native/release/candidate.mjs "$RUNNER_TEMP/candidate"
-  store:
-    needs: [build, apple, candidate]
-    if: ${{ always() && inputs.publish && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped') && fromJSON(inputs.target).mode == 'host' && (fromJSON(inputs.target).channel == 'ios-store' || fromJSON(inputs.target).channel == 'android-play') && (needs.build.result == 'success' || needs.apple.result == 'success') && needs.build.outputs.published != 'true' && needs.apple.outputs.published != 'true' }}
+  publish:
+    needs: [build, candidate]
+    if: ${{ always() && inputs.publish && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped') && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    environment: ${{ fromJSON(inputs.target).channel }}-publish
+    environment: ${{ fromJSON(inputs.target).channel == 'web' && 'web-release' || 'release-publish' }}
+    permissions:
+      contents: write
     env:
+      GH_TOKEN: ${{ github.token }}
+      TIO_RESOURCE_PUBLIC_KEY: ${{ vars.TIO_RESOURCE_PUBLIC_KEY }}
       TIO_SOURCE_COMMIT: ${{ fromJSON(inputs.target).sourceCommit }}
-      ASC_APP_ID: ${{ vars.ASC_APP_ID }}
-      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-      ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_PRIVATE_KEY_BASE64 }}
-      ANDROID_PLAY_SERVICE_ACCOUNT_BASE64: ${{ secrets.ANDROID_PLAY_SERVICE_ACCOUNT_BASE64 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -210,38 +185,6 @@ jobs:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
         with:
           name: release-${{ fromJSON(inputs.target).channel }}
-          path: ${{ runner.temp }}/store
-      - run: |
-          node apps/native/version.mjs --prepare-host
-          node apps/native/release/store.mjs "$RUNNER_TEMP/store"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: release-${{ fromJSON(inputs.target).channel }}-store
-          path: ${{ runner.temp }}/store/*
-          if-no-files-found: error
-  publish:
-    needs: [build, apple, store, candidate]
-    if: ${{ always() && inputs.publish && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped') && (needs.store.result == 'success' || needs.store.result == 'skipped') && (needs.build.result == 'success' || needs.apple.result == 'success') }}
-    runs-on: ubuntu-24.04
-    environment: ${{ fromJSON(inputs.target).channel == 'web' && 'web-release' || 'release-publish' }}
-    permissions:
-      contents: write
-    env:
-      GH_TOKEN: ${{ github.token }}
-      TIO_RESOURCE_PUBLIC_KEY: ${{ vars.TIO_RESOURCE_PUBLIC_KEY }}
-      TIO_SOURCE_COMMIT: ${{ fromJSON(inputs.target).sourceCommit }}
-      TIO_ANDROID_APK_CERT_SHA256: ${{ vars.TIO_ANDROID_APK_CERT_SHA256 }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ fromJSON(inputs.target).sourceCommit }}
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version-file: .node-version
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
-        with:
-          name: release-${{ fromJSON(inputs.target).channel }}${{ needs.store.result == 'success' && '-store' || '' }}
           path: ${{ runner.temp }}/download
       - name: Prepare signing key and exact source metadata
         env:
@@ -252,7 +195,7 @@ jobs:
           printf '%s' "${TIO_RESOURCE_PRIVATE_KEY_BASE64:?}" | base64 --decode > "$RUNNER_TEMP/tio-release-key.pem"
           printf 'TIO_RELEASE_KEY_FILE=%s\n' "$RUNNER_TEMP/tio-release-key.pem" >> "$GITHUB_ENV"
           if [ '${{ fromJSON(inputs.target).mode }}' = host ]; then node apps/native/version.mjs --prepare-host; fi
-      - if: needs.build.outputs.published != 'true' && needs.apple.outputs.published != 'true'
+      - if: needs.build.outputs.published != 'true'
         run: node apps/native/release/finalize.mjs "$RUNNER_TEMP/download"
       - if: fromJSON(inputs.target).channel == 'web'
         env:

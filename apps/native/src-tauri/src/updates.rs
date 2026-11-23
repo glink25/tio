@@ -60,12 +60,7 @@ pub fn resource_update(
 ) -> Result<Value, &'static str> {
     if !matches!(
         channel.as_str(),
-        "ios-store"
-            | "android-play"
-            | "android-apk"
-            | "macos-direct"
-            | "windows-direct"
-            | "linux-direct"
+        "ios-store" | "android-play" | "macos-direct" | "windows-direct" | "linux-direct"
     ) {
         return Err("invalid");
     }
@@ -159,12 +154,7 @@ pub async fn download_resources(
 ) -> Result<Value, &'static str> {
     if !matches!(
         channel.as_str(),
-        "ios-store"
-            | "android-play"
-            | "android-apk"
-            | "macos-direct"
-            | "windows-direct"
-            | "linux-direct"
+        "ios-store" | "android-play" | "macos-direct" | "windows-direct" | "linux-direct"
     ) {
         return Err("invalid");
     }

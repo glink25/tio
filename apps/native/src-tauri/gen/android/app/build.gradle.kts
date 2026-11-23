@@ -1,4 +1,3 @@
-import com.android.build.api.artifact.SingleArtifact
 import groovy.json.JsonSlurper
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -12,18 +11,14 @@ val nativeVersion = JsonSlurper().parseText(providers.fileContents(layout.projec
 val nativeBuildNumber = (nativeVersion["buildNumber"] as Number).toInt()
 require(nativeBuildNumber > 0)
 
-val channel = providers.gradleProperty("tioChannel").orElse("play").get()
-require(channel in setOf("play", "apk")) { "Unknown Tio distribution channel" }
-val compiledChannel = providers.fileContents(layout.projectDirectory.file("../../../distribution-channel")).asText.get().trim()
-require(compiledChannel == "android-$channel") { "Rust/frontend distribution channel differs from the Android application channel" }
 
 android {
     compileSdk = 37
     namespace = "com.glink25.tio"
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
-        manifestPlaceholders["tioOAuthScheme"] = if (channel == "apk") "tio-apk" else "tio"
-        applicationId = if (channel == "apk") "com.glink25.tio.apk" else "com.glink25.tio"
+        manifestPlaceholders["tioOAuthScheme"] = "tio"
+        applicationId = "com.glink25.tio"
         minSdk = 24
         targetSdk = 37
         versionCode = nativeBuildNumber
@@ -99,13 +94,3 @@ dependencies {
 }
 
 apply(from = file("tauri.build.gradle.kts"))
-
-// Installation permission belongs only to the independent distribution.
-if (channel == "apk") {
-    androidComponents.onVariants { variant ->
-        val transform = tasks.register<ApkInstallManifest>("${variant.name}ApkInstallManifest")
-        variant.artifacts.use(transform)
-            .wiredWithFiles(ApkInstallManifest::inputManifest, ApkInstallManifest::outputManifest)
-            .toTransform(SingleArtifact.MERGED_MANIFEST)
-    }
-}

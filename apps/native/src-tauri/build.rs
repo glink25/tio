@@ -7,16 +7,11 @@ fn main() {
         .unwrap_or_default();
     println!("cargo:rustc-env=TIO_COMPILED_RESOURCE_KEY={}", key.trim());
     println!("cargo:rerun-if-env-changed=VITE_TIO_CHANNEL");
-    println!("cargo:rerun-if-changed=distribution-channel");
-    let channel = std::env::var("VITE_TIO_CHANNEL")
-        .or_else(|_| std::fs::read_to_string("distribution-channel"))
-        .unwrap_or_default();
     let channel = match std::env::var("CARGO_CFG_TARGET_OS").as_deref() {
         Ok("ios") => "ios-store",
         Ok("macos") => "macos-direct",
         Ok("windows") => "windows-direct",
         Ok("linux") => "linux-direct",
-        Ok("android") if channel.trim() == "android-apk" => "android-apk",
         Ok("android") => "android-play",
         _ => panic!("Unsupported host target"),
     };
@@ -110,7 +105,7 @@ fn main() {
     );
     let platform = match channel {
         "ios-store" => "ios",
-        "android-play" | "android-apk" => "android",
+        "android-play" => "android",
         _ => "desktop",
     };
     let path = format!("../dist/{platform}/native-contract.json");

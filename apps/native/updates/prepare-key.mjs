@@ -10,18 +10,9 @@ writeFileSync(new URL('../src-tauri/resource-public-key', import.meta.url), key)
 const channel = process.env.VITE_TIO_CHANNEL ?? '';
 if (
   channel &&
-  ![
-    'ios-store',
-    'android-play',
-    'android-apk',
-    'macos-direct',
-    'windows-direct',
-    'linux-direct',
-  ].includes(channel)
+  !['ios-store', 'android-play', 'macos-direct', 'windows-direct', 'linux-direct'].includes(channel)
 )
   throw new Error('Unknown native distribution channel');
-if (channel.startsWith('android-'))
-  writeFileSync(new URL('../src-tauri/distribution-channel', import.meta.url), channel);
 const updaterKey = process.env.TIO_UPDATER_PUBLIC_KEY ?? '';
 if (updaterKey && Buffer.from(updaterKey, 'base64').toString('base64') !== updaterKey)
   throw new Error('Expected a base64-encoded Tauri updater public key');

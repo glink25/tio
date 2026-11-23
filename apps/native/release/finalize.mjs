@@ -1,5 +1,4 @@
-import { spawnSync } from 'node:child_process';
-import { readFile, writeFile, readdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { hash, signed, contract, assetURL, productVersion } from './lib.mjs';
@@ -47,31 +46,10 @@ if (receipt.mode === 'content') {
         throw new Error('Content introduces unknown keys');
   await writeFile(join(directory, 'content.json'), JSON.stringify(signed(payload, key)));
 }
-if (receipt.channel === 'android-apk' && receipt.mode === 'host') {
-  const apks = (await readdir(directory)).filter((n) => n.endsWith('.apk'));
-  if (apks.length !== 1) throw new Error('Expected one signed APK');
-  const tools = (await readdir(join(process.env.ANDROID_HOME, 'build-tools')))
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
-    .at(-1);
-  const result = spawnSync(
-    'node',
-    [
-      'apps/native/updates/apk-pack.mjs',
-      '--apk',
-      join(directory, apks[0]),
-      '--private-key',
-      process.env.TIO_RELEASE_KEY_FILE,
-      '--out',
-      directory,
-      '--apksigner',
-      join(process.env.ANDROID_HOME, 'build-tools', tools, 'apksigner'),
-      '--apkanalyzer',
-      join(process.env.ANDROID_HOME, 'cmdline-tools/latest/bin/apkanalyzer'),
-    ],
-    { stdio: 'inherit' },
-  );
-  if (result.status !== 0) throw new Error('APK finalization failed');
-}
+// Store binaries remain pipeline artifacts and are never public Release assets.
+if (receipt.channel === 'android-play')
+  for (const name of await readdir(directory))
+    if (name.endsWith('.aab')) await unlink(join(directory, name));
 receipt.checksums = {};
 for (const entry of await readdir(directory, { withFileTypes: true }))
   if (entry.isFile() && entry.name !== 'receipt.json')

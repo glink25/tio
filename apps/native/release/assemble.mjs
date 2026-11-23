@@ -22,26 +22,24 @@ function run(command, args) {
   });
   if (r.error || r.status !== 0) throw r.error ?? new Error(command + ' failed');
 }
-if (plan.mode === 'host') {
+if (plan.mode === 'host' && !['ios-store'].includes(plan.channel)) {
   const source = values.input;
-  if (['macos-direct', 'ios-store'].includes(plan.channel))
-    await copyFile(join(source, 'apple-build.json'), join(values.out, 'apple-build.json'));
   const files = [];
   async function collect(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       if (entry.isSymbolicLink()) throw new Error('Artifact links forbidden');
       const path = join(directory, entry.name);
-      if (entry.isDirectory() && entry.name !== 'verify-app') await collect(path);
+      if (entry.isDirectory() && !entry.name.endsWith('.app')) await collect(path);
       else if (
         entry.isFile() &&
         entry.name !== 'runtime-source.tar.gz' &&
-        /\.(exe|msi|deb|AppImage|tar\.gz|zip|apk|aab|sig)$/.test(entry.name)
+        /\.(exe|msi|dmg|deb|AppImage|tar\.gz|zip|aab|sig)$/.test(entry.name)
       )
         files.push(path);
     }
   }
   await collect(source);
-  if (!files.length && plan.channel !== 'ios-store') throw new Error('No native artifacts');
+  if (!files.length) throw new Error('No native artifacts');
   const names = new Set();
   for (const file of files) {
     const name = basename(file);
@@ -60,12 +58,7 @@ if (plan.mode === 'host') {
             : f.endsWith('.app.tar.gz.sig')),
     );
     if (signatures.length !== 1) throw new Error('Expected exactly one updater artifact');
-    const targets =
-      plan.channel === 'macos-direct'
-        ? ['darwin-aarch64', 'darwin-x86_64']
-        : plan.channel === 'windows-direct'
-          ? ['windows-x86_64']
-          : ['linux-x86_64'];
+    const targets = plan.channel === 'windows-direct' ? ['windows-x86_64'] : ['linux-x86_64'];
     const index = join(values.out, 'desktop-artifacts.json');
     await writeFile(
       index,

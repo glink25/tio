@@ -3,7 +3,9 @@ let metadata = JSON.parse(readFileSync(new URL('package.json', import.meta.url),
 const product = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
 const plan = JSON.parse(readFileSync(new URL('release-plan.json', import.meta.url), 'utf8'));
 if (process.argv.includes('--prepare-host')) {
-  metadata = { ...metadata, version: product.version, buildNumber: plan.hostBuild };
+  const cloudBuild =
+    process.env.CI_XCODE_CLOUD === 'TRUE' ? Number(process.env.CI_BUILD_NUMBER) : undefined;
+  metadata = { ...metadata, version: product.version, buildNumber: cloudBuild ?? plan.hostBuild };
   writeFileSync(new URL('package.json', import.meta.url), JSON.stringify(metadata, null, 2) + '\n');
 }
 if (

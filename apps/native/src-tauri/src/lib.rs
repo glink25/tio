@@ -1,5 +1,3 @@
-#[cfg(target_os = "android")]
-mod apk_update;
 mod catalog;
 mod clear_storage;
 mod credentials;

@@ -1,12 +1,8 @@
 {
   "format": 1,
-  "revision": 1001,
-  "hostBuild": 1001,
-  "targets": "auto",
-  "ios": {
-    "intent": "review-required",
-    "reason": "Initial native release includes new system integrations."
-  },
+  "revision": 1002,
+  "hostBuild": 1002,
+  "targets": ["ios-store", "macos-direct", "android-play"],
   "web": {
     "deployment": "tag"
   },
@@ -22,7 +18,15 @@
     "android-play": {
       "en-US": "Initial native client release.",
       "zh-CN": "首个原生客户端版本。"
+    },
+    "macos-direct": {
+      "en-US": "Initial native client release.",
+      "zh-Hans": "首个原生客户端版本。"
     }
   },
-  "forceHost": []
+  "forceHost": [],
+  "apple": {
+    "intent": "review-required",
+    "reason": "Initial native release includes new system integrations."
+  }
 }

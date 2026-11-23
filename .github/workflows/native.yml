@@ -68,6 +68,7 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     permissions:
       contents: write
+      actions: read
     uses: ./.github/workflows/native-target.yml
     with:
       target: ${{ toJSON(matrix) }}

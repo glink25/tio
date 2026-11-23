@@ -38,8 +38,8 @@ if (
 )
   throw new Error('Invalid release plan');
 if (
-  !['existing-behavior', 'review-required'].includes(config.ios?.intent) ||
-  !config.ios.reason?.trim()
+  !['existing-behavior', 'review-required'].includes(config.apple?.intent) ||
+  !config.apple.reason?.trim()
 )
   throw new Error('Declare iOS release intent and reason');
 if (!['tag', 'manual'].includes(config.web?.deployment))
@@ -68,16 +68,9 @@ function nativeFile(file, channel) {
   if (file.startsWith('apps/native/apple/')) return channel === 'ios-store';
   if (file.startsWith('apps/native/src-tauri/gen/android/')) return channel.startsWith('android-');
   if (file.startsWith('apps/native/src-tauri/gen/apple/')) {
-    if (/\/(assets|Externals|build)\//.test(file)) return false;
-    if (
-      /\/(Sources|tio-native_iOS|Assets.xcassets)\//.test(file) ||
-      file.endsWith('LaunchScreen.storyboard')
-    )
-      return channel === 'ios-store';
-    if (/\/Mac\//.test(file)) return channel === 'macos-direct';
-    return ['ios-store', 'macos-direct'].includes(channel);
+    if (/\/(assets|Externals|build|Mac)\//.test(file)) return false;
+    return channel === 'ios-store';
   }
-  if (file.endsWith('/apk_update.rs')) return channel.startsWith('android-');
   if (file.endsWith('/shortcuts.rs')) return channel === 'ios-store';
   if (file.endsWith('/headless_io.rs'))
     return channel === 'ios-store' || channel.startsWith('android-');
@@ -140,6 +133,7 @@ function fingerprint(predicate, extra) {
 }
 const matrix = [];
 for (const channel of channels) {
+  const appleStore = ['ios-store'].includes(channel);
   if (values.automatic && channel === 'web' && config.web?.deployment === 'manual') continue;
   if (selected !== 'auto' && !selected.includes(channel)) continue;
   const path = values.baseline && join(values.baseline, track, channel + '.json');
@@ -217,38 +211,41 @@ for (const channel of channels) {
   let mode =
     channel === 'web'
       ? 'web'
-      : !previous?.host || previous.host.nativeFingerprint !== nativeFingerprint
+      : !(appleStore ? previous?.nativeFingerprint : previous?.host?.nativeFingerprint) ||
+          (appleStore ? previous.nativeFingerprint : previous.host.nativeFingerprint) !==
+            nativeFingerprint
         ? 'host'
         : previous.runtimeFingerprint !== runtimeFingerprint
           ? 'runtime'
           : 'skip';
   if (mode === 'web' && previous?.runtimeFingerprint === runtimeFingerprint) mode = 'skip';
   if (config.forceHost.includes(channel)) mode = 'host';
-  if (channel === 'ios-store' && mode === 'runtime' && config.ios.intent === 'review-required')
-    mode = 'host';
+  if (appleStore && mode === 'runtime' && config.apple.intent === 'review-required') mode = 'host';
   if (config.content && mode === 'skip' && channel !== 'web') mode = 'content';
   if (
-    channel === 'ios-store' &&
+    appleStore &&
     mode === 'host' &&
     previous &&
     previous.runtimeFingerprint !== runtimeFingerprint &&
-    config.ios.intent === 'review-required' &&
-    previous.host.contractId === hostContract.contractId
+    config.apple.intent === 'review-required' &&
+    previous.runtime?.contractId === hostContract.contractId
   )
-    throw new Error('Increment the iOS reviewEpoch before shipping new functionality');
+    throw new Error('Increment the Apple reviewEpoch before shipping new functionality');
   const alreadyPublished =
     previous?.version === version &&
     previous.sourceCommit === sourceCommit &&
     previous.releaseRevision === config.revision &&
     previous.runtimeFingerprint === runtimeFingerprint &&
-    (channel === 'web' || previous.host?.nativeFingerprint === nativeFingerprint);
+    (channel === 'web' ||
+      (appleStore ? previous.nativeFingerprint : previous.host?.nativeFingerprint) ===
+        nativeFingerprint);
   const retry = alreadyPublished && selected !== 'auto';
   if (alreadyPublished && !retry) continue;
   if (retry) mode = previous.mode;
   if (mode === 'skip') continue;
   if (
     mode === 'host' &&
-    ['ios-store', 'android-play'].includes(channel) &&
+    ['ios-store', 'macos-direct', 'android-play'].includes(channel) &&
     !Object.values(config.storeNotes?.[channel] ?? {}).some(
       (note) => typeof note === 'string' && note.trim().length > 0,
     )
@@ -258,6 +255,7 @@ for (const channel of channels) {
     throw new Error(`Increase release revision for ${channel}`);
   if (
     mode === 'host' &&
+    !appleStore &&
     !retry &&
     config.hostBuild <= Math.max(previous?.host?.build ?? 0, other?.host?.build ?? 0)
   )

@@ -7,7 +7,6 @@
     "ios-store": "safari16",
     "macos-direct": "safari15",
     "android-play": "chrome105",
-    "android-apk": "chrome105",
     "windows-direct": "chrome105",
     "linux-direct": "safari15"
   },

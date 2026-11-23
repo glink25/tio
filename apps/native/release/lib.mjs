@@ -10,7 +10,6 @@ export const channels = [
   'windows-direct',
   'linux-direct',
   'android-play',
-  'android-apk',
   'web',
 ];
 export const readJSON = (path) => JSON.parse(readFileSync(new URL(path, repositoryURL), 'utf8'));

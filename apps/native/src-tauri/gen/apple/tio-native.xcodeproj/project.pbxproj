@@ -92,7 +92,6 @@
 		D17243772EF81CE870C88909 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
 		D18666549188123B39EF67B6 /* OSAKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OSAKit.framework; path = System/Library/Frameworks/OSAKit.framework; sourceTree = SDKROOT; };
 		D32283A3AD289808AD0195A2 /* ApplicationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ApplicationServices.framework; path = System/Library/Frameworks/ApplicationServices.framework; sourceTree = SDKROOT; };
-		D43FFBD4DBA100AED77D1A5D /* apk_update.rs */ = {isa = PBXFileReference; path = apk_update.rs; sourceTree = "<group>"; };
 		D44518A5BEB98951F11E595C /* main.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
 		D6FFD7C9D0467BDDCA582D0F /* icon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = icon.icns; sourceTree = "<group>"; };
 		D77E4EBEF6EA31D7A9ADC4A4 /* QuartzCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = QuartzCore.framework; path = System/Library/Frameworks/QuartzCore.framework; sourceTree = SDKROOT; };
@@ -216,7 +215,6 @@
 		65B5E5F180ED5D34C692DE50 /* src */ = {
 			isa = PBXGroup;
 			children = (
-				D43FFBD4DBA100AED77D1A5D /* apk_update.rs */,
 				EAC15B0CC620A5BABFF6B637 /* catalog.rs */,
 				88ACAF4E6807B5C5A96E8FCE /* clear_storage.rs */,
 				E05C5FBC6A5B210B245BAE74 /* credentials.rs */,
@@ -305,25 +303,25 @@
 			path = Mac;
 			sourceTree = "<group>";
 		};
-		"TEMP_59629F55-9917-41A8-98DF-01314A1D364A" /* macos */ = {
+		"TEMP_5AB8BDBF-997B-4492-B9AE-7D4A463147CD" /* macos */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = macos;
 			sourceTree = "<group>";
 		};
-		"TEMP_7203B0D6-61EE-4BD3-A741-93F699FBFE18" /* x86_64 */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = x86_64;
-			sourceTree = "<group>";
-		};
-		"TEMP_B2D94073-E15A-4F49-BC8F-C96B81215A94" /* arm64 */ = {
+		"TEMP_9990D351-9E76-4411-9E74-0DD1172E09F8" /* arm64 */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = arm64;
+			sourceTree = "<group>";
+		};
+		"TEMP_B1FA2BF4-AA20-4EC2-BF53-A7C96E0BE28A" /* x86_64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = x86_64;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -449,7 +447,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "pnpm tauri ios xcode-script -v --platform \"${PLATFORM_DISPLAY_NAME:?}\" --sdk-root \"${SDKROOT:?}\" --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration \"${CONFIGURATION:?}\" ${FORCE_COLOR} ${ARCHS:?}\n";
+			shellScript = "export PATH=\"$HOME/.cargo/bin:/opt/homebrew/opt/node@24/bin:/usr/local/opt/node@24/bin:$PATH\"\ncorepack pnpm tauri ios xcode-script -v --platform \"${PLATFORM_DISPLAY_NAME:?}\" --sdk-root \"${SDKROOT:?}\" --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration \"${CONFIGURATION:?}\" ${FORCE_COLOR} ${ARCHS:?}\n";
 		};
 		431EE14426C2748871182F45 /* Build Rust desktop host */ = {
 			isa = PBXShellScriptBuildPhase;

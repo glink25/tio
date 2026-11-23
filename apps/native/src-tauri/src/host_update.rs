@@ -1,4 +1,3 @@
-#[cfg(not(target_os = "android"))]
 use serde_json::json;
 use serde_json::Value;
 use tauri::AppHandle;
@@ -9,16 +8,12 @@ pub async fn host_update(
     action: String,
     version: Option<String>,
 ) -> Result<Value, &'static str> {
-    #[cfg(target_os = "android")]
-    {
-        return crate::apk_update::run(app, action, version).await;
-    }
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_os = "android"))]
     {
         let _ = (app, action, version);
         return Ok(json!({"status":"store"}));
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "ios", target_os = "android")))]
     {
         use tauri_plugin_updater::UpdaterExt;
         if env!("TIO_COMPILED_UPDATER_KEY").is_empty() {

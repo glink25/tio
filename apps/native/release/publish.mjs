@@ -25,8 +25,10 @@ for (const [name, digest] of Object.entries(receipt.checksums)) {
     throw new Error('Artifact checksum mismatch');
 }
 const names = Object.keys(receipt.checksums);
+if (names.some((n) => /\.(?:aab|ipa|pkg|apk)$/.test(n)))
+  throw new Error('Store binaries cannot be published to GitHub');
 let storeState;
-if (receipt.mode === 'host' && ['ios-store', 'android-play'].includes(receipt.channel)) {
+if (receipt.mode === 'host' && receipt.channel === 'android-play') {
   if (!receipt.checksums['store-state.json']) throw new Error('Store submission receipt missing');
   storeState = JSON.parse(await readFile(join(dir, 'store-state.json'), 'utf8'));
   if (
@@ -77,6 +79,13 @@ const source =
     ? (await api('/git/tags/' + sourceRef.object.sha)).object
     : sourceRef.object;
 if (source.sha !== receipt.sourceCommit) throw new Error('Source tag does not match the build');
+if (receipt.mode === 'host' && ['ios-store'].includes(receipt.channel)) {
+  const ref = await api(
+    '/git/ref/tags/' + encodeURIComponent(`host/${receipt.channel}/v${receipt.version}`),
+  );
+  if (ref?.object?.type !== 'commit' || ref.object.sha !== receipt.sourceCommit)
+    throw new Error('Matching Xcode Cloud host tag missing');
+}
 decoded(signed({ channel: receipt.channel }, key), process.env.TIO_RESOURCE_PUBLIC_KEY);
 // Each platform has its own immutable release. Published assets are reused only
 // when their server-side digests agree; a rerun never replaces a published file.
@@ -141,6 +150,7 @@ await changeIndex(receipt.track, receipt.channel, async (previous) => {
     version: receipt.version,
     mode: receipt.mode,
     sourceCommit: receipt.sourceCommit,
+    nativeFingerprint: receipt.nativeFingerprint,
     storageFingerprint: receipt.storageFingerprint,
     bridgeFingerprint: receipt.bridgeFingerprint,
     releaseRevision: receipt.revision,
@@ -148,12 +158,16 @@ await changeIndex(receipt.track, receipt.channel, async (previous) => {
     runtimes: { ...(previous?.runtimes ?? {}) },
     contents: { ...(previous?.contents ?? {}) },
   };
-  if (receipt.mode === 'host') {
-    const manifest = ['windows-direct', 'linux-direct', 'macos-direct'].includes(receipt.channel)
+  if (receipt.mode === 'host' && receipt.channel === 'ios-store')
+    update.hostIntent = {
+      sourceCommit: receipt.sourceCommit,
+      tag: `host/ios-store/v${receipt.version}`,
+      status: 'requested',
+    };
+  if (receipt.mode === 'host' && receipt.channel !== 'ios-store') {
+    const manifest = ['macos-direct', 'windows-direct', 'linux-direct'].includes(receipt.channel)
       ? lookup('desktop-updates.json')
-      : receipt.channel === 'android-apk'
-        ? lookup('tio-android-apk-host.json')
-        : null;
+      : null;
     update.host = {
       version: receipt.version,
       build: receipt.hostBuild,
