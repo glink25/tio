@@ -33,9 +33,9 @@
                 <data android:scheme="${tioOAuthScheme}" />
                 <data android:host="auth" />
                 <data android:path="/github" />
-                
-                
-                
+
+
+
             </intent-filter>
             <!-- DEEP LINK PLUGIN. AUTO-GENERATED. DO NOT REMOVE. -->
         </activity>
