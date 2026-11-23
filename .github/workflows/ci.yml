@@ -26,6 +26,8 @@ jobs:
           node-version-file: .node-version
       - run: corepack enable
       - run: node scripts/install-ci.mjs
+      - name: Check release script syntax
+        run: for script in apps/native/release/*.mjs apps/native/updates/*.mjs; do node --check "$script" || exit 1; done
       - run: corepack pnpm check
       - run: corepack pnpm --filter @tio/tests exec playwright install --with-deps chromium
       - run: corepack pnpm test:e2e

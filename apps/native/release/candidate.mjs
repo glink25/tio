@@ -21,7 +21,7 @@ if (!release)
     prerelease: receipt.track === 'preview',
     make_latest: 'false',
   });
-if (!release.draft) return;
+if (!release.draft) throw new Error('Candidate release is already public; retry to reuse it');
 if (release.target_commitish !== receipt.sourceCommit)
   throw new Error('Candidate release source mismatch');
 await copyFile(join(directory, 'receipt.json'), join(directory, 'candidate-receipt.json'));

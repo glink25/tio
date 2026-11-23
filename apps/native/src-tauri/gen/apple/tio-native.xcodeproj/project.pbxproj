@@ -303,25 +303,25 @@
 			path = Mac;
 			sourceTree = "<group>";
 		};
-		"TEMP_5AB8BDBF-997B-4492-B9AE-7D4A463147CD" /* macos */ = {
+		"TEMP_023214B1-53F8-4865-96CA-D235148B48DD" /* macos */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = macos;
 			sourceTree = "<group>";
 		};
-		"TEMP_9990D351-9E76-4411-9E74-0DD1172E09F8" /* arm64 */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = arm64;
-			sourceTree = "<group>";
-		};
-		"TEMP_B1FA2BF4-AA20-4EC2-BF53-A7C96E0BE28A" /* x86_64 */ = {
+		"TEMP_976CB7D2-FE33-4B19-BE89-8408D5F2286A" /* x86_64 */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = x86_64;
+			sourceTree = "<group>";
+		};
+		"TEMP_ECEF6482-1E12-4F96-AD0A-994BD59BC502" /* arm64 */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = arm64;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -447,7 +447,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export PATH=\"$HOME/.cargo/bin:/opt/homebrew/opt/node@24/bin:/usr/local/opt/node@24/bin:$PATH\"\ncorepack pnpm tauri ios xcode-script -v --platform \"${PLATFORM_DISPLAY_NAME:?}\" --sdk-root \"${SDKROOT:?}\" --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration \"${CONFIGURATION:?}\" ${FORCE_COLOR} ${ARCHS:?}\n";
+			shellScript = "export PATH=\"$HOME/.cargo/bin:/opt/homebrew/opt/node@24/bin:/usr/local/opt/node@24/bin:$PATH\"\nif [ \"${CI_XCODE_CLOUD:-}\" = TRUE ]; then\n  /bin/bash \"$PROJECT_DIR/ci_scripts/build-ios-rust.sh\"\n  exit $?\nfi\ncorepack pnpm tauri ios xcode-script -v --platform \"${PLATFORM_DISPLAY_NAME:?}\" --sdk-root \"${SDKROOT:?}\" --framework-search-paths \"${FRAMEWORK_SEARCH_PATHS:?}\" --header-search-paths \"${HEADER_SEARCH_PATHS:?}\" --gcc-preprocessor-definitions \"${GCC_PREPROCESSOR_DEFINITIONS:-}\" --configuration \"${CONFIGURATION:?}\" ${FORCE_COLOR} ${ARCHS:?}\n";
 		};
 		431EE14426C2748871182F45 /* Build Rust desktop host */ = {
 			isa = PBXShellScriptBuildPhase;
