@@ -1,0 +1,28 @@
+{
+  "build": {
+    "beforeBuildCommand": "node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && corepack pnpm --filter @tio/native build --emptyOutDir --outDir dist/android",
+    "frontendDist": "../dist/android",
+    "beforeDevCommand": "node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && corepack pnpm --filter @tio/native dev"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Tio",
+        "create": false
+      }
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "mobile": [
+        {
+          "scheme": ["${tioOAuthScheme}"],
+          "host": "auth",
+          "path": ["/github"],
+          "appLink": false
+        }
+      ]
+    }
+  }
+}

@@ -13,7 +13,7 @@ const pure = [
   'host-protocol',
 ];
 const forbidden =
-  /^(react|react-dom|@blocknote\/|@glideapps\/|@tio\/(ui|i18n|editor-blocknote|views|provider-[^/]+|adapter-[^/]+|local-store))/;
+  /^(@tauri-apps\/|react|react-dom|@blocknote\/|@glideapps\/|@tio\/(ui|i18n|editor-blocknote|views|provider-[^/]+|adapter-[^/]+|local-store))/;
 for (const name of pure) {
   const pkg = JSON.parse(readFileSync(join('packages', name, 'package.json'), 'utf8'));
   for (const dependency of Object.keys(pkg.dependencies ?? {})) {
@@ -87,3 +87,35 @@ for (const name of pure)
         throw new Error(`${relative('.', file)}: forbidden source import ${match[1]}`);
     }
   }
+
+// The app accepts host capabilities; implementations live in thin executable entries.
+for (const name of ['app', 'native-core']) {
+  const pkg = JSON.parse(readFileSync(join('packages', name, 'package.json'), 'utf8'));
+  for (const dependency of visit(pkg.name)) {
+    if (
+      /^(@tauri-apps\/|@tio\/local-store$|@tio\/(adapter|provider)-local-folder$)/.test(dependency)
+    )
+      throw new Error(`${name}: concrete host dependency ${dependency}`);
+    if (
+      name === 'native-core' &&
+      /^(react($|[-/])|@tio\/(app|ui|views|editor-blocknote|web-editor)$)/.test(dependency)
+    )
+      throw new Error(`${name}: UI dependency ${dependency}`);
+  }
+  for (const file of sourceFiles(join('packages', name, 'src'))) {
+    const source = readFileSync(file, 'utf8');
+    if (
+      /from\s*['"]@tauri-apps\//.test(source) ||
+      /(?:from|import)\s*['"][^'"]*\/apps\//.test(source)
+    )
+      throw new Error(`${file}: imports an executable host`);
+    if (name === 'app' && /import\.meta\.env/.test(source))
+      throw new Error(`${file}: platform configuration must be injected`);
+    if (
+      name === 'native-core' &&
+      /\b(document|window|navigator|indexedDB|localStorage)\s*[.]/.test(source)
+    )
+      throw new Error(`${file}: browser dependency in headless kernel`);
+  }
+}
+console.log('Application and headless host boundaries verified.');

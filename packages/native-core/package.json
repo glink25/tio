@@ -1,0 +1,30 @@
+{
+  "name": "@tio/native-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@formatjs/intl-datetimeformat": "^8.0.3",
+    "@formatjs/intl-getcanonicallocales": "^3.3.1",
+    "@formatjs/intl-locale": "^5.4.3",
+    "@formatjs/intl-numberformat": "^10.0.4",
+    "@formatjs/intl-pluralrules": "^7.0.4",
+    "@formatjs/intl-segmenter": "^12.3.2",
+    "@tio/adapter-github": "workspace:*",
+    "@tio/core": "workspace:*",
+    "@tio/database": "workspace:*",
+    "@tio/file-storage": "workspace:*",
+    "@tio/operations": "workspace:*",
+    "@tio/provider-github": "workspace:*",
+    "@tio/serialization": "workspace:*",
+    "@tio/storage": "workspace:*",
+    "@tio/sync": "workspace:*",
+    "@tio/workspace": "workspace:*"
+  }
+}

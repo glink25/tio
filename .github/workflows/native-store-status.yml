@@ -1,0 +1,42 @@
+name: Store availability
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: store-availability
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    environment: release-publish
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TIO_RESOURCE_PUBLIC_KEY: ${{ vars.TIO_RESOURCE_PUBLIC_KEY }}
+      TIO_RESOURCE_PRIVATE_KEY_BASE64: ${{ secrets.TIO_RESOURCE_PRIVATE_KEY_BASE64 }}
+      ASC_APP_ID: ${{ vars.ASC_APP_ID }}
+      ASC_KEY_ID: ${{ secrets.ASC_READ_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_READ_ISSUER_ID }}
+      ASC_PRIVATE_KEY_BASE64: ${{ secrets.ASC_READ_PRIVATE_KEY_BASE64 }}
+      ANDROID_PLAY_SERVICE_ACCOUNT_BASE64: ${{ secrets.ANDROID_PLAY_READ_SERVICE_ACCOUNT_BASE64 }}
+      PLAY_PRODUCTION_TRACK_TYPE: ${{ vars.PLAY_PRODUCTION_TRACK_TYPE }}
+      PLAY_PREVIEW_TRACK_TYPE: ${{ vars.PLAY_PREVIEW_TRACK_TYPE }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .node-version
+      - run: |
+          set -eu
+          umask 077
+          printf '%s' "${TIO_RESOURCE_PRIVATE_KEY_BASE64:?}" | base64 --decode > "$RUNNER_TEMP/tio-release-key.pem"
+          printf 'TIO_RELEASE_KEY_FILE=%s\n' "$RUNNER_TEMP/tio-release-key.pem" >> "$GITHUB_ENV"
+      - run: node apps/native/release/store-status.mjs
+      - if: always()
+        run: node --input-type=module -e 'import {rmSync} from "node:fs"; rmSync(process.env.RUNNER_TEMP+"/tio-release-key.pem",{force:true});'

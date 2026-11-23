@@ -3,10 +3,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { Resvg } from '@resvg/resvg-js';
 
 // All public icons are derived assets. Edit the source SVG, then run pnpm brand:icons.
-const source = readFileSync(new URL('../apps/web/src/brand/logo.svg', import.meta.url), 'utf8');
+const source = readFileSync(new URL('../packages/app/src/brand/logo.svg', import.meta.url), 'utf8');
 const square = source.replace(' rx="42"', '');
 const contents = source.replace(/<svg[^>]*>|<\/svg>/g, '');
-const output = new URL('../apps/web/public/', import.meta.url);
+const output = new URL('../packages/app/public/', import.meta.url);
 writeFileSync(new URL('icon.svg', output), source);
 for (const [name, size, maskable] of [
   ['favicon-32.png', 32, false],

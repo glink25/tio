@@ -1,0 +1,75 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing source release tag
+        required: true
+        type: string
+      targets:
+        description: Comma-separated channels; empty uses the committed release plan
+        type: string
+      publish:
+        description: Publish verified artifacts and update indexes
+        default: false
+        type: boolean
+permissions:
+  contents: read
+jobs:
+  quality:
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ github.event.inputs.tag || github.ref_name }}
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_jobs: ${{ steps.plan.outputs.has_jobs }}
+    env:
+      TIO_RESOURCE_PUBLIC_KEY: ${{ vars.TIO_RESOURCE_PUBLIC_KEY }}
+      TIO_UPDATER_PUBLIC_KEY: ${{ vars.TIO_UPDATER_PUBLIC_KEY }}
+      TIO_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      TIO_TARGETS: ${{ github.event.inputs.targets }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ env.TIO_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version-file: .node-version
+      - name: Require a trusted source tag
+        shell: bash
+        run: |
+          set -eu
+          git rev-parse --verify "refs/tags/$TIO_TAG"
+          git merge-base --is-ancestor HEAD origin/main
+      - run: node apps/native/release/fetch-baselines.mjs --out "$RUNNER_TEMP/baselines"
+      - id: plan
+        shell: bash
+        run: |
+          set -eu
+          args=(--tag "$TIO_TAG" --baseline "$RUNNER_TEMP/baselines" --out "$RUNNER_TEMP/release-plan.json")
+          if [ '${{ github.event_name }}' = push ]; then args+=(--automatic); fi
+          if [ -n "$TIO_TARGETS" ]; then args+=(--targets "$TIO_TARGETS"); fi
+          node apps/native/release/plan.mjs "${args[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: release-plan
+          path: ${{ runner.temp }}/release-plan.json
+  target:
+    needs: [plan, quality]
+    if: needs.plan.outputs.has_jobs == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/native-target.yml
+    with:
+      target: ${{ toJSON(matrix) }}
+      publish: ${{ github.event_name == 'push' || inputs.publish == true }}
+    secrets: inherit

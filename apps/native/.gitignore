@@ -1,0 +1,14 @@
+src-tauri/target/
+src-tauri/gen/schemas/
+src-tauri/gen/apple/assets/headless.js
+src-tauri/gen/apple/assets/assets/
+src-tauri/resource-public-key
+
+src-tauri/distribution-channel
+
+src-tauri/gen/android/app/src/main/assets/tio-kernel.js
+src-tauri/gen/android/app/src/main/assets/tio-bootstrap.js
+
+release/target/
+
+src-tauri/updater-public-key

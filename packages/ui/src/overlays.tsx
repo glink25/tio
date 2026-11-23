@@ -13,7 +13,7 @@ import {
 } from 'react';
 import { Toaster, toast as sonnerToast, type ExternalToast } from 'sonner';
 
-import { PortalContext, Modal, cn } from './index';
+import { PortalContext, Modal, cn, useOverlayBack } from './index';
 import { OverlayPresence, useOverlayOpen } from './motion';
 import { useOverlayInteraction } from './overlay-interaction';
 import { ThemeContext } from './theme';
@@ -85,6 +85,7 @@ export function Menu({
     onOpenChange?.(next);
   };
   const interaction = useOverlayInteraction(active, () => change(false));
+  useOverlayBack(() => change(false), active);
   return (
     <MenuPrimitive.Root open={active} onOpenChange={change}>
       <MenuPrimitive.Trigger asChild>{trigger}</MenuPrimitive.Trigger>
@@ -137,8 +138,10 @@ export function MenuSub({
   disabled?: boolean;
 }) {
   const container = useContext(PortalContext);
+  const [open, setOpen] = useState(false);
+  useOverlayBack(() => setOpen(false), open);
   return (
-    <MenuPrimitive.Sub>
+    <MenuPrimitive.Sub open={open} onOpenChange={setOpen}>
       <MenuPrimitive.SubTrigger
         disabled={disabled}
         className="flex cursor-default items-center gap-2 rounded px-2.5 py-2 outline-none data-[disabled]:opacity-40 data-[highlighted]:bg-surface-hover"
@@ -198,6 +201,8 @@ export function Popover({
     onOpenChange?.(next);
   };
   const interaction = useOverlayInteraction(active, () => change(false), restoreFocus);
+  // Mobile sheets register through Modal; anchored and desktop popovers own their entry.
+  useOverlayBack(() => change(false), active && (!mobile || mobilePlacement === 'anchor'));
   if (mobile && mobilePlacement !== 'anchor')
     return (
       <>

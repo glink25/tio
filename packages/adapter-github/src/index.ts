@@ -24,6 +24,23 @@ export class GitHubRepositoryCreationError extends GitHubError {
     );
   }
 }
+export function githubAccessError(connectionId: string, error: unknown): ConnectionAccessState {
+  if (error instanceof ConnectionAccessError) return error.state;
+  return {
+    code:
+      error instanceof GitHubError
+        ? error.retryAt
+          ? 'unreachable'
+          : error.status === 401
+            ? 'reauthorization-required'
+            : [403, 404, 422].includes(error.status)
+              ? 'forbidden'
+              : 'unreachable'
+        : 'unreachable',
+    scope: { connectionId: connectionId },
+    ...(error instanceof GitHubError && error.retryAt ? { retryAt: error.retryAt } : {}),
+  };
+}
 export class GitHubAdapter implements ConnectionAdapter {
   readonly supportsSync = true;
   private listeners = new Set<(state: ConnectionAccessState) => void>();
@@ -42,21 +59,7 @@ export class GitHubAdapter implements ConnectionAdapter {
     };
   }
   classifyError(error: unknown): ConnectionAccessState {
-    if (error instanceof ConnectionAccessError) return error.state;
-    return {
-      code:
-        error instanceof GitHubError
-          ? error.retryAt
-            ? 'unreachable'
-            : error.status === 401
-              ? 'reauthorization-required'
-              : [403, 404, 422].includes(error.status)
-                ? 'forbidden'
-                : 'unreachable'
-          : 'unreachable',
-      scope: { connectionId: this.connectionId },
-      ...(error instanceof GitHubError && error.retryAt ? { retryAt: error.retryAt } : {}),
-    };
+    return githubAccessError(this.connectionId, error);
   }
   async getAccessState(workspaceId?: string): Promise<ConnectionAccessState> {
     try {
