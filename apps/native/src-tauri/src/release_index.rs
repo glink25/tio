@@ -1,4 +1,4 @@
-use crate::{catalog::Catalog, signed_update};
+use crate::{catalog::Catalog, release_http, signed_update};
 use serde::Deserialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -37,7 +37,7 @@ pub fn track() -> &'static str {
     env!("TIO_COMPILED_UPDATE_TRACK")
 }
 pub fn valid_url(url: &str) -> bool {
-    let Ok(url) = url.parse::<reqwest::Url>() else {
+    let Ok(url) = url.parse::<tauri::Url>() else {
         return false;
     };
     url.scheme() == "https"
@@ -51,36 +51,13 @@ pub fn valid_url(url: &str) -> bool {
             .decode_utf8()
             .is_ok_and(|path| path.starts_with("/glink25/tio/releases/download/dist/"))
 }
-pub async fn bytes(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>, &'static str> {
-    if !response.status().is_success() {
-        return Err("unavailable");
-    }
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| "unavailable")? {
-        if bytes.len() + chunk.len() > limit {
-            return Err("invalid");
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
-}
 pub async fn download(asset: &Asset, limit: usize) -> Result<Vec<u8>, &'static str> {
     if !valid_url(&asset.url) || asset.sha256.len() != 64 {
         return Err("invalid");
     }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(60))
-        .build()
-        .map_err(|_| "unavailable")?;
-    let bytes = bytes(
-        client
-            .get(&asset.url)
-            .send()
-            .await
-            .map_err(|_| "unavailable")?,
-        limit,
-    )
-    .await?;
+    let bytes = release_http::get(&asset.url, None, limit, 60)
+        .await?
+        .into_body()?;
     if format!("{:x}", Sha256::digest(&bytes)) != asset.sha256 {
         return Err("signature");
     }
@@ -162,21 +139,14 @@ pub async fn load(app: &AppHandle, force: bool) -> Result<Option<Index>, &'stati
     if !force && now.saturating_sub(checked) < 6 * 60 * 60 {
         return cached.as_deref().map(verify).transpose();
     }
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(20))
-        .build()
-        .map_err(|_| "unavailable")?;
     let url =
         format!("https://raw.githubusercontent.com/glink25/tio/release-index/{namespace}.json");
-    let mut request = client.get(url);
-    if let Some(etag) = &etag {
-        request = request.header("If-None-Match", etag);
-    }
-    let response = match request.send().await {
-        Ok(r) => r,
-        Err(_) => return cached.as_deref().map(verify).transpose(),
+    let response = match release_http::get(&url, etag.as_deref(), 2_000_000, 20).await {
+        Ok(response) => response,
+        Err("unavailable") => return cached.as_deref().map(verify).transpose(),
+        Err(error) => return Err(error),
     };
-    if response.status() == reqwest::StatusCode::NOT_MODIFIED {
+    if response.status == 304 {
         app.state::<Catalog>()
             .0
             .lock()
@@ -188,15 +158,11 @@ pub async fn load(app: &AppHandle, force: bool) -> Result<Option<Index>, &'stati
             .map_err(|_| "unavailable")?;
         return cached.as_deref().map(verify).transpose();
     }
-    if !response.status().is_success() {
+    if !response.is_success() {
         return cached.as_deref().map(verify).transpose();
     }
-    let etag = response
-        .headers()
-        .get("etag")
-        .and_then(|v| v.to_str().ok())
-        .map(str::to_owned);
-    let raw = String::from_utf8(bytes(response, 2_000_000).await?).map_err(|_| "invalid")?;
+    let release_http::Response { etag, body, .. } = response;
+    let raw = String::from_utf8(body).map_err(|_| "invalid")?;
     let index = verify(&raw)?;
     let catalog = app.state::<Catalog>();
     let db = catalog.0.lock().map_err(|_| "unavailable")?;

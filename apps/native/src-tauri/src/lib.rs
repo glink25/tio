@@ -8,6 +8,7 @@ mod headless_io;
 mod host_update;
 mod kernel_lease;
 mod process_lock;
+mod release_http;
 mod release_index;
 #[cfg(target_os = "ios")]
 mod shortcuts;

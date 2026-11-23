@@ -30,7 +30,7 @@ percent-encoding = "2"
 cap-std = "4"
 rfd = "0.17"
 
-[dependencies.ed25519-dalek]
+[target.'cfg(not(target_os = "ios"))'.dependencies.ed25519-dalek]
 version = "2"
 
 [target.'cfg(any(target_os = "ios", target_os = "macos"))'.dependencies]
@@ -48,7 +48,7 @@ version = "2"
 [dependencies.tauri-plugin-opener]
 version = "2"
 
-[dependencies.reqwest]
+[target.'cfg(not(target_os = "ios"))'.dependencies.reqwest]
 version = "0.12"
 default-features = false
 features = ["rustls-tls"]

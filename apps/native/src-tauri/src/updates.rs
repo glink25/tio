@@ -1,6 +1,5 @@
 use crate::catalog::Catalog;
-use crate::signed_update;
-use ed25519_dalek::VerifyingKey;
+use crate::signed_update::{self, VerifyingKey};
 use rusqlite::{params, OptionalExtension, TransactionBehavior};
 use serde::Deserialize;
 use serde_json::{json, Value};

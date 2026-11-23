@@ -454,33 +454,13 @@ pub async fn frontend_update(
                     return Ok(Value::Null);
                 }
             }
-            let client = reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(60))
-                .build()
-                .map_err(|_| "unavailable")?;
-            let response = client
-                .get(&manifest.archive_url)
-                .send()
-                .await
-                .map_err(|_| "unavailable")?;
-            if !response.status().is_success() {
-                return Err("unavailable");
-            }
-            let bytes = limited(response, MAX_ARCHIVE).await?;
+            let bytes = crate::release_http::get(&manifest.archive_url, None, MAX_ARCHIVE, 60)
+                .await?
+                .into_body()?;
             Ok(json!({"status":stage(&app, &state, &envelope, &bytes)?}))
         }
         _ => Err("invalid"),
     }
-}
-async fn limited(mut response: reqwest::Response, limit: usize) -> Result<Vec<u8>, &'static str> {
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| "unavailable")? {
-        if bytes.len() + chunk.len() > limit {
-            return Err("invalid");
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
 }
 pub fn serve(
     app: &AppHandle,

@@ -1,7 +1,7 @@
 {
   "format": 1,
-  "revision": 1007,
-  "hostBuild": 1007,
+  "revision": 1008,
+  "hostBuild": 1008,
   "targets": ["ios-store"],
   "web": {
     "deployment": "tag"
@@ -26,7 +26,7 @@
   },
   "forceHost": ["ios-store"],
   "apple": {
-    "intent": "review-required",
-    "reason": "Initial native release includes new system integrations."
+    "intent": "existing-behavior",
+    "reason": "Use Apple networking and signature verification for the existing iOS updater."
   }
 }

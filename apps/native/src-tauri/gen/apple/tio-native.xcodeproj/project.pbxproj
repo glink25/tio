@@ -31,6 +31,7 @@
 		ABF30DD7986981C942248C49 /* AuthorizedFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B72738EF98B8E857E5419D1 /* AuthorizedFolder.swift */; };
 		B0B607EA9275EDF9CD1B50CB /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E24D5B565AAE69FCD12DC71A /* CoreVideo.framework */; };
 		B2FEBB9FB4F7E43B2AAD4D59 /* icon.icns in Resources */ = {isa = PBXBuildFile; fileRef = D6FFD7C9D0467BDDCA582D0F /* icon.icns */; };
+		BDB067CC5893F124BA9FA345 /* ReleaseHTTP.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6C4094034EB7183C0D6CA5D /* ReleaseHTTP.swift */; };
 		C33363605D2EB5F6FC76C7E7 /* QuartzCore.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D77E4EBEF6EA31D7A9ADC4A4 /* QuartzCore.framework */; };
 		C5F270E37E1C54306A7DB495 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4D46E8F21D8882309D975F0 /* CoreGraphics.framework */; };
 		D3AF07A7CB61BF604BBB6A82 /* FolderAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3B90C84FCA0BB6EAD01DF46 /* FolderAccess.swift */; };
@@ -60,6 +61,7 @@
 		445208C7AECC53A41FB398E8 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		45EC1D3D7F010ED622E5290F /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		4C508459A886D3EBB8C45B0F /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
+		51A6AE2FB947946908C2A6DB /* release_http.rs */ = {isa = PBXFileReference; path = release_http.rs; sourceTree = "<group>"; };
 		5D1C319D1A9290A8E9F94283 /* shortcuts.rs */ = {isa = PBXFileReference; path = shortcuts.rs; sourceTree = "<group>"; };
 		5D80BA766C4185EE4A4C81B3 /* host_update.rs */ = {isa = PBXFileReference; path = host_update.rs; sourceTree = "<group>"; };
 		686C17515B5B89C43F7C3F39 /* updates.rs */ = {isa = PBXFileReference; path = updates.rs; sourceTree = "<group>"; };
@@ -75,6 +77,7 @@
 		A3B90C84FCA0BB6EAD01DF46 /* FolderAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderAccess.swift; sourceTree = "<group>"; };
 		A56036FE76CB437EB95A9504 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		A56386F2B5B371BF47A194E2 /* ShortcutsBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ShortcutsBridge.h; sourceTree = "<group>"; };
+		A6C4094034EB7183C0D6CA5D /* ReleaseHTTP.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseHTTP.swift; sourceTree = "<group>"; };
 		A903CD87DB7B16D7B155313E /* bindings.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = bindings.h; sourceTree = "<group>"; };
 		AB0F454A1DA0F8405540B52C /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
 		AE346E14496B6FA69EA55398 /* ShortcutKernel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutKernel.swift; sourceTree = "<group>"; };
@@ -226,6 +229,7 @@
 				38234BB6F084B4B1CE073DCE /* lib.rs */,
 				B63D5945077A766A2D852EA4 /* main.rs */,
 				CEAB0A2CCBECC86177192BE1 /* process_lock.rs */,
+				51A6AE2FB947946908C2A6DB /* release_http.rs */,
 				36AFFC860214484A65107F63 /* release_index.rs */,
 				5D1C319D1A9290A8E9F94283 /* shortcuts.rs */,
 				12D7044005C8BC4807A2F17D /* signed_update.rs */,
@@ -279,6 +283,7 @@
 				2877CEE983E4BE86BE52834B /* FolderJournal.swift */,
 				2D3E9A606F6C9CF1BA7B8B92 /* KernelLease.swift */,
 				C254A00E4BB18A03E185B035 /* main.mm */,
+				A6C4094034EB7183C0D6CA5D /* ReleaseHTTP.swift */,
 				AE346E14496B6FA69EA55398 /* ShortcutKernel.swift */,
 				A56386F2B5B371BF47A194E2 /* ShortcutsBridge.h */,
 				017C3F9BD804780D54F5D71A /* bindings */,
@@ -483,6 +488,7 @@
 				D3AF07A7CB61BF604BBB6A82 /* FolderAccess.swift in Sources */,
 				6016F3F4B1D05656B4382DC2 /* FolderJournal.swift in Sources */,
 				2D41B63F956D3F0FDC85C84F /* KernelLease.swift in Sources */,
+				BDB067CC5893F124BA9FA345 /* ReleaseHTTP.swift in Sources */,
 				D675D2097C7C43784684F9E7 /* ShortcutKernel.swift in Sources */,
 				A9F518C99948517033C4135A /* main.mm in Sources */,
 			);
