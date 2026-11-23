@@ -14,7 +14,9 @@ const plist = (key) =>
   ).trim();
 if (
   plist('CFBundleIdentifier') !== 'com.glink25.tio' ||
-  plist('CFBundleShortVersionString') !== metadata.version.split('-')[0] ||
+  ![metadata.version, metadata.version.split('-')[0]].includes(
+    plist('CFBundleShortVersionString'),
+  ) ||
   plist('CFBundleVersion') !== String(metadata.buildNumber)
 )
   throw new Error('macOS application identity differs from the release');

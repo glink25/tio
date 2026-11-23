@@ -58,7 +58,11 @@ if (plan.mode === 'host' && !['ios-store'].includes(plan.channel)) {
             : f.endsWith('.app.tar.gz.sig')),
     );
     if (signatures.length !== 1) throw new Error('Expected exactly one updater artifact');
-    const targets = plan.channel === 'windows-direct' ? ['windows-x86_64'] : ['linux-x86_64'];
+    const targets = {
+      'macos-direct': ['darwin-aarch64', 'darwin-x86_64'],
+      'windows-direct': ['windows-x86_64'],
+      'linux-direct': ['linux-x86_64'],
+    }[plan.channel];
     const index = join(values.out, 'desktop-artifacts.json');
     await writeFile(
       index,

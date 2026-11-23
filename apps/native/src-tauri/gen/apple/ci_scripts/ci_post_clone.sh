@@ -10,7 +10,7 @@ case "${CI_TAG:?Apple host tags only}" in
 esac
 cd "$CI_PRIMARY_REPOSITORY_PATH"
 export HOMEBREW_NO_AUTO_UPDATE=1
-brew install node@24 rustup xcodegen gh
+brew install node@24 rustup
 export PATH="$(brew --prefix node@24)/bin:$(brew --prefix rustup)/bin:$HOME/.cargo/bin:$PATH"
 command -v corepack >/dev/null || npm install --global corepack
 corepack enable
