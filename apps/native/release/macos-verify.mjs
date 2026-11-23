@@ -32,7 +32,7 @@ const arch = execFileSync(
 if (arch !== 'arm64,x86_64') throw new Error('macOS release must contain both architectures');
 execFileSync('codesign', ['--verify', '--deep', '--strict', app], { stdio: 'inherit' });
 const prefix = join(process.env.RUNNER_TEMP, 'tio-app-certificate-');
-execFileSync('codesign', ['-d', '--extract-certificates', prefix, app], {
+execFileSync('codesign', ['-d', `--extract-certificates=${prefix}`, app], {
   stdio: ['ignore', 'ignore', 'pipe'],
 });
 if (hash(await readFile(prefix + '0')) !== process.env.APPLE_CERTIFICATE_SHA256)
@@ -43,7 +43,9 @@ execFileSync('spctl', ['--assess', '--type', 'execute', app], { stdio: 'inherit'
 const dmgs = (await readdir(join(bundle, 'dmg'))).filter((n) => n.endsWith('.dmg'));
 if (dmgs.length !== 1) throw new Error('Expected one macOS disk image');
 const dmg = join(bundle, 'dmg', dmgs[0]);
+execFileSync('codesign', ['--verify', '--strict', dmg], { stdio: 'inherit' });
 if (spawnSync('xcrun', ['stapler', 'validate', dmg], { stdio: 'ignore' }).status !== 0) {
+  console.log('Submitting the signed disk image to Apple notarization');
   const result = spawnSync(
     'xcrun',
     [
@@ -57,13 +59,16 @@ if (spawnSync('xcrun', ['stapler', 'validate', dmg], { stdio: 'ignore' }).status
       '--team-id',
       process.env.APPLE_TEAM_ID,
       '--wait',
+      '--timeout',
+      '15m',
       '--output-format',
       'json',
     ],
     { encoding: 'utf8' },
   );
-  if (result.status !== 0 || JSON.parse(result.stdout).status !== 'Accepted')
-    throw new Error('Disk image notarization failed');
+  const notarization = result.status === 0 ? JSON.parse(result.stdout) : null;
+  if (notarization?.status !== 'Accepted') throw new Error('Disk image notarization failed');
+  console.log('Apple accepted disk image notarization ' + notarization.id);
   execFileSync('xcrun', ['stapler', 'staple', dmg], { stdio: 'inherit' });
 }
 execFileSync('xcrun', ['stapler', 'validate', dmg], { stdio: 'inherit' });
