@@ -70,7 +70,23 @@ jobs:
           TIO_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           set -eu
-          sdkmanager 'platforms;android-37' 'build-tools;37.0.0' 'ndk;28.2.13676358'
+          export ANDROID_HOME="${ANDROID_HOME:-$RUNNER_TEMP/android-sdk}"
+          tio_sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$tio_sdkmanager" ]; then
+            export ANDROID_HOME="$RUNNER_TEMP/android-sdk"
+            mkdir -p "$ANDROID_HOME/cmdline-tools"
+            curl --fail --silent --show-error --location --retry 3 https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip -o "$RUNNER_TEMP/tio-android-tools.zip"
+            printf '%s  %s\n' 4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583 "$RUNNER_TEMP/tio-android-tools.zip" | sha256sum --check
+            unzip -q "$RUNNER_TEMP/tio-android-tools.zip" -d "$RUNNER_TEMP/tio-android-tools"
+            mv "$RUNNER_TEMP/tio-android-tools/cmdline-tools" "$ANDROID_HOME/cmdline-tools/latest"
+            tio_sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          # Persist the same SDK and NDK locations for the Tauri and Gradle steps.
+          set +o pipefail
+          yes | "$tio_sdkmanager" --sdk_root="$ANDROID_HOME" --licenses >/dev/null
+          set -o pipefail
+          "$tio_sdkmanager" --sdk_root="$ANDROID_HOME" 'platform-tools' 'platforms;android-37' 'build-tools;37.0.0' 'ndk;28.2.13676358'
+          printf 'ANDROID_HOME=%s\nANDROID_SDK_ROOT=%s\nNDK_HOME=%s\n' "$ANDROID_HOME" "$ANDROID_HOME" "$ANDROID_HOME/ndk/28.2.13676358" >> "$GITHUB_ENV"
           rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
           umask 077
           printf '%s' "${TIO_KEYSTORE_BASE64:?}" | base64 --decode > "$RUNNER_TEMP/tio-release.jks"
