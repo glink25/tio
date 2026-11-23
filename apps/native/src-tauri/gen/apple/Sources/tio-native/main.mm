@@ -1,4 +1,5 @@
 #include "bindings/bindings.h"
+#include <stddef.h>
 #include <stdint.h>
 
 extern "C" char *tio_apple_folder(const char *);
