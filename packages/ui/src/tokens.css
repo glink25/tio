@@ -237,36 +237,35 @@ a[href] {
   }
   .tio-dialog,
   .tio-drawer {
-    --tio-keyboard-bottom: 0px;
     --tio-visible-top: 0px;
+    --tio-visible-bottom: 0px;
     --tio-visible-height: var(--tio-screen-height);
-    --tio-panel-bottom: max(var(--tio-safe-bottom), var(--tio-keyboard-bottom));
+    --tio-panel-top-clearance: max(var(--tio-safe-top), var(--tio-visible-top));
+    --tio-panel-bottom-clearance: max(var(--tio-safe-bottom), var(--tio-visible-bottom));
     position: absolute;
     box-sizing: border-box;
     top: auto;
     bottom: 0;
     left: 0;
     width: 100%;
-    max-height: calc(var(--tio-screen-height) - var(--tio-safe-top) - 12px);
-    padding: 0 var(--tio-safe-right) var(--tio-panel-bottom) var(--tio-safe-left);
+    max-height: max(0px, var(--tio-screen-height) - var(--tio-panel-top-clearance) - 12px);
+    padding: 0 var(--tio-safe-right) var(--tio-panel-bottom-clearance) var(--tio-safe-left);
     pointer-events: auto;
   }
-  .tio-dialog[data-placement='sheet']:not([data-wide='true']) {
-    top: auto;
-    bottom: 0;
-    translate: none;
-  }
   .tio-dialog[data-placement='center'] {
+    --tio-panel-safe-top: max(0px, var(--tio-safe-top) - var(--tio-visible-top));
+    --tio-panel-safe-bottom: max(0px, var(--tio-safe-bottom) - var(--tio-visible-bottom));
     top: calc(
-      var(--tio-visible-top) + var(--tio-safe-top) +
-        (var(--tio-visible-height) - var(--tio-safe-top) - var(--tio-safe-bottom)) / 2
+      var(--tio-visible-top) + var(--tio-panel-safe-top) +
+        (var(--tio-visible-height) - var(--tio-panel-safe-top) - var(--tio-panel-safe-bottom)) / 2
     );
     bottom: auto;
     left: calc(var(--tio-safe-left) + (100% - var(--tio-safe-left) - var(--tio-safe-right)) / 2);
     translate: -50% -50%;
     width: calc(100% - 24px - var(--tio-safe-left) - var(--tio-safe-right));
-    max-height: calc(
-      var(--tio-visible-height) - 24px - var(--tio-safe-top) - var(--tio-safe-bottom)
+    max-height: max(
+      0px,
+      var(--tio-visible-height) - 24px - var(--tio-panel-safe-top) - var(--tio-panel-safe-bottom)
     );
     padding: 0;
     border-radius: 12px;
@@ -275,11 +274,11 @@ a[href] {
   .tio-dialog[data-wide='true']:not([data-placement='center']),
   .tio-dialog[data-placement='sidebar'],
   .tio-drawer {
+    /* Keep the opaque surface behind the keyboard and constrain its contents. */
     top: 0;
-    bottom: 0;
     height: 100%;
     max-height: 100%;
-    padding-top: max(var(--tio-safe-top), var(--tio-visible-top));
+    padding-top: var(--tio-panel-top-clearance);
     border-radius: 0;
   }
   .tio-dialog[data-placement='sidebar'] {
@@ -290,10 +289,11 @@ a[href] {
     scroll-padding-block: 12px;
   }
   .tio-dialog[data-wide='true']:has(.page-preview) {
-    top: calc(var(--tio-safe-top) + 12px);
-    height: calc(100% - var(--tio-safe-top) - 12px);
-    max-height: calc(100% - var(--tio-safe-top) - 12px);
-    padding-top: 0;
+    --tio-preview-top: calc(var(--tio-safe-top) + 12px);
+    top: var(--tio-preview-top);
+    height: calc(100% - var(--tio-preview-top));
+    max-height: 100%;
+    padding-top: max(0px, var(--tio-visible-top) - var(--tio-preview-top));
     border-radius: 12px 12px 0 0;
   }
   :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='range']):not(
@@ -305,6 +305,22 @@ a[href] {
     /* Emoji Mart's search field subtracts 1px from this public token. */
     --font-size: 17px;
     max-width: 100%;
+  }
+}
+@media (min-width: 768px) {
+  .tio-dialog[data-keyboard]:not([data-placement='sidebar']) {
+    --tio-panel-safe-top: max(0px, var(--tio-safe-top) - var(--tio-visible-top));
+    --tio-panel-safe-bottom: max(0px, var(--tio-safe-bottom) - var(--tio-visible-bottom));
+    top: calc(var(--tio-visible-top) + var(--tio-panel-safe-top) + 12px);
+    max-height: max(
+      0px,
+      var(--tio-visible-height) - 24px - var(--tio-panel-safe-top) - var(--tio-panel-safe-bottom)
+    );
+  }
+  .tio-dialog[data-keyboard][data-placement='sidebar'],
+  .tio-drawer[data-keyboard] {
+    padding-top: max(var(--tio-safe-top), var(--tio-visible-top));
+    padding-bottom: max(var(--tio-safe-bottom), var(--tio-visible-bottom));
   }
 }
 @media (hover: none) and (pointer: coarse) {

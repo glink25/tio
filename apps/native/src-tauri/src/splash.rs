@@ -9,13 +9,22 @@ pub enum StartupStatus {
 }
 
 #[tauri::command]
-pub async fn mobile_startup(webview: Webview, status: StartupStatus) -> Result<(), String> {
+pub async fn mobile_startup(
+    webview: Webview,
+    status: StartupStatus,
+    dark: Option<bool>,
+) -> Result<(), String> {
     #[cfg(target_os = "ios")]
     {
         let &(_, finish) = IOS_STARTUP.get().ok_or("unavailable")?;
         webview
             .with_webview(move |view| unsafe {
-                finish(view.inner(), matches!(status, StartupStatus::Ready));
+                let appearance = dark.map_or(-1, i32::from);
+                finish(
+                    view.inner(),
+                    matches!(status, StartupStatus::Ready),
+                    appearance,
+                );
             })
             .map_err(|error| error.to_string())?;
     }
@@ -26,7 +35,7 @@ pub async fn mobile_startup(webview: Webview, status: StartupStatus) -> Result<(
         mobile_call(
             webview.app_handle(),
             "startup",
-            serde_json::json!({ "status": status }),
+            serde_json::json!({ "status": status, "dark": dark }),
         )
         .await?;
     }
@@ -36,7 +45,7 @@ pub async fn mobile_startup(webview: Webview, status: StartupStatus) -> Result<(
 #[cfg(target_os = "ios")]
 type Show = unsafe extern "C" fn(*mut std::ffi::c_void);
 #[cfg(target_os = "ios")]
-type Finish = unsafe extern "C" fn(*mut std::ffi::c_void, bool);
+type Finish = unsafe extern "C" fn(*mut std::ffi::c_void, bool, i32);
 #[cfg(target_os = "ios")]
 static IOS_STARTUP: std::sync::OnceLock<(Show, Finish)> = std::sync::OnceLock::new();
 

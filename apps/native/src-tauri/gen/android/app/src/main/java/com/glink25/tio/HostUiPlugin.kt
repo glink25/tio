@@ -10,7 +10,8 @@ import app.tauri.plugin.Plugin
 class HostUiPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
     fun startup(invoke: Invoke) {
-        val ready = when (invoke.getArgs().optString("status")) {
+        val args = invoke.getArgs()
+        val ready = when (args.optString("status")) {
             "ready" -> true
             "failed" -> false
             else -> {
@@ -18,8 +19,9 @@ class HostUiPlugin(private val activity: Activity) : Plugin(activity) {
                 return
             }
         }
+        val dark = if (args.isNull("dark")) null else args.optBoolean("dark")
         activity.runOnUiThread {
-            (activity as MainActivity).finishStartup(ready)
+            (activity as MainActivity).finishStartup(ready, dark)
             invoke.resolve()
         }
     }

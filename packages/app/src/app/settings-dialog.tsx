@@ -14,7 +14,17 @@ import {
   useMobile,
   useOverlayBack,
 } from '@tio/ui';
-import { ArrowRightLeft, ChevronLeft, HardDrive, Palette, Sparkles } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  HardDrive,
+  Palette,
+  RefreshCw,
+  Sparkles,
+  type LucideIcon,
+} from 'lucide-react';
 import { useCallback, useState, type ReactNode } from 'react';
 
 import { HostUpdateSettings } from '../components/host-update-settings';
@@ -40,6 +50,37 @@ const categories = [
 
 type Category = (typeof categories)[number]['kind'];
 type SettingsPage = { kind: Category | 'root' | 'update' | 'permissions' } | AssistantSettingsPage;
+
+function SettingsNavigationRow({
+  label,
+  icon: Icon,
+  current,
+  chevron = true,
+  onClick,
+}: {
+  label: string;
+  icon: LucideIcon;
+  current?: boolean;
+  chevron?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      aria-current={current ? 'page' : undefined}
+      className={cn(
+        'w-full min-w-0 justify-start gap-3 rounded-none px-1 py-3 text-left font-medium text-ink hover:bg-transparent hover:underline focus-visible:-outline-offset-2',
+        current && 'font-semibold',
+      )}
+      onClick={onClick}
+    >
+      <Icon aria-hidden size={18} className="shrink-0 text-secondary" />
+      <span className="min-w-0 flex-1 break-words">{label}</span>
+      {chevron && <ChevronRight aria-hidden size={16} className="shrink-0 text-muted" />}
+      {current && <Check aria-hidden size={16} className="shrink-0" />}
+    </Button>
+  );
+}
 
 export function SettingsDialog({
   model,
@@ -113,21 +154,23 @@ export function SettingsDialog({
               subpage={subpage}
               skipEnter={!mobile && !root}
               navigation={
-                !mobile &&
-                visibleCategories.map(({ kind, label, icon: Icon }) => (
-                  <Button
-                    key={kind}
-                    aria-current={activeCategory === kind ? 'page' : undefined}
-                    className={cn(
-                      'w-full justify-start px-2 text-left',
-                      activeCategory === kind && 'bg-surface-hover text-ink',
-                    )}
-                    onClick={() => openCategory(kind)}
+                (!mobile || root) && (
+                  <nav
+                    aria-label={t('ui.settings')}
+                    className="min-w-0 divide-y divide-line md:overflow-y-auto md:border-r md:border-line md:pr-3"
                   >
-                    <Icon aria-hidden size={16} />
-                    {t(label)}
-                  </Button>
-                ))
+                    {visibleCategories.map(({ kind, label, icon }) => (
+                      <SettingsNavigationRow
+                        key={kind}
+                        label={t(label)}
+                        icon={icon}
+                        current={!mobile && activeCategory === kind}
+                        chevron={mobile}
+                        onClick={() => openCategory(kind)}
+                      />
+                    ))}
+                  </nav>
+                )
               }
             >
               {renderContent(page, index)}
@@ -142,13 +185,7 @@ export function SettingsDialog({
     let content: ReactNode;
     switch (page.kind) {
       case 'root':
-        content = mobile ? (
-          <nav aria-label={t('ui.settings')} className="divide-y divide-line">
-            {visibleCategories.map(({ kind, label }) => (
-              <SettingsLink key={kind} label={t(label)} open={() => openCategory(kind)} />
-            ))}
-          </nav>
-        ) : (
+        content = !mobile && (
           <GeneralSettings
             openUpdates={() =>
               setPages(([root]) => [root, { kind: 'general' }, { kind: 'update' }])
@@ -296,6 +333,7 @@ function SettingsSurface({
   return (
     <Modal
       layout="page"
+      className="max-md:border-0"
       covered={covered}
       hidden={covered && !mobile}
       skipEnter={skipEnter}
@@ -321,16 +359,16 @@ function SettingsSurface({
     >
       <div
         className={cn(
-          'grid h-full min-h-0 pt-3',
-          !mobile && 'grid-cols-[170px_minmax(0,1fr)] gap-5',
+          'pt-4',
+          !mobile && 'grid h-full min-h-0 grid-cols-[190px_minmax(0,1fr)] gap-5 pt-5',
         )}
       >
-        {!mobile && (
-          <nav className="overflow-y-auto border-r border-line pr-3" aria-label={t('ui.settings')}>
-            {navigation}
-          </nav>
+        {navigation}
+        {(!mobile || subpage) && (
+          <section className={cn('min-w-0 px-1 pb-1', !mobile && 'min-h-0 overflow-y-auto')}>
+            {children}
+          </section>
         )}
-        <section className="min-h-0 min-w-0 overflow-y-auto px-1 pb-1">{children}</section>
       </div>
     </Modal>
   );
@@ -369,7 +407,7 @@ function pageTitle(page: SettingsPage) {
 function GeneralSettings({ openUpdates }: { openUpdates: () => void }) {
   const presentation = usePresentation();
   return (
-    <>
+    <div className="space-y-5">
       <SettingsGroup title={t('settings.preferences')}>
         <SettingsRow title={t('ui.appearance')} description={t('settings.appearanceDescription')}>
           <ChoiceSelect
@@ -394,9 +432,14 @@ function GeneralSettings({ openUpdates }: { openUpdates: () => void }) {
           />
         </SettingsRow>
       </SettingsGroup>
-
-      {platform().update && <SettingsLink label={t('settings.update')} open={openUpdates} />}
-    </>
+      {platform().update && (
+        <SettingsNavigationRow
+          label={t('settings.update')}
+          icon={RefreshCw}
+          onClick={openUpdates}
+        />
+      )}
+    </div>
   );
 }
 

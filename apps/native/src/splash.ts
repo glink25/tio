@@ -4,7 +4,9 @@ export function reportMobileStartup(status: 'ready' | 'failed') {
   if (!import.meta.env.VITE_TIO_NATIVE_SPLASH) return;
 
   const report = () => {
-    void invoke('mobile_startup', { status }).catch((error: unknown) => {
+    const dark =
+      status === 'ready' ? document.documentElement.classList.contains('dark') : undefined;
+    void invoke('mobile_startup', { status, dark }).catch((error: unknown) => {
       console.warn('Native startup state unavailable', error);
     });
   };

@@ -4,17 +4,28 @@ import WebKit
 @MainActor
 private final class StartupOverlay: UIView {
     private static let startupTag = 0x54494F
+    private static var startupBackground: UIColor {
+        UIColor(named: "TioStartupBackground") ?? .systemBackground
+    }
     private let dot = UIImageView(image: UIImage(named: "TioStartupDot")?.withRenderingMode(.alwaysTemplate))
     private let symbol = UIImageView(image: UIImage(named: "TioStartupSymbol")?.withRenderingMode(.alwaysTemplate))
     private let failureLabel = UILabel()
     private let retry = UIButton(configuration: .bordered())
     private weak var webView: WKWebView?
+    private let scrollBackground: UIColor?
     private var timeout: DispatchWorkItem?
     private var ready = false
 
     static func attach(to webView: WKWebView) {
         guard webView.viewWithTag(startupTag) == nil else { return }
-        let overlay = StartupOverlay(webView: webView)
+        let background = startupBackground
+        webView.window?.backgroundColor = background
+        webView.superview?.backgroundColor = background
+        webView.backgroundColor = background
+        let scrollView = webView.scrollView
+        let previousScrollBackground = scrollView.backgroundColor
+        scrollView.backgroundColor = background
+        let overlay = StartupOverlay(webView: webView, scrollBackground: previousScrollBackground)
         overlay.tag = startupTag
         overlay.translatesAutoresizingMaskIntoConstraints = false
         webView.addSubview(overlay)
@@ -27,17 +38,18 @@ private final class StartupOverlay: UIView {
         overlay.start()
     }
 
-    static func finish(in webView: WKWebView, ready: Bool) {
+    static func finish(in webView: WKWebView, ready: Bool, dark: Bool?) {
         guard let overlay = webView.viewWithTag(startupTag) as? StartupOverlay else { return }
-        if ready { overlay.dismiss() }
+        if ready { overlay.dismiss(dark: dark) }
         else { overlay.fail() }
     }
 
-    private init(webView: WKWebView) {
+    private init(webView: WKWebView, scrollBackground: UIColor?) {
         self.webView = webView
+        self.scrollBackground = scrollBackground
         super.init(frame: .zero)
         accessibilityViewIsModal = true
-        backgroundColor = UIColor(named: "TioStartupBackground") ?? .systemBackground
+        backgroundColor = Self.startupBackground
         let ink = UIColor(named: "TioStartupInk") ?? .label
         for image in [symbol, dot] {
             image.contentMode = .scaleAspectFit
@@ -118,12 +130,14 @@ private final class StartupOverlay: UIView {
         UIAccessibility.post(notification: .layoutChanged, argument: failureLabel)
     }
 
-    private func dismiss() {
+    private func dismiss(dark: Bool?) {
         guard !ready else { return }
         ready = true
         timeout?.cancel()
         stopDot()
-        if UIAccessibility.isReduceMotionEnabled { removeFromSuperview() }
+        webView?.scrollView.backgroundColor = scrollBackground
+        let changesAppearance = dark.map { $0 != (traitCollection.userInterfaceStyle == .dark) } ?? false
+        if UIAccessibility.isReduceMotionEnabled || changesAppearance { removeFromSuperview() }
         else {
             UIView.animate(withDuration: 0.16, animations: { self.alpha = 0 }) { _ in
                 self.removeFromSuperview()
@@ -142,6 +156,7 @@ func tioShowStartup(_ pointer: UnsafeRawPointer) {
 
 @MainActor
 @_cdecl("tio_finish_startup")
-func tioFinishStartup(_ pointer: UnsafeRawPointer, _ ready: Bool) {
-    StartupOverlay.finish(in: Unmanaged<WKWebView>.fromOpaque(pointer).takeUnretainedValue(), ready: ready)
+func tioFinishStartup(_ pointer: UnsafeRawPointer, _ ready: Bool, _ appearance: Int32) {
+    let webView = Unmanaged<WKWebView>.fromOpaque(pointer).takeUnretainedValue()
+    StartupOverlay.finish(in: webView, ready: ready, dark: appearance < 0 ? nil : appearance == 1)
 }

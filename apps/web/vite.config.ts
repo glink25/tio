@@ -14,6 +14,13 @@ export default defineConfig({
     {
       name: 'tio-boot-logo',
       transformIndexHtml(html) {
+        html = html.replace(
+          '<!--tio-startup-theme-->',
+          readFileSync(
+            new URL('../../packages/app/src/brand/startup-theme.html', import.meta.url),
+            'utf8',
+          ),
+        );
         return html.replace(
           '<!--tio-boot-logo-->',
           readFileSync(new URL('../../packages/app/src/brand/logo.svg', import.meta.url), 'utf8'),

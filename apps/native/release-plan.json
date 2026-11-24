@@ -1,30 +1,30 @@
 {
   "format": 1,
-  "revision": 1012,
-  "hostBuild": 1012,
-  "targets": ["windows-direct"],
+  "revision": 1013,
+  "hostBuild": 1013,
+  "targets": ["ios-store", "macos-direct", "windows-direct", "linux-direct", "android-play"],
   "compatibility": {
     "storage": "unchanged",
-    "bridge": "breaking",
-    "reason": "The frontend requires the native window registry, per-window lock ownership, mobile startup handoff and coordinated Android modal Back handling."
+    "bridge": "compatible",
+    "reason": "The mobile startup handoff accepts an optional appearance value while preserving the existing ready and failed states."
   },
   "storeNotes": {
     "ios-store": {
-      "en-US": "Open workspaces in multiple iPad windows, use the reorganized settings, and start with a new launch screen.",
-      "zh-Hans": "支持在 iPad 上通过多个窗口打开工作空间，重新组织设置，并更新启动界面。"
+      "en-US": "Use a simpler settings layout, see your preferred appearance during startup, and keep focused fields visible when the keyboard opens.",
+      "zh-Hans": "简化设置布局，使启动界面匹配外观偏好，并在键盘弹出时保持输入项可见。"
     },
     "android-play": {
-      "en-US": "A new launch screen, reorganized settings, and improved Back navigation that protects unsaved settings.",
-      "zh-CN": "更新启动界面和设置布局，改进返回操作，保护尚未保存的设置。"
+      "en-US": "Use a simpler settings layout, see your preferred appearance during startup, and keep focused fields visible when the keyboard opens.",
+      "zh-CN": "简化设置布局，使启动界面匹配外观偏好，并在键盘弹出时保持输入项可见。"
     },
     "macos-direct": {
-      "en-US": "Updated window controls and settings, with improved workspace window and synchronization handling.",
-      "zh-Hans": "更新窗口控件和设置，改进工作空间窗口管理与同步。"
+      "en-US": "Simplified settings navigation and made the startup screen follow your appearance preference.",
+      "zh-Hans": "简化设置导航，使启动界面匹配外观偏好。"
     }
   },
   "forceHost": [],
   "apple": {
-    "intent": "review-required",
-    "reason": "iPad multi-window, native startup and reorganized settings introduce new app behavior."
+    "intent": "existing-behavior",
+    "reason": "The changes refine existing settings, startup appearance and keyboard positioning without adding iOS features."
   }
 }

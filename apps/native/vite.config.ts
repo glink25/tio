@@ -35,6 +35,13 @@ export default defineConfig(({ mode }) => {
       {
         name: 'tio-boot-logo',
         transformIndexHtml(html) {
+          html = html.replace(
+            '<!--tio-startup-theme-->',
+            readFileSync(
+              new URL('../../packages/app/src/brand/startup-theme.html', import.meta.url),
+              'utf8',
+            ),
+          );
           if (mobilePlatform)
             return html
               .replace(/\s*<!-- web-boot -->[\s\S]*?<!-- \/web-boot -->/g, '')

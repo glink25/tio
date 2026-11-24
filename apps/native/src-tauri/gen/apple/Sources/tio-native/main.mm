@@ -20,8 +20,8 @@ extern "C" void tio_register_foreground();
 extern "C" bool tio_is_active();
 extern "C" void tio_set_foreground_reader(bool (*)(void));
 extern "C" void tio_show_startup(void *);
-extern "C" void tio_finish_startup(void *, bool);
-extern "C" void tio_register_startup(void (*)(void *), void (*)(void *, bool));
+extern "C" void tio_finish_startup(void *, bool, int32_t);
+extern "C" void tio_register_startup(void (*)(void *), void (*)(void *, bool, int32_t));
 
 extern "C" bool tio_supports_ipad_windows();
 extern "C" bool tio_focus_scene(const char *);

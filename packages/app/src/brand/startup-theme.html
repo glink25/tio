@@ -1,0 +1,36 @@
+<style>
+  :root {
+    --tio-startup-background: #fff;
+    --tio-startup-ink: #111;
+    background: var(--color-panel, var(--tio-startup-background));
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-tio-startup-theme='light']) {
+      --tio-startup-background: #191919;
+      --tio-startup-ink: #eee;
+      color-scheme: dark;
+    }
+  }
+  :root[data-tio-startup-theme='dark'] {
+    --tio-startup-background: #191919;
+    --tio-startup-ink: #eee;
+    color-scheme: dark;
+  }
+</style>
+<script>
+  (() => {
+    const root = document.documentElement;
+    let theme;
+    try {
+      theme = JSON.parse(localStorage.getItem('tio.presentation'))?.theme;
+    } catch {
+      /* Theme storage is optional. */
+    }
+    if (theme === 'light' || theme === 'dark') root.dataset.tioStartupTheme = theme;
+    root.classList.toggle(
+      'dark',
+      theme === 'dark' || (theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches),
+    );
+  })();
+</script>

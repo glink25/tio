@@ -91,6 +91,7 @@ export function Modal({
   onPanelReady,
   covered = false,
   hidden = false,
+  className,
 }: {
   leading?: ReactNode;
   titleRef?: Ref<HTMLHeadingElement>;
@@ -114,6 +115,7 @@ export function Modal({
   onPanelReady?: () => void;
   covered?: boolean;
   hidden?: boolean;
+  className?: string;
 }) {
   const t = useT();
   const open = useOverlayOpen();
@@ -133,7 +135,7 @@ export function Modal({
     sidebar: sheet,
     page: mobilePlacement !== 'center' && (wide || layout !== 'default'),
   });
-  const position = useMobileDialogPosition();
+  useMobileDialogPosition(panelMotion.element, open && !covered);
   const interaction = useOverlayInteraction(
     open && !covered,
     () => dismissOnOutside && requestClose(),
@@ -180,9 +182,11 @@ export function Modal({
             data-wide={wide || undefined}
             data-layout={layout}
             data-headerless={hideHeader || undefined}
-            style={position}
             aria-describedby={undefined}
-            className="tio-dialog fixed z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border border-line bg-panel text-ink shadow-xl outline-none"
+            className={cn(
+              'tio-dialog fixed z-50 flex min-h-0 min-w-0 flex-col overflow-hidden border border-line bg-panel text-ink shadow-xl outline-none',
+              className,
+            )}
           >
             {hideHeader ? (
               <Dialog.Title className="sr-only">{title}</Dialog.Title>
@@ -260,10 +264,10 @@ export function Drawer({
   closeLabel?: string;
 }) {
   const t = useT();
-  const position = useMobileDialogPosition();
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const open = useOverlayOpen();
   const panelMotion = useModalSwipe({ open, close, page: true });
+  useMobileDialogPosition(panelMotion.element, open);
   useOverlayBack(close, open);
   const { ref: attachInteraction, ...interaction } = useOverlayInteraction(open, close);
   const attach = useCallback(
@@ -291,7 +295,6 @@ export function Drawer({
           <Dialog.Overlay className="tio-overlay fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
           <Dialog.Content
             inert={!open || undefined}
-            style={position}
             {...interaction}
             ref={attach}
             data-tio-swipe-panel=""
@@ -361,6 +364,7 @@ function useModalSwipe({
   });
   return {
     layer: attach,
+    element: layer,
     managed: swipe,
     motion: sidebar || swipe ? side : undefined,
     nativeNarrow: native && narrow,

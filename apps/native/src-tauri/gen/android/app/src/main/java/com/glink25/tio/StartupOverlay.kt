@@ -3,6 +3,7 @@ package com.glink25.tio
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.app.Activity
+import android.content.res.Configuration
 import android.content.Context
 import android.os.Build
 import android.os.Handler
@@ -102,7 +103,7 @@ internal class StartupOverlay(private val activity: Activity) {
         armTimeout()
     }
 
-    fun finish(success: Boolean) {
+    fun finish(success: Boolean, dark: Boolean?) {
         val surface = overlay ?: return
         if (ready) return
         if (!success) {
@@ -117,7 +118,9 @@ internal class StartupOverlay(private val activity: Activity) {
                 ready = true
                 handler.removeCallbacks(timedOut)
                 stopDot()
-                if (reduceMotion) {
+                val nightMode = activity.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                val changesAppearance = dark != null && dark != (nightMode == Configuration.UI_MODE_NIGHT_YES)
+                if (reduceMotion || changesAppearance) {
                     remove(surface)
                 } else {
                     surface.animate().alpha(0f).setDuration(160).withEndAction { remove(surface) }

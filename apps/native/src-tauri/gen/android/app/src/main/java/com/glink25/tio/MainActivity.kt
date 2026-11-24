@@ -15,6 +15,7 @@ class MainActivity : TauriActivity() {
 
   override fun onWebViewCreate(webView: WebView) {
     super.onWebViewCreate(webView)
+    webView.setBackgroundColor(getColor(R.color.tio_startup_background))
     startup.attach(webView)
     webView.settings.setSupportZoom(false)
     webBack?.remove()
@@ -53,5 +54,5 @@ class MainActivity : TauriActivity() {
     super.onDestroy()
   }
 
-  fun finishStartup(ready: Boolean) = startup.finish(ready)
+  fun finishStartup(ready: Boolean, dark: Boolean?) = startup.finish(ready, dark)
 }
