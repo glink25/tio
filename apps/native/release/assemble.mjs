@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFile, mkdir, readdir, copyFile, writeFile } from 'node:fs/promises';
+import { readFile, mkdir, readdir, copyFile, lstat, writeFile } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -25,11 +25,11 @@ function run(command, args) {
 if (plan.mode === 'host' && !['ios-store'].includes(plan.channel)) {
   const source = values.input;
   const files = [];
-  async function collect(directory) {
+  async function collect(directory, recursive = true) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       if (entry.isSymbolicLink()) throw new Error('Artifact links forbidden');
       const path = join(directory, entry.name);
-      if (entry.isDirectory() && !entry.name.endsWith('.app')) await collect(path);
+      if (recursive && entry.isDirectory() && !entry.name.endsWith('.app')) await collect(path);
       else if (
         entry.isFile() &&
         entry.name !== 'runtime-source.tar.gz' &&
@@ -38,7 +38,17 @@ if (plan.mode === 'host' && !['ios-store'].includes(plan.channel)) {
         files.push(path);
     }
   }
-  await collect(source);
+  if (plan.channel === 'linux-direct') {
+    // Tauri puts finished packages beside its AppImage build tree, which contains symlinks.
+    for (const name of ['deb', 'appimage']) {
+      const directory = join(source, name);
+      if (!(await lstat(directory)).isDirectory())
+        throw new Error('Expected a bundle directory: ' + name);
+      await collect(directory, false);
+    }
+  } else {
+    await collect(source);
+  }
   if (!files.length) throw new Error('No native artifacts');
   const names = new Set();
   for (const file of files) {

@@ -1,8 +1,8 @@
 {
   "format": 1,
-  "revision": 1009,
-  "hostBuild": 1009,
-  "targets": ["ios-store", "macos-direct", "windows-direct", "linux-direct", "android-play", "web"],
+  "revision": 1010,
+  "hostBuild": 1010,
+  "targets": ["linux-direct"],
   "web": {
     "deployment": "tag"
   },
@@ -25,7 +25,7 @@
       "zh-Hans": "更新窗口控件和设置，改进工作空间窗口管理与同步。"
     }
   },
-  "forceHost": ["ios-store"],
+  "forceHost": [],
   "apple": {
     "intent": "review-required",
     "reason": "iPad multi-window, native startup and reorganized settings introduce new app behavior."
