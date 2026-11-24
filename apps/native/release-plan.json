@@ -1,8 +1,8 @@
 {
   "format": 1,
-  "revision": 1010,
-  "hostBuild": 1010,
-  "targets": ["linux-direct"],
+  "revision": 1011,
+  "hostBuild": 1011,
+  "targets": ["windows-direct"],
   "compatibility": {
     "storage": "unchanged",
     "bridge": "breaking",
