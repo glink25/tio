@@ -1,28 +1,45 @@
-import { id, object, textBlock, visible, type TioObject } from '@tio/core';
+import { id, object, textBlock, visible, type Field, type TioObject } from '@tio/core';
 
-export function starterWorkspace(name: string, language: 'zh' | 'en' = 'zh'): TioObject[] {
+const defaultWorkspaceCopy = {
+  'common.untitled': '未命名',
+  'workspace.starterIntro': '留一点空间，记录你的想法。',
+  'workspace.starterLead': '从这里开始。',
+  'workspace.starterTitle': '开始',
+  'workspace.starterInsert': '输入 / 添加内容。',
+  'workspace.starterStyle': '选中文字，试试不同样式。',
+  'workspace.databaseTitleField': '名称',
+  'workspace.databaseTodo': '待开始',
+  'workspace.databaseDoing': '进行中',
+  'workspace.databaseDone': '已完成',
+  'workspace.databaseDefaultView': '默认视图',
+  'workspace.newDatabase': '新数据库',
+  'workspace.databaseStatus': '状态',
+};
+type WorkspaceCopy = (key: keyof typeof defaultWorkspaceCopy) => string;
+const workspaceCopy: WorkspaceCopy = (key) => defaultWorkspaceCopy[key];
+
+export function starterWorkspace(name: string, copy: WorkspaceCopy = workspaceCopy): TioObject[] {
   if (!name.trim()) throw new Error('Workspace name is required');
-  const en = language === 'en';
   const workspaceId = id('workspace');
-  const intro = textBlock(en ? 'A little space for your ideas.' : '留一点空间，记录你的想法。');
+  const intro = textBlock(copy('workspace.starterIntro'));
   intro.content = [
-    { type: 'text', text: en ? 'Start here.' : '从这里开始。', styles: { bold: true } },
+    { type: 'text', text: copy('workspace.starterLead'), styles: { bold: true } },
     ...(intro.content as unknown[]),
   ];
   return [
     object('workspace', workspaceId, { id: workspaceId, name: name.trim() }),
     object('page', workspaceId, {
-      title: en ? 'Getting started' : '开始',
+      title: copy('workspace.starterTitle'),
       parentId: null,
       order: 0,
       blocks: [
         intro,
         {
-          ...textBlock(en ? 'Type / to add content.' : '输入 / 添加内容。'),
+          ...textBlock(copy('workspace.starterInsert')),
           type: 'bulletListItem',
         },
         {
-          ...textBlock(en ? 'Select text to change its style.' : '选中文字，试试不同样式。'),
+          ...textBlock(copy('workspace.starterStyle')),
           type: 'bulletListItem',
         },
       ],
@@ -39,41 +56,53 @@ export function search(objects: TioObject[], query: string) {
       JSON.stringify([o.title, o.name, o.properties, o.blocks]).toLocaleLowerCase().includes(q),
   );
 }
-export function newPage(workspaceId: string, parentId: string | null = null): TioObject {
+export function newPage(
+  workspaceId: string,
+  parentId: string | null = null,
+  copy: WorkspaceCopy = workspaceCopy,
+): TioObject {
   return object('page', workspaceId, {
-    title: '未命名',
+    title: copy('common.untitled'),
     parentId,
     blocks: [textBlock('')],
   });
 }
-export function newDatabase(workspaceId: string, parentId: string | null = null): TioObject[] {
-  const db = object('database', workspaceId, {
-    name: '新数据库',
-    parentId,
-    fields: [
-      { id: id('field'), name: '名称', type: 'title' },
-      {
-        id: id('field'),
-        name: '状态',
-        type: 'status',
-        options: [
-          { id: id('option'), label: '待开始', color: 'gray', group: 'todo' },
-          { id: id('option'), label: '进行中', color: 'blue', group: 'doing' },
-          { id: id('option'), label: '已完成', color: 'green', group: 'done' },
-        ],
-      },
+export function newDatabase(
+  workspaceId: string,
+  parentId: string | null = null,
+  copy: WorkspaceCopy = workspaceCopy,
+): TioObject[] {
+  const title: Field = {
+    id: id('field'),
+    name: copy('workspace.databaseTitleField'),
+    type: 'title',
+  };
+  const status: Field = {
+    id: id('field'),
+    name: copy('workspace.databaseStatus'),
+    type: 'status',
+    options: [
+      { id: id('option'), label: copy('workspace.databaseTodo'), color: 'gray', group: 'todo' },
+      { id: id('option'), label: copy('workspace.databaseDoing'), color: 'blue', group: 'doing' },
+      { id: id('option'), label: copy('workspace.databaseDone'), color: 'green', group: 'done' },
     ],
+  };
+  const fields = [title, status];
+  const db = object('database', workspaceId, {
+    name: copy('workspace.newDatabase'),
+    parentId,
+    fields,
   });
   return [
     db,
     object('databaseView', workspaceId, {
       databaseId: db.id,
-      name: '默认视图',
+      name: copy('workspace.databaseDefaultView'),
       layout: 'table',
-      visibleFieldIds: db.fields!.map((f) => f.id),
+      visibleFieldIds: fields.map((field) => field.id),
       filters: [],
       sorts: [],
-      groupBy: db.fields![1].id,
+      groupBy: status.id,
     }),
   ];
 }

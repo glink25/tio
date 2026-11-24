@@ -18,7 +18,7 @@ public struct MobileResourcePack: Decodable, Sendable {
     }
 
     public static func verified(_ data: Data, publicKey: Data, channel: String, hostABI: Int,
-                                activeRevision: Int, bundledKeys: Set<String>) throws -> Self {
+                                activeRevision: Int, bundledKeys: [String: Set<String>]) throws -> Self {
         let decoder = JSONDecoder()
         let envelope = try decoder.decode(Envelope.self, from: data)
         let key = try Curve25519.Signing.PublicKey(rawRepresentation: publicKey)
@@ -31,7 +31,8 @@ public struct MobileResourcePack: Decodable, Sendable {
         guard pack.abi == hostABI else { throw UpdateError.incompatibleHost }
         guard pack.revision > activeRevision else { throw UpdateError.staleRevision }
         guard pack.translations.allSatisfy({ language, entries in
-            ["en", "zh"].contains(language) && Set(entries.keys).isSubset(of: bundledKeys)
+            guard let keys = bundledKeys[language] else { return false }
+            return Set(entries.keys).isSubset(of: keys)
         }) else { throw UpdateError.unsupportedResource }
         return pack
     }

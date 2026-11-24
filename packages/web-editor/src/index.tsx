@@ -8,10 +8,11 @@ export type {
 import { HostError, type Domain, type AccessPolicy, type WorkspaceRepository } from '@tio/core';
 import { EditorSchemaContext, defaultEditorSchema, type EditorSchema } from '@tio/editor-blocknote';
 import { BridgeRepository, type HostContext, type Transport } from '@tio/host-protocol';
-import { createLanguageInstance, I18nextProvider, type Language } from '@tio/i18n';
+import { createLanguageInstance, I18nextProvider, initialLanguage, type Language } from '@tio/i18n';
 import {
   AssetPolicyContext,
   ThemeContext,
+  ModalProvider,
   PortalContext,
   Notifications,
   NotificationContext,
@@ -57,18 +58,22 @@ function Environment({
           lang={locale}
           style={{ colorScheme: theme }}
         >
-          <PortalContext.Provider value={container ?? undefined}>
-            {container && (
-              <NotificationContext.Provider value={notificationId}>
-                <Notifications />
-                <EditorSchemaContext.Provider value={extensions ?? { schema: defaultEditorSchema }}>
-                  <ViewExtensionsContext.Provider value={views ?? {}}>
-                    {children}
-                  </ViewExtensionsContext.Provider>
-                </EditorSchemaContext.Provider>
-              </NotificationContext.Provider>
-            )}
-          </PortalContext.Provider>
+          <ModalProvider>
+            <PortalContext.Provider value={container ?? undefined}>
+              {container && (
+                <NotificationContext.Provider value={notificationId}>
+                  <Notifications />
+                  <EditorSchemaContext.Provider
+                    value={extensions ?? { schema: defaultEditorSchema }}
+                  >
+                    <ViewExtensionsContext.Provider value={views ?? {}}>
+                      {children}
+                    </ViewExtensionsContext.Provider>
+                  </EditorSchemaContext.Provider>
+                </NotificationContext.Provider>
+              )}
+            </PortalContext.Provider>
+          </ModalProvider>
         </div>
       </ThemeContext.Provider>
     </I18nextProvider>
@@ -135,7 +140,7 @@ export async function mountEditor(
   let target = options.target;
   let presentation: Presentation = {
     theme: 'dark',
-    locale: 'zh',
+    locale: initialLanguage,
     readOnly: false,
     ...options.presentation,
   };

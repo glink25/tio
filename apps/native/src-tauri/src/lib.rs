@@ -1,11 +1,15 @@
 mod catalog;
 mod clear_storage;
 mod credentials;
+#[cfg(desktop)]
+mod desktop_chrome;
 mod folder;
 mod frontend_update;
 #[cfg(mobile)]
 mod headless_io;
 mod host_update;
+#[cfg(target_os = "ios")]
+mod ipad_scenes;
 mod kernel_lease;
 mod process_lock;
 mod release_http;
@@ -13,17 +17,30 @@ mod release_index;
 #[cfg(target_os = "ios")]
 mod shortcuts;
 mod signed_update;
+#[cfg(mobile)]
+mod splash;
 mod updates;
+mod window_host;
+mod window_locks;
 mod workspace;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, _, _| {
+        window_host::focus_existing(app);
+    }));
+    let builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .manage(folder::FolderLocks::default())
-        .manage(process_lock::ProcessLocks::default());
+        .manage(process_lock::ProcessLocks::default())
+        .manage(window_host::Windows::default())
+        .manage(updates::ResourceBoot::default());
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(splash::android_plugin());
     let builder = if !tauri::is_dev() {
         builder.register_uri_scheme_protocol("tauri", |context, request| {
             frontend_update::serve(context.app_handle(), request)
@@ -40,26 +57,16 @@ pub fn run() {
             })
             .build(),
     );
-    #[cfg(not(target_os = "ios"))]
-    let builder = builder.on_page_load(|webview, event| {
-        if webview.label() == "main"
-            && matches!(event.event(), tauri::webview::PageLoadEvent::Started)
-        {
-            webview.state::<folder::FolderLocks>().reset();
-            webview.state::<process_lock::ProcessLocks>().reset();
-        }
-    });
-    #[cfg(target_os = "ios")]
-    let builder = builder.on_page_load(|webview, event| {
-        if webview.label() == "main"
-            && matches!(event.event(), tauri::webview::PageLoadEvent::Started)
-        {
-            shortcuts::reset_foreground();
-            webview.state::<process_lock::ProcessLocks>().reset();
-        }
-    });
     builder
+        .on_page_load(|webview, event| {
+            if matches!(event.event(), tauri::webview::PageLoadEvent::Started) {
+                window_host::reloading(webview.app_handle(), webview.label());
+            }
+        })
+        .on_window_event(window_host::on_event)
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            desktop_chrome::install_app_menu(app.handle())?;
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             if !env!("TIO_COMPILED_UPDATER_KEY").is_empty() {
                 app.handle().plugin(
@@ -78,14 +85,21 @@ pub fn run() {
                     show_ios_app(app.handle())?;
                 }
             }
-            #[cfg(target_os = "android")]
-            for config in &app.config().app.windows {
-                tauri::WebviewWindowBuilder::from_config(app.handle(), config)?.build()?;
-            }
+            #[cfg(not(target_os = "ios"))]
+            window_host::initial(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             catalog::catalog,
+            window_host::window_host,
+            #[cfg(desktop)]
+            desktop_chrome::desktop_chrome_state,
+            #[cfg(desktop)]
+            desktop_chrome::desktop_chrome_title,
+            #[cfg(mobile)]
+            splash::mobile_startup,
+            #[cfg(target_os = "android")]
+            splash::set_overlay_back,
             release_index::update_status,
             clear_storage::clear_host_storage,
             frontend_update::frontend_update,
@@ -100,8 +114,38 @@ pub fn run() {
             #[cfg(target_os = "ios")]
             shortcuts::apple_folder
         ])
-        .run(tauri::generate_context!())
-        .expect("failed to run Tio");
+        .build(tauri::generate_context!())
+        .expect("failed to build Tio host")
+        .run(|app, event| match event {
+            #[cfg(desktop)]
+            tauri::RunEvent::ExitRequested { api, code, .. }
+                if code != Some(tauri::RESTART_EXIT_CODE) && !app.webview_windows().is_empty() =>
+            {
+                api.prevent_exit();
+                for window in app.webview_windows().into_values() {
+                    window_host::request_close(&window);
+                }
+            }
+            #[cfg(target_os = "macos")]
+            tauri::RunEvent::Reopen {
+                has_visible_windows: false,
+                ..
+            } => {
+                if let Err(error) = window_host::initial(app) {
+                    eprintln!("Tio window unavailable: {error}");
+                }
+            }
+            #[cfg(target_os = "ios")]
+            tauri::RunEvent::SceneRequested { options, .. } => {
+                let requested = ipad_scenes::requested_label(&*options as *const _ as *const _);
+                if let Err(error) = window_host::system_scene(app, requested) {
+                    eprintln!("Tio scene unavailable: {error}");
+                }
+            }
+            _ => {
+                let _ = app;
+            }
+        });
 }
 
 #[cfg(target_os = "macos")]
@@ -130,9 +174,7 @@ fn show_ios_app(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>
     if app.try_state::<frontend_update::FrontendState>().is_none() {
         app.manage(frontend_update::open(app).map_err(std::io::Error::other)?);
     }
-    for config in &app.config().app.windows {
-        tauri::WebviewWindowBuilder::from_config(app, config)?.build()?;
-    }
+    window_host::initial(app)?;
     Ok(())
 }
 
@@ -146,5 +188,21 @@ pub extern "C" fn tio_activate_foreground() {
                 eprintln!("Tio foreground unavailable: {error}");
             }
         });
+    }
+}
+
+#[cfg(target_os = "ios")]
+#[no_mangle]
+pub unsafe extern "C" fn tio_scene_request_failed(label: *const std::ffi::c_char) {
+    if let (Some(app), Ok(label)) = (IOS_APP.get(), std::ffi::CStr::from_ptr(label).to_str()) {
+        window_host::scene_failed(app, label);
+    }
+}
+
+#[cfg(target_os = "ios")]
+#[no_mangle]
+pub unsafe extern "C" fn tio_scene_close_failed(label: *const std::ffi::c_char) {
+    if let (Some(app), Ok(label)) = (IOS_APP.get(), std::ffi::CStr::from_ptr(label).to_str()) {
+        window_host::scene_close_failed(app, label);
     }
 }

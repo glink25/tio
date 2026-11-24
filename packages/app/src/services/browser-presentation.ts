@@ -1,4 +1,4 @@
-import { i18n, setLanguage, type Language } from '@tio/i18n';
+import { i18n, initialLanguage, resolveLanguage, setLanguage, type Language } from '@tio/i18n';
 import { useSyncExternalStore } from 'react';
 type ThemePreference = 'light' | 'dark' | 'system';
 type Preference = {
@@ -11,7 +11,7 @@ type Presentation = Preference & { theme: 'light' | 'dark' };
 let state: Presentation = {
   themePreference: 'system',
   theme: 'light',
-  locale: 'zh',
+  locale: initialLanguage,
   readOnly: false,
   readingMode: window.matchMedia('(max-width: 767px)').matches,
 };
@@ -61,7 +61,7 @@ export function initializePresentation() {
   }
   setPresentation({
     themePreference: value.theme === 'dark' || value.theme === 'light' ? value.theme : 'system',
-    locale: value.locale === 'en' ? 'en' : 'zh',
+    locale: resolveLanguage(value.locale, initialLanguage),
     readingMode:
       typeof value.readingMode === 'boolean'
         ? value.readingMode

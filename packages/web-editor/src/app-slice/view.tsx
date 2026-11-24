@@ -1,5 +1,5 @@
 import { type Block, type TioObject } from '@tio/core';
-import { useTranslation } from '@tio/i18n';
+import { useT } from '@tio/i18n';
 import { OverlayPresence } from '@tio/ui';
 import { IconButton, cn } from '@tio/ui';
 import { Settings } from 'lucide-react';
@@ -24,8 +24,7 @@ export function AppSlice({
   block: Block;
   fullscreen?: boolean;
 }) {
-  const { i18n } = useTranslation();
-  const zh = i18n.language === 'zh';
+  const t = useT();
   const key = JSON.stringify([
     m.appSlice.namespace ?? 'local',
     page.workspaceId,
@@ -61,7 +60,7 @@ export function AppSlice({
           <span className="text-xs font-medium text-secondary">App Slice</span>
           <IconButton
             ref={trigger}
-            label={zh ? 'App Slice 设置' : 'App Slice settings'}
+            label={t('appSlice.settings')}
             className="p-1.5"
             onClick={() => setOpen(true)}
           >
@@ -84,7 +83,7 @@ export function AppSlice({
         />
       ) : (
         <div className="flex h-40 items-center justify-center text-sm text-muted">
-          {zh ? '已停止' : 'Stopped'}
+          {t('appSlice.stopped')}
         </div>
       )}
       <OverlayPresence>

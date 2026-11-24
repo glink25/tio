@@ -11,9 +11,9 @@ private final class FolderPicker: NSObject, UIDocumentPickerDelegate, UIAdaptive
     private let complete: (Result<URL, Error>) -> Void
     init(_ complete: @escaping (Result<URL, Error>) -> Void) { self.complete = complete }
 
-    static func show(_ complete: @escaping (Result<URL, Error>) -> Void) {
+    static func show(sceneID: String?, _ complete: @escaping (Result<URL, Error>) -> Void) {
         guard active == nil, var controller = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene })
-            .filter({ $0.activationState == .foregroundActive }).flatMap(\.windows).first(where: \.isKeyWindow)?.rootViewController
+            .filter({ $0.activationState == .foregroundActive && (sceneID == nil || $0.session.persistentIdentifier == sceneID) }).flatMap(\.windows).first(where: \.isKeyWindow)?.rootViewController
         else { complete(.failure(FolderBridgeError.unavailable)); return }
         while let presented = controller.presentedViewController { controller = presented }
         let delegate = FolderPicker(complete)
@@ -58,7 +58,8 @@ enum FolderAccess {
             guard !Thread.isMainThread else { throw FolderBridgeError.unavailable }
             let done = DispatchSemaphore(value: 0)
             var picked: Result<URL, Error>?
-            DispatchQueue.main.async { FolderPicker.show { picked = $0; done.signal() } }
+            let sceneID = request["scene"] as? String
+            DispatchQueue.main.async { FolderPicker.show(sceneID: sceneID) { picked = $0; done.signal() } }
             done.wait()
             let selection = try picked!.get()
             let grant = try AuthorizedFolder(selection: selection)

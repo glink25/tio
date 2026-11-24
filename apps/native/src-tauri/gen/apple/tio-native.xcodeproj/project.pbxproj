@@ -11,14 +11,17 @@
 		05847D8F59BE96EB411FE21C /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4D46E8F21D8882309D975F0 /* CoreGraphics.framework */; };
 		10D4C9CE426E4274C38DAA55 /* libapp.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 45EC1D3D7F010ED622E5290F /* libapp.a */; };
 		12EDC6117140E5194D904D13 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 79C7ED5DA05340147214163C /* Assets.xcassets */; };
+		1464BE9A9C2B34C1D8769B92 /* WindowScenes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4FF7EBB5574622AD2547C115 /* WindowScenes.swift */; };
 		19C614C7AB0A593B1A559025 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3C0888742757FC13CFF44792 /* Security.framework */; };
 		2D41B63F956D3F0FDC85C84F /* KernelLease.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D3E9A606F6C9CF1BA7B8B92 /* KernelLease.swift */; };
 		2E6E3FA65CF164187231CDD3 /* Carbon.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 41CEF54C11186B54B84CC207 /* Carbon.framework */; };
 		386AFE009DB9DDB1D939340F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = AB0F454A1DA0F8405540B52C /* LaunchScreen.storyboard */; };
+		3ABDAEB6577F7977051443EF /* StartupOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D8523DC7253285B73B8E1D0 /* StartupOverlay.swift */; };
 		497EE72C123D16DE4BEB20BC /* WebKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BE6EE05A4087DE5048D0E5F1 /* WebKit.framework */; };
 		4AE23218B57E86371A25FB41 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1867AA03C306CF7D4071B1C4 /* SystemConfiguration.framework */; };
 		4C302A195B7222F1A8E8FFDD /* CoreFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D17243772EF81CE870C88909 /* CoreFoundation.framework */; };
 		53D6544CAC34D94AABEBBE7E /* ApplicationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D32283A3AD289808AD0195A2 /* ApplicationServices.framework */; };
+		579207352FD06E8FB426B113 /* Startup.strings in Resources */ = {isa = PBXBuildFile; fileRef = 9333B41D7EEAA3D38A71FBDF /* Startup.strings */; };
 		5BA8594DF8E03041AC8DF6F1 /* AppKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A56036FE76CB437EB95A9504 /* AppKit.framework */; };
 		6016F3F4B1D05656B4382DC2 /* FolderJournal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2877CEE983E4BE86BE52834B /* FolderJournal.swift */; };
 		65237E49536726A3C6BB7F88 /* BackgroundIO.swift in Sources */ = {isa = PBXBuildFile; fileRef = B29A578BBFB1ECF8A656FA41 /* BackgroundIO.swift */; };
@@ -47,10 +50,12 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		029EEC6968FCF2038A3DB527 /* window_host.rs */ = {isa = PBXFileReference; path = window_host.rs; sourceTree = "<group>"; };
 		12D7044005C8BC4807A2F17D /* signed_update.rs */ = {isa = PBXFileReference; path = signed_update.rs; sourceTree = "<group>"; };
 		1867AA03C306CF7D4071B1C4 /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = System/Library/Frameworks/SystemConfiguration.framework; sourceTree = SDKROOT; };
 		2877CEE983E4BE86BE52834B /* FolderJournal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderJournal.swift; sourceTree = "<group>"; };
 		2D3E9A606F6C9CF1BA7B8B92 /* KernelLease.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KernelLease.swift; sourceTree = "<group>"; };
+		2D8523DC7253285B73B8E1D0 /* StartupOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StartupOverlay.swift; sourceTree = "<group>"; };
 		31126420AB0524ED066F2BC4 /* AppLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLifecycle.swift; sourceTree = "<group>"; };
 		36AFFC860214484A65107F63 /* release_index.rs */ = {isa = PBXFileReference; path = release_index.rs; sourceTree = "<group>"; };
 		38234BB6F084B4B1CE073DCE /* lib.rs */ = {isa = PBXFileReference; path = lib.rs; sourceTree = "<group>"; };
@@ -61,10 +66,14 @@
 		445208C7AECC53A41FB398E8 /* UIKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UIKit.framework; path = System/Library/Frameworks/UIKit.framework; sourceTree = SDKROOT; };
 		45EC1D3D7F010ED622E5290F /* libapp.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp.a; sourceTree = "<group>"; };
 		4C508459A886D3EBB8C45B0F /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
+		4FF7EBB5574622AD2547C115 /* WindowScenes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowScenes.swift; sourceTree = "<group>"; };
 		51A6AE2FB947946908C2A6DB /* release_http.rs */ = {isa = PBXFileReference; path = release_http.rs; sourceTree = "<group>"; };
+		5CCEAF5B3910DF477E322A93 /* desktop_chrome.rs */ = {isa = PBXFileReference; path = desktop_chrome.rs; sourceTree = "<group>"; };
 		5D1C319D1A9290A8E9F94283 /* shortcuts.rs */ = {isa = PBXFileReference; path = shortcuts.rs; sourceTree = "<group>"; };
 		5D80BA766C4185EE4A4C81B3 /* host_update.rs */ = {isa = PBXFileReference; path = host_update.rs; sourceTree = "<group>"; };
 		686C17515B5B89C43F7C3F39 /* updates.rs */ = {isa = PBXFileReference; path = updates.rs; sourceTree = "<group>"; };
+		6ACA70ACEA2092A457E52CD4 /* desktop_chrome_windows.rs */ = {isa = PBXFileReference; path = desktop_chrome_windows.rs; sourceTree = "<group>"; };
+		6B176E847A9BCDAA2DDF8B8C /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Startup.strings"; sourceTree = "<group>"; };
 		6ECEE658E88BF6015E83D79D /* MetalKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = MetalKit.framework; path = System/Library/Frameworks/MetalKit.framework; sourceTree = SDKROOT; };
 		71369AE545DA764D0EB8C8CB /* tio-native_iOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = "tio-native_iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		73F0D82CFDC86292C72E3770 /* frontend_update.rs */ = {isa = PBXFileReference; path = frontend_update.rs; sourceTree = "<group>"; };
@@ -73,6 +82,7 @@
 		7CB8D8DF7331814318316DF6 /* kernel_lease.rs */ = {isa = PBXFileReference; path = kernel_lease.rs; sourceTree = "<group>"; };
 		81279D5D4ABA49BF89FCD51F /* libapp_macos.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libapp_macos.a; sourceTree = "<group>"; };
 		88ACAF4E6807B5C5A96E8FCE /* clear_storage.rs */ = {isa = PBXFileReference; path = clear_storage.rs; sourceTree = "<group>"; };
+		99552A6986C521299011866B /* ipad_scenes.rs */ = {isa = PBXFileReference; path = ipad_scenes.rs; sourceTree = "<group>"; };
 		9E76EA9F99531D9B5E7E925E /* assets */ = {isa = PBXFileReference; lastKnownFileType = folder; path = assets; sourceTree = SOURCE_ROOT; };
 		A3B90C84FCA0BB6EAD01DF46 /* FolderAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderAccess.swift; sourceTree = "<group>"; };
 		A56036FE76CB437EB95A9504 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
@@ -87,10 +97,13 @@
 		B63D5945077A766A2D852EA4 /* main.rs */ = {isa = PBXFileReference; path = main.rs; sourceTree = "<group>"; };
 		BE6EE05A4087DE5048D0E5F1 /* WebKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WebKit.framework; path = System/Library/Frameworks/WebKit.framework; sourceTree = SDKROOT; };
 		C254A00E4BB18A03E185B035 /* main.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = main.mm; sourceTree = "<group>"; };
+		C4751D747C1C5B230570229C /* window_locks.rs */ = {isa = PBXFileReference; path = window_locks.rs; sourceTree = "<group>"; };
 		C495A91D07465BCECFCF64DD /* DocumentIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentIntents.swift; sourceTree = "<group>"; };
 		C55A4BF8DC5B4ECEF160FE94 /* tio-native_macOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "tio-native_macOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		C9FED354D25B6CBA83DE30C1 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Startup.strings; sourceTree = "<group>"; };
 		CEAB0A2CCBECC86177192BE1 /* process_lock.rs */ = {isa = PBXFileReference; path = process_lock.rs; sourceTree = "<group>"; };
 		CFF38EBCB2E15F69174B2C10 /* workspace.rs */ = {isa = PBXFileReference; path = workspace.rs; sourceTree = "<group>"; };
+		D025694E2976638D154785B6 /* splash.rs */ = {isa = PBXFileReference; path = splash.rs; sourceTree = "<group>"; };
 		D14AA58E9C16651ADF102C93 /* headless_io.rs */ = {isa = PBXFileReference; path = headless_io.rs; sourceTree = "<group>"; };
 		D17243772EF81CE870C88909 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
 		D18666549188123B39EF67B6 /* OSAKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = OSAKit.framework; path = System/Library/Frameworks/OSAKit.framework; sourceTree = SDKROOT; };
@@ -163,6 +176,7 @@
 				2356C8CE6BD95324785783F6 /* Externals */,
 				461869ACFDCB3B747C37F082 /* icons */,
 				AA896C10CD87A7BF390D3AAA /* Mac */,
+				F54E3B86D3248F203981715F /* Resources */,
 				855E0828595177B47260C5F1 /* Sources */,
 				65B5E5F180ED5D34C692DE50 /* src */,
 				29CAC246FDF99B3DDB013469 /* tio-native_iOS */,
@@ -221,10 +235,13 @@
 				EAC15B0CC620A5BABFF6B637 /* catalog.rs */,
 				88ACAF4E6807B5C5A96E8FCE /* clear_storage.rs */,
 				E05C5FBC6A5B210B245BAE74 /* credentials.rs */,
+				6ACA70ACEA2092A457E52CD4 /* desktop_chrome_windows.rs */,
+				5CCEAF5B3910DF477E322A93 /* desktop_chrome.rs */,
 				E967BD557C9EC3AFDCC50ACC /* folder.rs */,
 				73F0D82CFDC86292C72E3770 /* frontend_update.rs */,
 				D14AA58E9C16651ADF102C93 /* headless_io.rs */,
 				5D80BA766C4185EE4A4C81B3 /* host_update.rs */,
+				99552A6986C521299011866B /* ipad_scenes.rs */,
 				7CB8D8DF7331814318316DF6 /* kernel_lease.rs */,
 				38234BB6F084B4B1CE073DCE /* lib.rs */,
 				B63D5945077A766A2D852EA4 /* main.rs */,
@@ -233,7 +250,10 @@
 				36AFFC860214484A65107F63 /* release_index.rs */,
 				5D1C319D1A9290A8E9F94283 /* shortcuts.rs */,
 				12D7044005C8BC4807A2F17D /* signed_update.rs */,
+				D025694E2976638D154785B6 /* splash.rs */,
 				686C17515B5B89C43F7C3F39 /* updates.rs */,
+				029EEC6968FCF2038A3DB527 /* window_host.rs */,
+				C4751D747C1C5B230570229C /* window_locks.rs */,
 				CFF38EBCB2E15F69174B2C10 /* workspace.rs */,
 			);
 			name = src;
@@ -286,6 +306,8 @@
 				A6C4094034EB7183C0D6CA5D /* ReleaseHTTP.swift */,
 				AE346E14496B6FA69EA55398 /* ShortcutKernel.swift */,
 				A56386F2B5B371BF47A194E2 /* ShortcutsBridge.h */,
+				2D8523DC7253285B73B8E1D0 /* StartupOverlay.swift */,
+				4FF7EBB5574622AD2547C115 /* WindowScenes.swift */,
 				017C3F9BD804780D54F5D71A /* bindings */,
 			);
 			path = "tio-native";
@@ -308,25 +330,33 @@
 			path = Mac;
 			sourceTree = "<group>";
 		};
-		"TEMP_023214B1-53F8-4865-96CA-D235148B48DD" /* macos */ = {
+		F54E3B86D3248F203981715F /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				9333B41D7EEAA3D38A71FBDF /* Startup.strings */,
 			);
-			path = macos;
+			path = Resources;
 			sourceTree = "<group>";
 		};
-		"TEMP_976CB7D2-FE33-4B19-BE89-8408D5F2286A" /* x86_64 */ = {
+		"TEMP_0E899935-5A32-4DEA-98F3-829BD322D6AE" /* x86_64 */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = x86_64;
 			sourceTree = "<group>";
 		};
-		"TEMP_ECEF6482-1E12-4F96-AD0A-994BD59BC502" /* arm64 */ = {
+		"TEMP_1C7CFA98-C795-493D-9E32-B249B79F73F2" /* arm64 */ = {
 			isa = PBXGroup;
 			children = (
 			);
 			path = arm64;
+			sourceTree = "<group>";
+		};
+		"TEMP_5658B94D-65F4-4863-9185-21C7866C824C" /* macos */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = macos;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -398,6 +428,7 @@
 			knownRegions = (
 				Base,
 				en,
+				"zh-Hans",
 			);
 			mainGroup = 1C9F035EF5712A54CE90B9CF;
 			minimizedProjectReferenceProxies = 1;
@@ -418,6 +449,7 @@
 			files = (
 				12EDC6117140E5194D904D13 /* Assets.xcassets in Resources */,
 				386AFE009DB9DDB1D939340F /* LaunchScreen.storyboard in Resources */,
+				579207352FD06E8FB426B113 /* Startup.strings in Resources */,
 				781CBAAC257428CF69500CC0 /* assets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -490,6 +522,8 @@
 				2D41B63F956D3F0FDC85C84F /* KernelLease.swift in Sources */,
 				BDB067CC5893F124BA9FA345 /* ReleaseHTTP.swift in Sources */,
 				D675D2097C7C43784684F9E7 /* ShortcutKernel.swift in Sources */,
+				3ABDAEB6577F7977051443EF /* StartupOverlay.swift in Sources */,
+				1464BE9A9C2B34C1D8769B92 /* WindowScenes.swift in Sources */,
 				A9F518C99948517033C4135A /* main.mm in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -503,6 +537,18 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		9333B41D7EEAA3D38A71FBDF /* Startup.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C9FED354D25B6CBA83DE30C1 /* en */,
+				6B176E847A9BCDAA2DDF8B8C /* zh-Hans */,
+			);
+			name = Startup.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		05BEFCB11CCBC0F93B41413A /* release */ = {
@@ -587,7 +633,7 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.glink25.tio;
-				PRODUCT_NAME = Tio;
+				PRODUCT_NAME = "Tio";
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Sources/tio-native/ShortcutsBridge.h";
 				SWIFT_VERSION = 5.0;
@@ -655,7 +701,7 @@
 				"LIBRARY_SEARCH_PATHS[arch=arm64]" = "$(inherited) $(PROJECT_DIR)/Externals/arm64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				"LIBRARY_SEARCH_PATHS[arch=x86_64]" = "$(inherited) $(PROJECT_DIR)/Externals/x86_64/$(CONFIGURATION) $(SDKROOT)/usr/lib/swift $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/$(PLATFORM_NAME) $(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-5.0/$(PLATFORM_NAME)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.glink25.tio;
-				PRODUCT_NAME = Tio;
+				PRODUCT_NAME = "Tio";
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Sources/tio-native/ShortcutsBridge.h";
 				SWIFT_VERSION = 5.0;

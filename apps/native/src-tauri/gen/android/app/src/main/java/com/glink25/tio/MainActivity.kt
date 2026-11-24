@@ -6,32 +6,33 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 
 class MainActivity : TauriActivity() {
-  // Intercept only while Tio has a page or overlay to close. At the root,
+  private val startup = StartupOverlay(this)
+
+  // Intercept only while Tio has a modal to close. At the root,
   // Android owns Back, including its predictive back-to-home animation.
   override val handleBackNavigation: Boolean = false
   private var webBack: OnBackPressedCallback? = null
-  private var historyRevision = 0
 
   override fun onWebViewCreate(webView: WebView) {
     super.onWebViewCreate(webView)
+    startup.attach(webView)
+    webView.settings.setSupportZoom(false)
     webBack?.remove()
-    val callback = object : OnBackPressedCallback(webView.canGoBack()) {
+    val callback = object : OnBackPressedCallback(false) {
       override fun handleOnBackPressed() {
-        // WebView's native list omits same-URL pushState entries. HTML history
-        // still contains them, so use it for both overlay and page traversal.
-        webView.evaluateJavascript("history.back()", null)
+        webView.evaluateJavascript(
+          "window.dispatchEvent(new Event('tio:request-overlay-back'))",
+          null
+        )
       }
     }
     webBack = callback
     onBackPressedDispatcher.addCallback(this, callback)
   }
 
-  override fun onWebViewHistoryChanged(webView: WebView) {
-    super.onWebViewHistoryChanged(webView)
-    val revision = ++historyRevision
-    webView.evaluateJavascript("Boolean(history.state && history.state.tioOverlay)") { overlay ->
-      if (revision == historyRevision)
-        webBack?.isEnabled = overlay == "true" || webView.canGoBack()
+  fun setOverlayBack(available: Boolean) {
+    runOnUiThread {
+      webBack?.isEnabled = available
     }
   }
 
@@ -43,6 +44,14 @@ class MainActivity : TauriActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
+    startup.show()
     SyncWorker.schedule(applicationContext)
   }
+
+  override fun onDestroy() {
+    startup.dispose()
+    super.onDestroy()
+  }
+
+  fun finishStartup(ready: Boolean) = startup.finish(ready)
 }

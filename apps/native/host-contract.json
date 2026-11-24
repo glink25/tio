@@ -1,8 +1,15 @@
 {
   "format": 1,
-  "bridgeApiVersion": 1,
+  "bridgeApiVersion": 4,
   "storageEpoch": 1,
-  "capabilities": ["catalog.v1", "credentials.v1", "folder.v1", "updates.v1", "workspace.v1"],
+  "capabilities": [
+    "catalog.v1",
+    "credentials.v1",
+    "folder.v1",
+    "updates.v1",
+    "window-host.v1",
+    "workspace.v1"
+  ],
   "runtimeTargets": {
     "ios-store": "safari16",
     "macos-direct": "safari15",
@@ -11,6 +18,6 @@
     "linux-direct": "safari15"
   },
   "reviewEpochs": {
-    "ios-store": 1
+    "ios-store": 2
   }
 }

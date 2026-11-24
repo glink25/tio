@@ -1,6 +1,10 @@
 import { githubAccessError } from '@tio/adapter-github';
 import { HostError, type WorkspaceSession } from '@tio/core';
-import type { GitHubEndpoint } from '@tio/provider-github';
+import {
+  githubConnectionUserId,
+  githubEndpointsKey,
+  type GitHubEndpoint,
+} from '@tio/provider-github';
 import { githubToken } from '@tio/provider-github/credentials';
 
 import { withProcessLock } from './process-lock';
@@ -12,6 +16,16 @@ declare function tioFetch(url: string, request: string): string;
 declare function tioLock(name: string, token: string): string | null;
 declare function tioCancelled(): boolean;
 declare function tioKernelInfo(): string;
+
+const shouldRetry = {
+  synced: false,
+  manual: false,
+  permission: false,
+  issues: true,
+  failed: true,
+  deferred: true,
+} as const;
+type BackgroundStatus = keyof typeof shouldRetry;
 
 export async function runBackground() {
   const call = async <T>(request: Record<string, unknown>): Promise<T> => {
@@ -50,12 +64,12 @@ export async function runBackground() {
     removeEventListener() {},
   } as unknown as AbortSignal;
   const sessions = await call<WorkspaceSession[]>({ action: 'sessions' });
-  const results: { session: string; status: string }[] = [];
+  const results: { session: string; status: BackgroundStatus }[] = [];
   for (const session of sessions) {
-    if (!session.connectionId.startsWith('github-')) continue;
+    if (githubConnectionUserId(session.connectionId) === undefined) continue;
     if (await read('workspace-lifecycle/' + session.id)) continue;
     const endpoints = await read<[string, GitHubEndpoint][]>(
-      'tio.github.endpoints.' + session.connectionId,
+      githubEndpointsKey(session.connectionId),
     );
     const endpoint = endpoints?.find(([id]) => id === session.workspaceId)?.[1];
     if (!endpoint) continue;
@@ -119,5 +133,5 @@ export async function runBackground() {
     results,
     kernel: JSON.parse(tioKernelInfo()),
   });
-  return results;
+  return { retry: results.some(({ status }) => shouldRetry[status]) };
 }

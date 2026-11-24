@@ -1,6 +1,5 @@
 import { titleOf, type TioObject } from '@tio/core';
 import { t } from '@tio/i18n';
-import { OverlayPresence } from '@tio/ui';
 import { OptionsPanel } from '@tio/ui';
 import {
   Button,
@@ -11,8 +10,7 @@ import {
   MenuItem,
   MenuSeparator,
   Popover,
-  Modal,
-  useMobile,
+  SidebarDrawer,
 } from '@tio/ui';
 import { Zap, Settings } from 'lucide-react';
 import {
@@ -28,8 +26,9 @@ import {
   Database,
   Pencil,
   Move,
+  AppWindow,
 } from 'lucide-react';
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { ConnectionInfo, Identity } from '../../components/identity';
 import { PageTree } from './page-tree';
@@ -42,11 +41,19 @@ export function WorkspaceSwitcher({
   model: WorkspaceController;
   compact?: boolean;
 }) {
+  const [newWindow, setNewWindow] = useState(false);
+  const close = () => {
+    setNewWindow(false);
+    m.setMenu(false);
+  };
   return (
     <Popover
       mobilePlacement="center"
       open={m.menu}
-      onOpenChange={m.setMenu}
+      onOpenChange={(open) => {
+        if (open) m.setMenu(true);
+        else close();
+      }}
       label={t('ui.switch')}
       trigger={
         <Button
@@ -63,7 +70,7 @@ export function WorkspaceSwitcher({
       }
     >
       <OptionsPanel
-        label={t('ui.spaces')}
+        label={t(newWindow ? 'workspace.openInNewWindow' : 'ui.spaces')}
         autoFocusSearch={false}
         selected={m.session ? [m.session.id] : []}
         options={m.sessions.map((session) => ({
@@ -71,18 +78,28 @@ export function WorkspaceSwitcher({
           text: session.name,
           label: session.name,
         }))}
-        onClose={() => m.setMenu(false)}
+        onClose={close}
         onSelect={(id) => {
           const session = m.sessions.find((item) => item.id === id);
-          if (session) void m.activate(session);
-          m.setMenu(false);
+          if (session) void (newWindow ? m.openInNewWindow(session) : m.activate(session));
+          close();
         }}
       />
       <div className="mt-2 border-t border-line pt-2">
+        {m.canOpenWindow && (
+          <Button
+            className="w-full justify-start"
+            aria-pressed={newWindow}
+            onClick={() => setNewWindow((active) => !active)}
+          >
+            <AppWindow size={16} />
+            {t('workspace.openInNewWindow')}
+          </Button>
+        )}
         <Button
           className="w-full justify-start"
           onClick={() => {
-            m.setMenu(false);
+            close();
             void m.offline();
           }}
         >
@@ -92,7 +109,7 @@ export function WorkspaceSwitcher({
         <Button
           className="w-full justify-start"
           onClick={() => {
-            m.setMenu(false);
+            close();
             m.setRenaming(true);
           }}
         >
@@ -149,28 +166,37 @@ export function ObjectMenu({
 }
 export function Sidebar({
   model: m,
+  mobile,
   pageActions,
-  onOpenAssistant,
+  onToggleAssistant,
+  assistantOpen,
+  chrome,
 }: {
   model: WorkspaceController;
+  mobile: boolean;
   pageActions?: ReactNode;
-  onOpenAssistant?: () => void;
+  onToggleAssistant?: () => void;
+  assistantOpen?: boolean;
+  chrome?: 'overlay' | 'headerbar' | 'system';
 }) {
-  const mobile = useMobile();
   const content = (
     <div className="flex h-full min-h-0 flex-col px-2 py-3">
-      <div className="flex items-center">
-        <div className="min-w-0 flex-1">
-          <WorkspaceSwitcher model={m} />
+      {(chrome !== 'overlay' || mobile) && (
+        <div className="flex items-center">
+          <div className="min-w-0 flex-1">
+            <WorkspaceSwitcher model={m} />
+          </div>
+          {(chrome !== 'headerbar' || mobile) && (
+            <IconButton
+              label={t(mobile ? 'common.close' : 'ui.collapse')}
+              className="p-1"
+              onClick={() => (mobile ? m.setSidebar(false) : m.collapseSidebar())}
+            >
+              <PanelLeftClose size={16} />
+            </IconButton>
+          )}
         </div>
-        <IconButton
-          label={t(mobile ? 'common.close' : 'ui.collapse')}
-          className="p-1"
-          onClick={() => (mobile ? m.setSidebar(false) : m.collapseSidebar())}
-        >
-          <PanelLeftClose size={16} />
-        </IconButton>
-      </div>
+      )}
       <div className="my-3 space-y-1">
         <Button className="w-full justify-start text-sm" onClick={() => m.setSearching(true)}>
           <Search size={17} />
@@ -195,7 +221,7 @@ export function Sidebar({
           </MenuItem>
         </Menu>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div data-tio-sidebar-scroll className="min-h-0 flex-1 overflow-y-auto">
         {!!m.session?.favorites?.length && (
           <section className="mb-4">
             <p className="px-3 py-2 text-xs text-muted">{t('workspace.favorites')}</p>
@@ -275,12 +301,13 @@ export function Sidebar({
             </MenuItem>
           </Menu>
         </div>
-        {onOpenAssistant && (
+        {onToggleAssistant && (
           <IconButton
             label={t('assistant.title')}
+            aria-pressed={assistantOpen}
             onClick={() => {
               m.setSidebar(false);
-              onOpenAssistant();
+              onToggleAssistant();
             }}
             className="shrink-0 p-2"
           >
@@ -296,7 +323,7 @@ export function Sidebar({
         <aside
           data-collapsed={m.sidebarCollapsed}
           inert={m.sidebarCollapsed || undefined}
-          className="tio-sidebar fixed inset-y-0 left-0 z-20 hidden border-r border-line bg-surface md:block"
+          className="tio-sidebar fixed inset-y-0 left-0 z-20 border-r border-line bg-surface"
           style={{ width: m.sidebarWidth, translate: m.sidebarCollapsed ? '-100% 0' : '0 0' }}
         >
           {content}
@@ -322,13 +349,16 @@ export function Sidebar({
           />
         </aside>
       )}
-      <OverlayPresence>
-        {m.sidebar && (
-          <Modal sheet hideHeader title={t('workspace.sidebar')} close={() => m.setSidebar(false)}>
-            {content}
-          </Modal>
-        )}
-      </OverlayPresence>
+      {mobile && (
+        <SidebarDrawer
+          title={t('workspace.sidebar')}
+          open={m.sidebar}
+          enabled={!m.graph && !m.openingWorkspace}
+          onOpenChange={m.setSidebar}
+        >
+          {content}
+        </SidebarDrawer>
+      )}
     </>
   );
 }

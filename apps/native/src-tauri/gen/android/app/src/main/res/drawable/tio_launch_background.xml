@@ -1,0 +1,5 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/tio_startup_background" />
+    <item android:drawable="@drawable/tio_launch_mark" android:gravity="center"
+        android:width="72dp" android:height="72dp" />
+</layer-list>

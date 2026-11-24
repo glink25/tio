@@ -5,7 +5,11 @@ import { claimInteraction, interactionOwner, registerInteraction } from './inter
 const layers = new Set<HTMLElement>();
 
 /** Touch dismissal consumes one gesture; it must never activate the editor below. */
-export function useOverlayInteraction(open: boolean, close: () => void, restoreFocus?: () => void) {
+export function useOverlayInteraction(
+  open: boolean,
+  close: () => void | boolean,
+  restoreFocus?: () => void,
+) {
   const ref = useRef<HTMLDivElement | null>(null);
   const [node, setNode] = useState<HTMLDivElement | null>(null);
   const ownership = useRef<ReturnType<typeof registerInteraction> | null>(null);
@@ -59,7 +63,7 @@ export function useOverlayInteraction(open: boolean, close: () => void, restoreF
         }
         swallow(next);
         outsideTouch.current = true;
-        closeRef.current();
+        if (closeRef.current() === false) outsideTouch.current = false;
         // Keep swallowing the compatibility click after this layer unmounts.
       };
       const click = (next: MouseEvent) => {

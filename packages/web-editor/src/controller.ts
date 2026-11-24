@@ -12,7 +12,7 @@ import {
   type Block,
 } from '@tio/core';
 import type { EditorSchema } from '@tio/editor-blocknote';
-import { useT, useTranslation } from '@tio/i18n';
+import { useT } from '@tio/i18n';
 import { useNotify } from '@tio/ui';
 import type { EditHistory } from '@tio/ui';
 import type { ViewExtensions } from '@tio/views';
@@ -52,6 +52,8 @@ export interface EditorSurfaceProps {
     actions: ReactNode,
     layout: { appMode: boolean; navigationPageActions: ReactNode },
   ) => ReactNode;
+  /** Optional document viewport supplied by a host with a separate toolbar. */
+  documentScrollRef?: React.Ref<HTMLDivElement>;
   autoFocusTitle?: boolean;
   pageActions?: ReactNode;
   renderEmptyState?: () => ReactNode;
@@ -85,7 +87,6 @@ export function useEditorController(props: EditorSurfaceProps) {
   };
   const t = useT();
   const notify = useNotify();
-  const { i18n } = useTranslation();
   const state = useStore(runtime.state);
   useEffect(() => {
     const release = runtime.retain([target.id]);
@@ -164,8 +165,7 @@ export function useEditorController(props: EditorSurfaceProps) {
     command(() => runtime.patch(o.id, changes, remember));
   }
   function addPage(parentId: string | null = null) {
-    const page = newPage(workspaceId, parentId);
-    page.title = t('common.untitled');
+    const page = newPage(workspaceId, parentId, t);
     command(() => {
       runtime.create([page]);
       (props.onOpen ?? onNavigate)({ id: page.id, mode: 'preview' });
@@ -173,15 +173,7 @@ export function useEditorController(props: EditorSurfaceProps) {
   }
   function addDatabase(embed = false) {
     if (!current) return;
-    const items = newDatabase(workspaceId, embed ? current.id : null);
-    items[0].name = t('workspace.newDatabase');
-    if (i18n.language === 'en') {
-      items[0].fields![0].name = 'Name';
-      items[0].fields![1].name = 'Status';
-      items[0].fields![1].options![0].label = 'To do';
-      items[0].fields![1].options![1].label = 'Done';
-      items[1].name = 'Default view';
-    }
+    const items = newDatabase(workspaceId, embed ? current.id : null, t);
     command(() => {
       runtime.create(
         items,

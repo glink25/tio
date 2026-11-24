@@ -5,6 +5,7 @@ import cytoscape, { type Core } from 'cytoscape';
 import { ArrowLeft, ArrowUpRight, Maximize, Minus, Plus, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { DesktopDragRegion } from '../../components/desktop-chrome';
 import type { WorkspaceController } from '../workspace/use-workspace';
 import databaseIcon from './icons/database.svg';
 import pageIcon from './icons/page.svg';
@@ -20,10 +21,14 @@ function fitGraph(graph: Core) {
 
 export default function RelationshipGraph({
   model: m,
-  onOpenAssistant,
+  onToggleAssistant,
+  assistantOpen,
+  desktopOverlay,
 }: {
   model: WorkspaceController;
-  onOpenAssistant?: () => void;
+  onToggleAssistant?: () => void;
+  assistantOpen?: boolean;
+  desktopOverlay?: boolean;
 }) {
   const t = useT();
   const theme = useTheme();
@@ -268,17 +273,22 @@ export default function RelationshipGraph({
       data-theme={theme}
       aria-busy={!!provider && status === 'loading'}
     >
-      <header className="flex flex-wrap items-center gap-3 border-b border-line p-3">
+      <header className="tio-graph-header flex flex-wrap items-center gap-3 border-b border-line p-3">
         <Button onClick={() => void m.navigateTarget({ id: m.selected })}>
           <ArrowLeft size={18} />
           {t('links.back')}
         </Button>
         <h1 className="font-medium">{t('links.graph')}</h1>
-        {onOpenAssistant && (
-          <IconButton label={t('assistant.title')} onClick={onOpenAssistant}>
+        {onToggleAssistant && (
+          <IconButton
+            label={t('assistant.title')}
+            aria-pressed={assistantOpen}
+            onClick={onToggleAssistant}
+          >
             <Sparkles size={18} />
           </IconButton>
         )}
+        {desktopOverlay && <DesktopDragRegion className="tio-desktop-drag" />}
         <input
           disabled={!graphVisible}
           aria-label={t('links.search')}

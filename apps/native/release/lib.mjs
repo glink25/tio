@@ -41,13 +41,16 @@ export function contract(channel) {
   };
   return { ...value, contractId: hash(canonical(value)) };
 }
+export function trackFor(version) {
+  const match = /^(?:\d+\.\d+\.\d+)(-rc\.\d+)?$/.exec(version);
+  if (!match) throw new Error('Expected a release version or rc version');
+  return match[1] ? 'preview' : 'stable';
+}
 export function productVersion() {
-  const version = readJSON('package.json').version;
-  if (!/^\d+\.\d+\.\d+(?:-rc\.\d+)?$/.test(version))
-    throw new Error('Expected a release version or rc version');
+  const { version } = readJSON('package.json');
+  trackFor(version);
   return version;
 }
-export const trackFor = (version) => (version.includes('-rc.') ? 'preview' : 'stable');
 export const distTag = (version, channel) => `dist/${version}/${channel}`;
 export function assetURL(version, channel, file) {
   if (!/^[a-zA-Z0-9_.-]+$/.test(file)) throw new Error('Unsafe asset filename');
@@ -85,11 +88,13 @@ export function git(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 }
 export async function runtimeIdentity(channel, kernelSha256) {
-  const { en, zh } = await import('../../../packages/i18n/src/locales.ts');
-  const translationKeys = {
-    en: Object.keys(en).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-    zh: Object.keys(zh).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-  };
+  const { locales } = await import('../../../packages/i18n/src/locales.ts');
+  const translationKeys = Object.fromEntries(
+    Object.entries(locales).map(([language, { translation }]) => [
+      language,
+      Object.keys(translation).sort(),
+    ]),
+  );
   const value = {
     contractId: contract(channel).contractId,
     productVersion: productVersion(),

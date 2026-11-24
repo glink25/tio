@@ -1,0 +1,6 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/tio_startup_symbol" android:gravity="center"
+        android:width="72dp" android:height="72dp" />
+    <item android:drawable="@drawable/tio_startup_dot" android:gravity="center"
+        android:width="72dp" android:height="72dp" />
+</layer-list>

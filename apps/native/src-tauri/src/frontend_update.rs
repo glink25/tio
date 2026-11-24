@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Component, Path, PathBuf},
 };
@@ -51,6 +51,37 @@ impl FrontendState {
             .map(|(m, _)| m.runtime_id.as_str())
             .unwrap_or(env!("TIO_COMPILED_RUNTIME_ID"))
     }
+    pub fn translation_keys(
+        &self,
+        app: &AppHandle,
+    ) -> Result<BTreeMap<String, BTreeSet<String>>, &'static str> {
+        const PATH: &str = "native-contract.json";
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Metadata {
+            runtime_id: String,
+            translation_keys: BTreeMap<String, BTreeSet<String>>,
+        }
+        let bytes = if let Some((manifest, root)) = &self.active {
+            let hash = manifest.files.get(PATH).ok_or("invalid")?;
+            let bytes = fs::read(root.join(PATH)).map_err(|_| "unavailable")?;
+            if format!("{:x}", Sha256::digest(&bytes)) != *hash {
+                return Err("signature");
+            }
+            bytes
+        } else {
+            app.asset_resolver()
+                .get(PATH.into())
+                .ok_or("unavailable")?
+                .bytes
+        };
+        let metadata: Metadata = serde_json::from_slice(&bytes).map_err(|_| "invalid")?;
+        if metadata.runtime_id != self.runtime_id() {
+            return Err("incompatible");
+        }
+        Ok(metadata.translation_keys)
+    }
+
     pub fn diagnostics(&self) -> Value {
         json!({"productVersion":self.active.as_ref().map(|(m,_)|m.product_version.as_str()).unwrap_or(env!("TIO_COMPILED_PRODUCT_VERSION")),"revision":self.active.as_ref().map(|(m,_)|m.revision).unwrap_or(0),"runtimeId":self.runtime_id()})
     }

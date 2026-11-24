@@ -1,0 +1,3 @@
+"startup.loading" = "正在启动 Tio";
+"startup.failed" = "Tio 启动失败";
+"startup.retry" = "重试";

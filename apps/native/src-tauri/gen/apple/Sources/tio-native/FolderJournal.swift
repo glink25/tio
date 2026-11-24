@@ -7,10 +7,10 @@ enum FolderJournal {
     private static let mutex = NSLock()
     private static var held = [String: (fd: Int32, owner: String)]()
 
-    static func resetForegroundLocks() {
+    static func resetForegroundLocks(owner: String?) {
         mutex.lock()
         defer { mutex.unlock() }
-        for (token, lock) in held where lock.owner == "foreground" {
+        for (token, lock) in held where owner.map({ lock.owner == "foreground/" + $0 }) ?? lock.owner.hasPrefix("foreground/") {
             close(lock.fd)
             held.removeValue(forKey: token)
         }
@@ -40,7 +40,8 @@ enum FolderJournal {
         if action == "unlock" {
             guard let token = request["token"] as? String else { throw FolderBridgeError.invalid }
             mutex.lock()
-            let lock = held.removeValue(forKey: token)
+            let owner = request["owner"] as? String ?? ""
+            let lock = held[token]?.owner == owner ? held.removeValue(forKey: token) : nil
             mutex.unlock()
             if let lock { close(lock.fd) }
             return NSNull()
@@ -109,4 +110,6 @@ enum FolderJournal {
 }
 
 @_cdecl("tio_reset_folder_locks")
-func tioResetFolderLocks() { FolderJournal.resetForegroundLocks() }
+func tioResetFolderLocks(_ owner: UnsafePointer<CChar>?) {
+    FolderJournal.resetForegroundLocks(owner: owner.map { String(cString: $0) })
+}

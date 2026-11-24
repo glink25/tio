@@ -56,6 +56,7 @@ export class HostSyncRunner {
       onError?: (error: unknown) => void;
       normalizeError?: (error: unknown) => unknown;
       isActive?: () => boolean;
+      canSchedule?: () => boolean;
       onActive?: (listener: () => void) => () => void;
       lock?: (name: string, work: () => Promise<void>) => Promise<void>;
     } = {},
@@ -103,7 +104,8 @@ export class HostSyncRunner {
     this.onStatus();
   }
   async backgroundSync() {
-    if (!this.debounce && this.canRetry()) await this.run(true);
+    if (this.host.canSchedule?.() !== false && !this.debounce && this.canRetry())
+      await this.run(true);
   }
   /** The host has confirmed restored connection access; resume only permitted background work. */
   async resume() {
@@ -116,7 +118,7 @@ export class HostSyncRunner {
     if (this.disposed) return;
     this.dirty = true;
     if (!this.running && !this.issues.length) this.state('pending');
-    if (!this.automatic) return;
+    if (!this.automatic || this.host.canSchedule?.() === false) return;
     if (!this.canRetry()) return;
     clearTimeout(this.debounce);
     if (!this.running) this.state('pending');

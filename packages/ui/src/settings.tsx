@@ -1,3 +1,4 @@
+import { ChevronRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { Button } from './index';
@@ -45,5 +46,14 @@ export function SettingsAction({
           : 'h-9'
       }
     />
+  );
+}
+
+export function SettingsLink({ label, open }: { label: string; open: () => void }) {
+  return (
+    <Button type="button" className="w-full justify-between py-3 text-left" onClick={open}>
+      {label}
+      <ChevronRight aria-hidden size={16} />
+    </Button>
   );
 }

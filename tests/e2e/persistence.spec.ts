@@ -57,3 +57,49 @@ test('host status contains persistence errors and recovers the latest input with
   await page.reload();
   await expect(title).toHaveValue('故障期间的最新输入');
 });
+
+// Editor persistence alone cannot catch a host resize or Back traversal erasing a settings draft.
+test('Back preserves a workspace AI draft until the user confirms discarding it', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: '仅此浏览器', exact: true }).click();
+  await page.getByRole('button', { name: '创建工作空间', exact: true }).click();
+  const create = page.getByRole('dialog', { name: '新建工作空间', exact: true });
+  await create.getByRole('textbox').fill('设置返回测试');
+  await create.getByRole('button', { name: '新建', exact: true }).click();
+  await expect(page.getByLabel('页面标题')).toHaveValue('开始');
+  const contentUrl = page.url();
+
+  await page.getByRole('button', { name: '打开侧栏', exact: true }).click();
+  const sidebar = page.getByRole('dialog', { name: '打开侧栏', exact: true });
+  await sidebar.getByRole('button', { name: '设置', exact: true }).click();
+  await page.getByRole('menuitem', { name: '设置', exact: true }).click();
+  await page.getByRole('button', { name: 'AI 设置', exact: true }).click();
+  await page.getByRole('button', { name: '添加配置', exact: true }).click();
+
+  const form = page.getByRole('dialog', { name: '添加配置', exact: true });
+  const name = form.getByRole('textbox', { name: '名称', exact: true });
+  await name.fill('待保存的配置');
+  await page.setViewportSize({ width: 1024, height: 844 });
+  const categories = form.getByRole('navigation', { name: '设置', exact: true });
+  await expect(categories.getByRole('button', { name: 'AI 设置' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await expect(name).toHaveValue('待保存的配置');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(categories).not.toBeVisible();
+
+  const discard = page.getByRole('dialog', { name: '放弃尚未保存的修改？', exact: true });
+  await page.evaluate(() => history.back());
+  await discard.getByRole('button', { name: '继续编辑', exact: true }).click();
+  await expect(name).toHaveValue('待保存的配置');
+  await expect(page).toHaveURL(contentUrl);
+
+  await page.evaluate(() => history.back());
+  await discard.getByRole('button', { name: '放弃修改', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'AI 设置', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(contentUrl);
+});

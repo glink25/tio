@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" style="color-scheme: light">
+<html lang="en" style="color-scheme: light">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -13,6 +13,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <title>Tio</title>
+    <!-- web-boot -->
     <style>
       body {
         margin: 0;
@@ -90,11 +91,14 @@
         }
       }
     </style>
+    <!-- /web-boot -->
   </head>
   <body>
+    <!-- web-boot -->
     <div id="boot" role="status" aria-label="Tio" aria-busy="true">
       <a href="" aria-label="Reload Tio"><!--tio-boot-logo--></a>
     </div>
+    <!-- /web-boot -->
     <div id="root"></div>
     <script type="module" src="/src/bootstrap.ts"></script>
     <div id="portal"></div>

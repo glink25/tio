@@ -9,7 +9,13 @@ export function WorkspaceActionDialog({ model: m }: { model: WorkspaceController
   const action = m.workspaceActions(target.session)[target.operation];
   if (!action) return null;
   return (
-    <Modal mobilePlacement="center" title={action.title} close={m.closeWorkspaceAction}>
+    <Modal
+      mobilePlacement="center"
+      title={action.title}
+      close={m.closeWorkspaceAction}
+      canClose={() => !m.actionBusy}
+      dismissOnOutside={false}
+    >
       <p className="mb-3 font-medium break-words">{target.session.name}</p>
       <p className="text-sm whitespace-pre-line text-muted">{action.description}</p>
       {m.actionError && (

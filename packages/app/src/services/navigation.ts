@@ -1,5 +1,14 @@
 import { isContentAnchor, type ContentAnchor, type ContentTarget } from '@tio/core';
-export function readRoute(hash = location.hash) {
+import { isOverlayHistoryTraversal, navigateFromOverlay } from '@tio/ui';
+
+interface ContentRoute {
+  workspaceId: string;
+  id: string;
+  graph: boolean;
+  anchor?: ContentAnchor;
+}
+
+export function readRoute(hash: string): ContentRoute | null {
   try {
     const match = hash.match(/^#\/w\/([A-Za-z0-9_-]+)\/(p\/([A-Za-z0-9_-]*)|graph)(?:\?([^#]*))?$/);
     if (!match) return null;
@@ -28,16 +37,59 @@ export function contentHash(workspaceId: string, id: string, anchor?: ContentAnc
 export function contentUrl(target: ContentTarget) {
   return `${location.origin}${location.pathname}${location.search}${contentHash(target.workspaceId, target.id, target.anchor)}`;
 }
-export function writeRoute(
-  workspaceId: string,
-  id: string,
-  replace = false,
-  anchor?: ContentAnchor,
-  graph = false,
-) {
-  const hash = graph
-    ? `#/w/${encodeURIComponent(workspaceId)}/graph?focus=${encodeURIComponent(id)}`
-    : contentHash(workspaceId, id, anchor);
-  if (location.hash !== hash || history.state?.tioOverlay)
-    history[replace || history.state?.tioOverlay ? 'replaceState' : 'pushState']({}, '', hash);
+export function createContentRouter(memory: boolean) {
+  let memoryRoute = memory ? readRoute(location.hash) : null;
+  const launchHash = memoryRoute ? location.hash : '';
+  const baseUrl = () => location.pathname + location.search;
+  let observed = location.hash;
+  function writeHash(hash: string, replace: boolean) {
+    if (location.hash !== hash) {
+      navigateFromOverlay(() => {
+        if (location.hash !== hash)
+          history[replace ? 'replaceState' : 'pushState']({}, '', hash || baseUrl());
+        observed = location.hash;
+      });
+    }
+  }
+  return {
+    current: () => (memory ? memoryRoute : location.hash),
+    read: () => (memory ? memoryRoute : readRoute(location.hash)),
+    start() {
+      if (launchHash && location.hash === launchHash)
+        history.replaceState(history.state, '', baseUrl());
+    },
+    clear() {
+      if (memory) memoryRoute = null;
+      else writeHash('', true);
+    },
+    write(workspaceId: string, id: string, replace = false, anchor?: ContentAnchor, graph = false) {
+      if (memory) {
+        memoryRoute = { workspaceId, id, anchor, graph };
+        return;
+      }
+      writeHash(
+        graph
+          ? `#/w/${encodeURIComponent(workspaceId)}/graph?focus=${encodeURIComponent(id)}`
+          : contentHash(workspaceId, id, anchor),
+        replace,
+      );
+    },
+    subscribe(listener: (route: ContentRoute) => void) {
+      if (memory) return;
+      const pop = (event: Event) => {
+        if (isOverlayHistoryTraversal(event) || history.state?.tioOverlay) return;
+        const hash = location.hash;
+        if (hash === observed) return;
+        observed = hash;
+        const route = readRoute(hash);
+        if (route) listener(route);
+      };
+      window.addEventListener('popstate', pop);
+      window.addEventListener('hashchange', pop);
+      return () => {
+        window.removeEventListener('popstate', pop);
+        window.removeEventListener('hashchange', pop);
+      };
+    },
+  };
 }

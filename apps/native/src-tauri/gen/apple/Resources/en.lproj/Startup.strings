@@ -1,0 +1,3 @@
+"startup.loading" = "Loading Tio";
+"startup.failed" = "Tio couldn’t start";
+"startup.retry" = "Retry";

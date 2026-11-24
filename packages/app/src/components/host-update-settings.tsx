@@ -6,7 +6,7 @@ import { platform, type HostUpdate } from '../platform';
 
 type Update = HostUpdate;
 export function HostUpdateSettings({ beforeInstall }: { beforeInstall?: () => Promise<void> }) {
-  const [enabled, setEnabled] = useState(false);
+  const [enabled, setEnabled] = useState<boolean>();
   const [update, setUpdate] = useState<Update>({ status: 'idle' });
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState<HostUpdate['diagnostics']>();
@@ -22,12 +22,15 @@ export function HostUpdateSettings({ beforeInstall }: { beforeInstall?: () => Pr
             setUpdate({ status: 'available', version: value.pendingVersion });
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (active) setEnabled(false);
+      });
     return () => {
       active = false;
     };
   }, []);
-  if (!enabled) return null;
+  if (enabled === undefined) return <output>{t('common.loading')}</output>;
+  if (!enabled) return <p className="text-sm text-muted">{t('settings.updateUnavailable')}</p>;
   const run = async () => {
     setBusy(true);
     try {

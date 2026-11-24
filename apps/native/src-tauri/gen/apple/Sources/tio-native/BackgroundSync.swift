@@ -3,6 +3,7 @@ import UIKit
 
 enum BackgroundSync {
     static let identifier = "com.glink25.tio.sync"
+    private struct Outcome: Decodable { let retry: Bool }
     private static var observers: [NSObjectProtocol] = []
 
     static func register() {
@@ -19,9 +20,8 @@ enum BackgroundSync {
                         in: .userDomainMask, appropriateFor: nil, create: false)
                         .appendingPathComponent(identifier).appendingPathComponent("catalog.sqlite3")
                     let result = try ShortcutKernel.execute(["action": "background"], bundle: bundle, database: database)
-                    let rows = try JSONSerialization.jsonObject(with: Data(result.utf8)) as? [[String: String]]
-                    let succeeded = rows?.allSatisfy { ["synced", "manual", "permission"].contains($0["status"] ?? "") } == true
-                    task.setTaskCompleted(success: succeeded && !Task.isCancelled)
+                    let outcome = try JSONDecoder().decode(Outcome.self, from: Data(result.utf8))
+                    task.setTaskCompleted(success: !outcome.retry && !Task.isCancelled)
                 } catch {
                     task.setTaskCompleted(success: false)
                 }

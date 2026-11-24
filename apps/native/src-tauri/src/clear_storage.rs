@@ -27,12 +27,12 @@ pub async fn clear_host_storage(app: AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "ios")]
     {
-        crate::shortcuts::reset_foreground();
-        crate::shortcuts::apple_folder(serde_json::json!({"action":"forgetAll"})).await?;
+        crate::shortcuts::reset_foreground(None);
+        crate::shortcuts::call_folder(serde_json::json!({"action":"forgetAll"})).await?;
     }
     #[cfg(not(target_os = "ios"))]
-    app.state::<crate::folder::FolderLocks>().reset();
-    app.state::<crate::process_lock::ProcessLocks>().reset();
+    app.state::<crate::folder::FolderLocks>().0.reset();
+    app.state::<crate::process_lock::ProcessLocks>().0.reset();
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
         // Signed application resources and their anti-replay state contain no workspace data.

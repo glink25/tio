@@ -12,6 +12,7 @@ import type { GitHubCache } from '@tio/provider-github';
 import type { Credentials } from '@tio/provider-github/credentials';
 
 import type { ConnectionBinding } from './services/connection-adapters';
+import type { DesktopChrome } from './services/desktop-chrome';
 
 export interface FolderGrant {
   kind: 'native-folder';
@@ -59,7 +60,23 @@ export interface HostUpdate {
     runtime: { productVersion: string; revision: number };
   };
 }
+export interface WorkspaceWindows {
+  enabled: boolean;
+  session?: string;
+  restoreRecent: boolean;
+  claim(session: string): Promise<boolean>;
+  commit(session: string): Promise<void>;
+  cancel(): Promise<void>;
+  release(): Promise<void>;
+  open(session?: string): Promise<void>;
+  ownsSync(session?: string): boolean;
+  confirmSyncOwner(session: string): Promise<boolean>;
+  subscribeAssignments(listener: () => void): () => void;
+  onClose(prepare: () => Promise<void>): Promise<() => void>;
+  changeConnection<T>(work: () => Promise<T>, session?: string): Promise<T>;
+}
 export interface AppPlatform {
+  mobile?: 'ios' | 'android';
   deviceLabel: 'welcome.device' | 'welcome.offline';
   catalog(): HostCatalog;
   deviceRepository(workspace: string, instance: string): WorkspaceRepository & { close(): void };
@@ -80,7 +97,7 @@ export interface AppPlatform {
   };
   auth: {
     origin?: string;
-    attempts(): Storage;
+    attempts(): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
     read(): Credentials | undefined;
     readFresh(): Promise<Credentials | undefined>;
     persist(value?: Credentials): Promise<void>;
@@ -99,6 +116,9 @@ export interface AppPlatform {
     subscribe(listener: () => void): () => void;
     lock<T>(name: string, session: string, work: () => Promise<T>): Promise<T>;
   };
+  windows?: WorkspaceWindows;
+  desktopChrome?: DesktopChrome;
+  onStartupReady?(): void;
   update?: (action: string, version?: string) => Promise<HostUpdate>;
   clearStorage(): Promise<void>;
   afterReady?(): Promise<void>;

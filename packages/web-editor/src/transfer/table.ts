@@ -1,5 +1,5 @@
 import { id, object, type Field, type TioObject } from '@tio/core';
-import { createEvaluator, displayValue } from '@tio/database';
+import { createEvaluator, displayValue, exportDisplay } from '@tio/database';
 import { convertValue, inferColumn } from '@tio/database/conversion';
 
 export interface TableData {
@@ -161,7 +161,7 @@ export function exportTable(
               ),
             );
         }
-        return displayValue(value, field, objects, 'en');
+        return displayValue(value, field, objects, exportDisplay);
       }),
     ),
   };

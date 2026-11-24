@@ -48,7 +48,7 @@ export function createEvaluator(objects: TioObject[], now = new Date()) {
       const database = byId.get(record.databaseId ?? '');
       const resolve = (id: string) => {
         const target = database?.fields?.find((f) => f.id === id);
-        if (!target) throw new Error(`Missing field: ${id}`);
+        if (!target) throw new Error(`Missing field: ${String(id)}`);
         const value = read(record, target);
         if (value.error) throw new Error(value.error);
         if (['select', 'status'].includes(target.type))
@@ -185,42 +185,57 @@ export function createEvaluator(objects: TioObject[], now = new Date()) {
     },
   };
 }
+const queryDisplay = {
+  locale: 'zh-CN',
+  text: {
+    unavailableReference: '引用不可用',
+    missingReference: '引用已失效',
+    untitledRecord: '未命名记录',
+    missingAttachment: '附件不可用',
+    yes: '是',
+    no: '否',
+    unknownOption: (id: unknown) => `未知选项 ${String(id)}`,
+  },
+};
+export type ValuePresentation = typeof queryDisplay;
+export const exportDisplay: ValuePresentation = {
+  locale: 'en-US',
+  text: {
+    unavailableReference: 'Unavailable reference',
+    missingReference: 'Missing reference',
+    untitledRecord: 'Untitled record',
+    missingAttachment: 'Missing attachment',
+    yes: 'Yes',
+    no: 'No',
+    unknownOption: (id) => `Unknown option ${String(id)}`,
+  },
+};
 export function displayValue(
   value: unknown,
   field: Field,
   objects: TioObject[] = [],
-  language: 'en' | 'zh' = 'zh',
+  presentation: ValuePresentation = queryDisplay,
 ): string {
+  const { text, locale } = presentation;
   if (value == null) return '';
   if (field.type === 'mention')
     return mentionReferences(value)
-      .map(
-        (ref) =>
-          mentionTitle(ref, objects) ??
-          (language === 'zh' ? '引用不可用' : 'Unavailable reference'),
-      )
+      .map((ref) => mentionTitle(ref, objects) ?? text.unavailableReference)
       .join(', ');
   if (isFieldError(value)) return `⚠ ${value.fieldError}`;
   if (['select', 'multiSelect', 'status'].includes(field.type))
     return (Array.isArray(value) ? value : [value])
-      .map(
-        (id) =>
-          field.options?.find((o) => o.id === id)?.label ??
-          (language === 'zh' ? `未知选项 ${id}` : `Unknown option ${id}`),
-      )
+      .map((id) => field.options?.find((o) => o.id === id)?.label ?? text.unknownOption(id))
       .join(', ');
   if (field.type === 'relation')
     return (Array.isArray(value) ? value : [value])
       .map((id) => {
         const record = objects.find((o) => o.id === id && !o.deleted);
-        if (!record) return language === 'zh' ? '引用已失效' : 'Missing reference';
+        if (!record) return text.missingReference;
         const title = objects
           .find((o) => o.id === record.databaseId)
           ?.fields?.find((f) => f.type === 'title');
-        return valueText(
-          record.properties?.[title?.id ?? ''] ??
-            (language === 'zh' ? '未命名记录' : 'Untitled record'),
-        );
+        return valueText(record.properties?.[title?.id ?? ''] ?? text.untitledRecord);
       })
       .join(', ');
   if (field.type === 'files')
@@ -228,15 +243,14 @@ export function displayValue(
       .map(
         (ref) =>
           objects.find((o) => o.id === String(ref).slice(6) && !o.deleted)?.filename ??
-          (language === 'zh' ? '附件不可用' : 'Missing attachment'),
+          text.missingAttachment,
       )
       .join(', ');
-  if (field.type === 'boolean')
-    return language === 'zh' ? (value ? '是' : '否') : value ? 'Yes' : 'No';
+  if (field.type === 'boolean') return value ? text.yes : text.no;
   if (isDateValue(value)) {
     const format = (part: string) =>
       part.includes('T')
-        ? new Intl.DateTimeFormat(language === 'zh' ? 'zh-CN' : 'en-US', {
+        ? new Intl.DateTimeFormat(locale, {
             timeZone: value.timeZone ?? localTimeZone(),
             year: 'numeric',
             month: '2-digit',
@@ -257,11 +271,11 @@ export function displayValue(
       .find((o) => o.id === relation?.targetDatabaseId)
       ?.fields?.find((f) => f.id === field.rollup?.targetFieldId);
     if (target && !['rollup', 'formula'].includes(target.type))
-      return value.map((v) => displayValue(v, target, objects, language)).join(', ');
+      return value.map((v) => displayValue(v, target, objects, presentation)).join(', ');
   }
   if (typeof value === 'number')
     return new Intl.NumberFormat(
-      language === 'zh' ? 'zh-CN' : 'en-US',
+      locale,
       field.numberFormat === 'currency'
         ? { style: 'currency', currency: field.currency ?? 'CNY' }
         : field.numberFormat === 'percent'
@@ -270,7 +284,7 @@ export function displayValue(
     ).format(value);
   if (Array.isArray(value))
     return value
-      .map((v) => displayValue(v, { ...field, type: 'text' }, objects, language))
+      .map((v) => displayValue(v, { ...field, type: 'text' }, objects, presentation))
       .join(', ');
   return valueText(value);
 }
@@ -337,10 +351,12 @@ export function queryRecords(
                 ? c < 0
                 : c <= 0;
         }
-        default:
+        case 'contains':
           return displayValue(value, field, objects)
             .toLocaleLowerCase()
             .includes(valueText(filter.value ?? '').toLocaleLowerCase());
+        default:
+          return false;
       }
     });
   return rows.sort((a, b) => {
@@ -360,7 +376,7 @@ export function queryRecords(
           ? x - y
           : displayValue(av, field, objects).localeCompare(
               displayValue(bv, field, objects),
-              'zh-CN',
+              queryDisplay.locale,
               { numeric: true },
             );
       if (c) return sort.direction === 'asc' ? c : -c;
@@ -378,7 +394,7 @@ export function groups(records: TioObject[], field: Field | undefined) {
     })),
     {
       id: '',
-      label: '未分组',
+      label: '',
       records: records.filter(
         (r) => !field || !options.some((o) => o.id === r.properties?.[field.id]),
       ),

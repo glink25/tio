@@ -1,0 +1,5 @@
+<resources>
+    <string name="tio_startup_loading">正在启动 Tio</string>
+    <string name="tio_startup_failed">Tio 启动失败</string>
+    <string name="tio_startup_retry">重试</string>
+</resources>

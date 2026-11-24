@@ -1,8 +1,8 @@
 {
   "build": {
-    "beforeBuildCommand": "node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && corepack pnpm --filter @tio/native build --emptyOutDir --outDir dist/android",
+    "beforeBuildCommand": "node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && corepack pnpm exec vite build --mode android --emptyOutDir --outDir dist/android",
     "frontendDist": "../dist/android",
-    "beforeDevCommand": "node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && corepack pnpm --filter @tio/native dev"
+    "beforeDevCommand": "node updates/prepare-key.mjs && corepack pnpm --filter @tio/native build:kernel && corepack pnpm exec vite --host 0.0.0.0 --mode android"
   },
   "app": {
     "windows": [

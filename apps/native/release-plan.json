@@ -1,32 +1,33 @@
 {
   "format": 1,
-  "revision": 1008,
-  "hostBuild": 1008,
-  "targets": ["ios-store"],
+  "revision": 1009,
+  "hostBuild": 1009,
+  "targets": ["ios-store", "macos-direct", "windows-direct", "linux-direct", "android-play", "web"],
   "web": {
     "deployment": "tag"
   },
   "compatibility": {
     "storage": "unchanged",
-    "bridge": "unchanged"
+    "bridge": "breaking",
+    "reason": "The frontend requires the native window registry, per-window lock ownership, mobile startup handoff and coordinated Android modal Back handling."
   },
   "storeNotes": {
     "ios-store": {
-      "en-US": "Initial native client release.",
-      "zh-Hans": "首个原生客户端版本。"
+      "en-US": "Open workspaces in multiple iPad windows, use the reorganized settings, and start with a new launch screen.",
+      "zh-Hans": "支持在 iPad 上通过多个窗口打开工作空间，重新组织设置，并更新启动界面。"
     },
     "android-play": {
-      "en-US": "Initial native client release.",
-      "zh-CN": "首个原生客户端版本。"
+      "en-US": "A new launch screen, reorganized settings, and improved Back navigation that protects unsaved settings.",
+      "zh-CN": "更新启动界面和设置布局，改进返回操作，保护尚未保存的设置。"
     },
     "macos-direct": {
-      "en-US": "Initial native client release.",
-      "zh-Hans": "首个原生客户端版本。"
+      "en-US": "Updated window controls and settings, with improved workspace window and synchronization handling.",
+      "zh-Hans": "更新窗口控件和设置，改进工作空间窗口管理与同步。"
     }
   },
   "forceHost": ["ios-store"],
   "apple": {
-    "intent": "existing-behavior",
-    "reason": "Use Apple networking and signature verification for the existing iOS updater."
+    "intent": "review-required",
+    "reason": "iPad multi-window, native startup and reorganized settings introduce new app behavior."
   }
 }

@@ -12,9 +12,8 @@ export function ConnectionDialogs({ model: m }: { model: WorkspaceController }) 
           <Modal
             mobilePlacement="center"
             title={t('workspace.new')}
-            close={() => {
-              if (!m.busy) m.setCreating(false);
-            }}
+            close={() => m.setCreating(false)}
+            canClose={() => !m.busy}
           >
             <form
               className="space-y-4"
@@ -53,9 +52,8 @@ export function ConnectionDialogs({ model: m }: { model: WorkspaceController }) 
         {m.logoutOpen && (
           <Modal
             title={t('workspace.disconnect')}
-            close={() => {
-              if (!m.loggingOut) m.setLogoutOpen(false);
-            }}
+            close={() => m.setLogoutOpen(false)}
+            canClose={() => !m.loggingOut}
           >
             <p className="text-sm">{t('workspace.logoutWarning')}</p>
             {m.identity?.localOnly && <p className="mt-3 text-sm">{t('workspace.localWarning')}</p>}

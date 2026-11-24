@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Tio",
+        "create": false,
         "width": 1100,
         "height": 800
       }

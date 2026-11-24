@@ -10,7 +10,11 @@ import {
 } from '@tio/core';
 import { FileRepository, FileWorkspaceContent } from '@tio/file-storage';
 import { WorkspaceOperations, type ObjectRead } from '@tio/operations';
-import type { GitHubEndpoint } from '@tio/provider-github';
+import {
+  githubConnectionUserId,
+  githubEndpointsKey,
+  type GitHubEndpoint,
+} from '@tio/provider-github';
 import { WorkspaceRuntime } from '@tio/workspace';
 
 import { NativeFolderProvider, FolderState, type FolderCall } from './folder';
@@ -31,7 +35,7 @@ interface Shortcut {
 }
 
 export async function run(input: Shortcut) {
-  if (/^github-[1-9][0-9]*$/.test(input.connection ?? '')) {
+  if (input.connection && githubConnectionUserId(input.connection) !== undefined) {
     const call = async <T>(request: Record<string, unknown>): Promise<T> => {
       const reply = JSON.parse(tioNative(JSON.stringify(request)));
       if (reply.error) throw new HostError(reply.error);
@@ -46,7 +50,7 @@ export async function run(input: Shortcut) {
       throw new HostError('closed');
     const endpoints = await call<[string, GitHubEndpoint][] | undefined>({
       action: 'read',
-      key: 'tio.github.endpoints.' + input.connection,
+      key: githubEndpointsKey(input.connection),
     });
     const endpoint = endpoints?.find(([id]) => id === input.workspace)?.[1];
     if (!endpoint || endpoint.workspaceId !== input.workspace) throw new HostError('unavailable');

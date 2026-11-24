@@ -13,11 +13,11 @@ public actor MobileResourceStore {
     private let publicKey: Data
     private let channel: String
     private let hostABI: Int
-    private let bundledKeys: Set<String>
+    private let bundledKeys: [String: Set<String>]
     private var started = false
     private var selected: MobileResourcePack?
 
-    public init(directory: URL, publicKey: Data, channel: String, hostABI: Int, bundledKeys: Set<String>) {
+    public init(directory: URL, publicKey: Data, channel: String, hostABI: Int, bundledKeys: [String: Set<String>]) {
         self.file = directory.appendingPathComponent("resources-\(channel)-\(hostABI).json")
         self.publicKey = publicKey
         self.channel = channel

@@ -10,6 +10,7 @@ import {
   type ConnectionAccessState,
   type WorkspaceRepository,
 } from '@tio/core';
+import { githubConnectionId } from '@tio/provider-github';
 import { StorageError } from '@tio/storage';
 import { HostSyncRunner, type SyncSnapshot } from '@tio/sync';
 import { WorkspaceRuntime } from '@tio/workspace';
@@ -30,6 +31,7 @@ export class WorkspaceServices {
   private binding?: ConnectionBinding;
   private generation = 0;
   private syncStarted = false;
+  private assignedSync = new Set<string>();
   private unsubscribeAccess?: () => void;
   private authorization?: Promise<void>;
   private recovery?: HostSaveRecovery;
@@ -201,25 +203,22 @@ export class WorkspaceServices {
   private timer?: ReturnType<typeof setInterval>;
   private startPolling() {
     if (this.timer) return;
-    this.timer = setInterval(
-      () => {
-        if (this.polling || !this.active || document.visibilityState !== 'visible') return;
-        const active = this.active;
-        this.polling = true;
-        void this.checkAccess(active.session.workspaceId)
-          .then((allowed) => {
-            if (allowed && active === this.active) return active.runtime.poll();
-          })
-          .catch((error) => {
-            if (active === this.active && this.binding)
-              this.setAccess(this.binding.adapter.classifyError(error));
-          })
-          .finally(() => {
-            this.polling = false;
-          });
-      },
-      this.connection?.kind === 'github' ? 60000 : 5000,
-    );
+    this.timer = setInterval(() => {
+      if (this.polling || !this.active || document.visibilityState !== 'visible') return;
+      const active = this.active;
+      this.polling = true;
+      void this.checkAccess(active.session.workspaceId)
+        .then((allowed) => {
+          if (allowed && active === this.active) return active.runtime.poll();
+        })
+        .catch((error) => {
+          if (active === this.active && this.binding)
+            this.setAccess(this.binding.adapter.classifyError(error));
+        })
+        .finally(() => {
+          this.polling = false;
+        });
+    }, this.binding?.repositoryPollMs ?? 5000);
   }
   private assertLive() {
     if (this.abandoning) throw new Error('Connection is closed');
@@ -243,7 +242,7 @@ export class WorkspaceServices {
     if (kind === 'github') {
       const auth = credentials();
       if (!auth) throw new Error('GitHub credentials missing');
-      this.connection = { id: `github-${auth.userId}`, kind, name: auth.login };
+      this.connection = { id: githubConnectionId(auth.userId), kind, name: auth.login };
       this.bind();
       await this.catalog.setting('connection', { connection: this.connection });
       return;
@@ -275,6 +274,16 @@ export class WorkspaceServices {
     );
     return saved;
   }
+  refreshSyncAssignments() {
+    if (!this.syncStarted) return;
+    const next = new Set<string>();
+    for (const [id, entry] of this.repositories) {
+      if (!entry.runner || !platform().windows?.ownsSync(id)) continue;
+      next.add(id);
+      if (!this.assignedSync.has(id)) void entry.runner.backgroundSync();
+    }
+    this.assignedSync = next;
+  }
   async refreshRemote(strict = false) {
     const generation = this.generation,
       binding = this.binding;
@@ -286,6 +295,7 @@ export class WorkspaceServices {
       }
     }
     if (!binding || !binding.adapter.supportsSync) return;
+    if (!strict && platform().windows?.ownsSync() === false) return;
     if (!(await this.checkAccess())) {
       if (strict) throw new ConnectionAccessError(this.accessFor()!);
       return;
@@ -402,9 +412,17 @@ export class WorkspaceServices {
               );
             },
             isActive: () => platform().sync.active(),
+            canSchedule: () => platform().windows?.ownsSync(session.id) ?? true,
             onActive: (listener) => platform().sync.subscribe(listener),
             lock: (name, work) => {
-              const job = this.queue.then(() => platform().sync.lock(name, session.id, work));
+              const host = platform();
+              const job = this.queue.then(() =>
+                host.sync.lock(name, session.id, async () => {
+                  // The registry can change while this runner is waiting for the process lock.
+                  if (!host.windows || (await host.windows.confirmSyncOwner(session.id)))
+                    await work();
+                }),
+              );
               this.queue = job.catch(() => {});
               return job;
             },
@@ -657,6 +675,7 @@ export class WorkspaceServices {
       this.binding = undefined;
       this.accessStates.clear();
       this.syncStarted = false;
+      this.assignedSync.clear();
       this.handle = undefined;
       await this.catalog.setting('connection', null);
     });

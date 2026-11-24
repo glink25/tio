@@ -2,7 +2,13 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 import { googleToken } from './google-api.mjs';
 import { readJSON, hash } from './lib.mjs';
-const [bundle, out] = process.argv.slice(2);
+const [bundle, out, releaseTrack] = process.argv.slice(2);
+const playTracks = new Map([
+  ['stable', 'production'],
+  ['preview', 'internal'],
+]);
+const track = playTracks.get(releaseTrack);
+if (!track) throw new Error('Unknown release track');
 const access_token = await googleToken('https://www.googleapis.com/auth/androidpublisher');
 const base =
   'https://androidpublisher.googleapis.com/androidpublisher/v3/applications/com.glink25.tio';
@@ -44,7 +50,6 @@ if (existing) {
 }
 if (uploaded.versionCode !== metadata.buildNumber || uploaded.sha256 !== hash(bytes))
   throw new Error('Play uploaded bundle differs from the release');
-const track = metadata.version.includes('-rc.') ? 'internal' : 'production';
 await api(
   `/edits/${edit.id}/tracks/${track}`,
   {

@@ -1,5 +1,5 @@
 import { useTranslation } from '@tio/i18n';
-import { OverlayPresence } from '@tio/ui';
+import { ModalProvider, OverlayPresence } from '@tio/ui';
 import { Notifications, toast, ThemeContext, LoadingSkeleton, SidebarSkeleton } from '@tio/ui';
 import { useEffect, lazy, Suspense } from 'react';
 
@@ -23,6 +23,7 @@ export function App() {
   useTranslation();
   const model = useWorkspace();
   const presentation = usePresentation();
+  useEffect(() => platform().onStartupReady?.(), []);
   useEffect(() => {
     if (model.error) toast.error(model.error, { id: 'host-error' });
   }, [model.error]);
@@ -51,51 +52,53 @@ export function App() {
     return () => window.removeEventListener('keydown', key);
   }, [model]);
   return (
-    <ThemeContext.Provider value={presentation.theme}>
-      <Notifications />
-      {'modelContext' in document && (
-        <Suspense fallback={null}>
-          <SiteToolsHost model={model} />
-        </Suspense>
-      )}
-      <ConnectionDialogs model={model} />
-      <OverlayPresence>
-        {model.workspaceAction && <WorkspaceActionDialog model={model} />}
-      </OverlayPresence>
-      <OverlayPresence>{model.githubOpen && <GitHubDialog model={model} />}</OverlayPresence>
-      <input
-        ref={model.importRef}
-        className="hidden"
-        type="file"
-        accept=".zip"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          if (f) void model.importFile(f);
-          e.target.value = '';
-        }}
-      />
-      {model.session ? (
-        <div hidden={model.openingWorkspace}>
-          <Suspense fallback={<WorkspaceLoading />}>
-            <WorkspacePage key={model.session.id} model={model} />
-            {!model.loading && !model.openingWorkspace && <ApplicationReady />}
+    <ModalProvider mobile={platform().mobile}>
+      <ThemeContext.Provider value={presentation.theme}>
+        <Notifications />
+        {'modelContext' in document && (
+          <Suspense fallback={null}>
+            <SiteToolsHost model={model} />
           </Suspense>
-        </div>
-      ) : (
-        !model.openingWorkspace && (
-          <>
-            <WelcomePage model={model} />
-            {!model.loading && <ApplicationReady />}
-          </>
-        )
-      )}
-      {model.openingWorkspace && <WorkspaceLoading />}
-      {model.session && (
-        <Suspense fallback={null}>
-          <WorkspaceDialogs key={model.session?.id} model={model} />
-        </Suspense>
-      )}
-    </ThemeContext.Provider>
+        )}
+        <ConnectionDialogs model={model} />
+        <OverlayPresence>
+          {model.workspaceAction && <WorkspaceActionDialog model={model} />}
+        </OverlayPresence>
+        <OverlayPresence>{model.githubOpen && <GitHubDialog model={model} />}</OverlayPresence>
+        <input
+          ref={model.importRef}
+          className="hidden"
+          type="file"
+          accept=".zip"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void model.importFile(f);
+            e.target.value = '';
+          }}
+        />
+        {model.session ? (
+          <div hidden={model.openingWorkspace}>
+            <Suspense fallback={<WorkspaceLoading />}>
+              <WorkspacePage key={model.session.id} model={model} />
+              {!model.loading && !model.openingWorkspace && <ApplicationReady />}
+            </Suspense>
+          </div>
+        ) : (
+          !model.openingWorkspace && (
+            <>
+              <WelcomePage model={model} />
+              {!model.loading && <ApplicationReady />}
+            </>
+          )
+        )}
+        {model.openingWorkspace && <WorkspaceLoading />}
+        {model.session && (
+          <Suspense fallback={null}>
+            <WorkspaceDialogs key={model.session?.id} model={model} />
+          </Suspense>
+        )}
+      </ThemeContext.Provider>
+    </ModalProvider>
   );
 }
 

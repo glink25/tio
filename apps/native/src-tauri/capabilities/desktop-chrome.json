@@ -1,0 +1,6 @@
+{
+  "identifier": "desktop-chrome",
+  "platforms": ["macOS", "windows", "linux"],
+  "windows": ["main", "tio-window-*"],
+  "permissions": ["core:window:allow-internal-toggle-maximize", "core:window:allow-start-dragging"]
+}

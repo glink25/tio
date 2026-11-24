@@ -1,11 +1,10 @@
-import { useTranslation } from '@tio/i18n';
+import { useT } from '@tio/i18n';
 import { useTheme } from '@tio/ui';
 import { useEffect, useState } from 'react';
 
 export default function MermaidPreview({ source }: { source: string }) {
   const theme = useTheme();
-  const { i18n } = useTranslation();
-  const zh = i18n.language === 'zh';
+  const t = useT();
   const [result, setResult] = useState<{ svg?: string; error?: string }>({});
   useEffect(() => {
     let active = true;
@@ -29,22 +28,15 @@ export default function MermaidPreview({ source }: { source: string }) {
       clearTimeout(timer);
     };
   }, [source, theme]);
-  if (!source.trim())
-    return (
-      <div className="tio-code-notice">
-        {zh ? '输入 Mermaid 源码以预览图表' : 'Enter Mermaid source to preview a diagram'}
-      </div>
-    );
+  if (!source.trim()) return <div className="tio-code-notice">{t('codeBlock.diagramEmpty')}</div>;
   if (result.error)
     return (
       <div role="alert" className="tio-code-notice">
-        {zh ? '图表渲染失败，请检查源码。' : 'Unable to render diagram. Check the source.'}
+        {t('codeBlock.diagramFailed')}
         <pre>{result.error}</pre>
       </div>
     );
   if (!result.svg)
-    return (
-      <output className="tio-code-notice">{zh ? '正在渲染图表…' : 'Rendering diagram…'}</output>
-    );
+    return <output className="tio-code-notice">{t('codeBlock.diagramLoading')}</output>;
   return <div className="tio-mermaid-preview" dangerouslySetInnerHTML={{ __html: result.svg }} />;
 }

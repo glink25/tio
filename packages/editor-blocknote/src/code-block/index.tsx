@@ -1,7 +1,7 @@
 import { createCodeBlockSpec } from '@blocknote/core';
 import { createReactBlockSpec } from '@blocknote/react';
 import { codeText } from '@tio/core';
-import { useTranslation } from '@tio/i18n';
+import { useT } from '@tio/i18n';
 import { SelectInput } from '@tio/ui';
 import { LoadingIndicator } from '@tio/ui';
 import { lazy, Suspense, useState } from 'react';
@@ -39,8 +39,7 @@ export const CodeBlock = createReactBlockSpec(
       },
     },
     render: function CodeBlockView({ block, editor, contentRef }) {
-      const { i18n } = useTranslation();
-      const zh = i18n.language === 'zh';
+      const t = useT();
       const [temporaryMode, setTemporaryMode] = useState<Mode>();
       const id = languageId(block.props.language);
       const Preview = previewFor(id);
@@ -51,7 +50,7 @@ export const CodeBlock = createReactBlockSpec(
         <div className="tio-code-block" data-mode={Preview ? mode : 'code'}>
           <div className="tio-code-toolbar" contentEditable={false}>
             <SelectInput
-              aria-label={zh ? '代码语言' : 'Code language'}
+              aria-label={t('codeBlock.language')}
               value={id}
               disabled={!editor.isEditable}
               onValueChange={(value) => {
@@ -64,12 +63,12 @@ export const CodeBlock = createReactBlockSpec(
               {!Object.hasOwn(languages, id) && <option value={id}>{block.props.language}</option>}
               {Object.entries(languages).map(([value, item]) => (
                 <option key={value} value={value}>
-                  {value === 'text' && zh ? '纯文本' : item.name}
+                  {value === 'text' ? t('codeBlock.plainText') : item.name}
                 </option>
               ))}
             </SelectInput>
             {Preview && (
-              <fieldset aria-label={zh ? '显示模式' : 'Display mode'}>
+              <fieldset aria-label={t('codeBlock.displayMode')}>
                 {(['code', 'preview', 'split'] as const).map((value) => (
                   <button
                     type="button"
@@ -81,9 +80,7 @@ export const CodeBlock = createReactBlockSpec(
                       else setTemporaryMode(value);
                     }}
                   >
-                    {zh
-                      ? { code: '代码', preview: '预览', split: '分屏' }[value]
-                      : { code: 'Code', preview: 'Preview', split: 'Split' }[value]}
+                    {t(`codeBlock.${value}`)}
                   </button>
                 ))}
               </fieldset>
@@ -95,14 +92,7 @@ export const CodeBlock = createReactBlockSpec(
             </pre>
             {Preview && mode !== 'code' && (
               <div className="tio-code-preview" contentEditable={false}>
-                <PreviewBoundary
-                  key={id}
-                  message={
-                    zh
-                      ? '预览加载失败，请重新打开页面。源码仍可编辑。'
-                      : 'Preview could not load. Reopen the page to retry. Source remains editable.'
-                  }
-                >
+                <PreviewBoundary key={id} message={t('codeBlock.previewFailed')}>
                   <Suspense fallback={<LoadingIndicator />}>
                     <Preview source={codeText(block.content)} />
                   </Suspense>

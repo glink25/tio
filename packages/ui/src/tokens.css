@@ -144,7 +144,6 @@
 .tio-popover [role='tab'],
 .tio-dialog [role='tab'],
 [cmdk-item],
-.tio-settings a,
 a[href] {
   touch-action: manipulation;
 }
@@ -196,6 +195,10 @@ a[href] {
     height: auto;
     max-height: 88dvh;
   }
+  .tio-dialog[data-layout='page'] {
+    width: min(840px, calc(100% - 24px));
+    height: min(560px, 76dvh);
+  }
   .tio-dialog[data-layout='workspace']:not([data-placement='sidebar']) {
     top: 3dvh;
     width: min(1600px, 96vw);
@@ -217,6 +220,15 @@ a[href] {
   }
   .tio-modal-layer[data-drawer] {
     z-index: 40;
+  }
+  .tio-modal-layer.tio-sidebar-preview {
+    visibility: hidden;
+  }
+  .tio-modal-layer.tio-sidebar-preview[data-swipe] {
+    visibility: visible;
+  }
+  .tio-modal-layer.tio-sidebar-preview > :is(.tio-dialog, .tio-overlay) {
+    pointer-events: none;
   }
   .tio-modal-layer > .tio-overlay {
     position: absolute;
@@ -299,4 +311,12 @@ a[href] {
   .tio-shortcut {
     display: none;
   }
+}
+
+.tio-modal-layer[hidden] {
+  display: none;
+}
+.tio-modal-layer[data-covered] > .tio-overlay {
+  visibility: hidden;
+  pointer-events: none;
 }

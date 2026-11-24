@@ -43,6 +43,26 @@ describe('trailing synchronization', () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(run).toHaveBeenCalledTimes(2);
   });
+  it('starts work only on the foreground owner after its assignment changes', async () => {
+    vi.useFakeTimers();
+    let owner = 'first';
+    const first = vi.fn(async () => {});
+    const second = vi.fn(async () => {});
+    const from = engine(first, { canSchedule: () => owner === 'first' });
+    const to = engine(second, { canSchedule: () => owner === 'second' });
+    from.start();
+    to.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+
+    from.schedule();
+    owner = 'second';
+    await to.backgroundSync();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledTimes(1);
+  });
   it('does not lose a trailing request that expires during an in-flight write', async () => {
     vi.useFakeTimers();
     let release!: () => void;

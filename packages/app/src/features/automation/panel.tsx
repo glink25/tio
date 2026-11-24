@@ -27,12 +27,12 @@ export default function AutomationDialog({
   runtime,
   workspaceId,
   close,
-  registerClose,
+  registerGuard,
 }: {
   runtime: WorkspaceRuntime;
   workspaceId: string;
   close: () => void;
-  registerClose?: (request: () => void) => void;
+  registerGuard?: (guard: () => boolean) => void;
 }) {
   const t = useT();
   const flow = useFlowDraft();
@@ -123,13 +123,17 @@ export default function AutomationDialog({
   const triggerReady =
     !!draft?.trigger &&
     !Object.keys(issues).some((key) => key === 'trigger' || key.startsWith('condition'));
+  const canLeave = (apply: () => void) => {
+    if (busy) return false;
+    if (!flow.dirty) return true;
+    setLeave(() => apply);
+    return false;
+  };
   const requestLeave = (apply: () => void) => {
-    if (busy) return;
-    if (flow.dirty) setLeave(() => apply);
-    else apply();
+    if (canLeave(apply)) apply();
   };
   useEffect(() => {
-    registerClose?.(() => requestLeave(close));
+    registerGuard?.(() => canLeave(close));
   });
   const back = () =>
     requestLeave(() => {
@@ -321,11 +325,12 @@ export default function AutomationDialog({
       <RecordQueryContext.Provider value={queryRecords}>
         <Modal
           layout="workspace"
-          trackHistory={!registerClose}
+          trackHistory={!registerGuard}
           title={title}
           header={header}
           footer={footer}
-          close={() => requestLeave(close)}
+          close={close}
+          canClose={() => canLeave(close)}
         >
           {error && (
             <div role="alert" className="border-b border-line px-5 py-3 text-sm text-red-600">
@@ -577,9 +582,8 @@ export default function AutomationDialog({
             <Modal
               title={t('automation.deleteFlow')}
               mobilePlacement="center"
-              close={() => {
-                if (!busy) setDeleteRule(undefined);
-              }}
+              close={() => setDeleteRule(undefined)}
+              canClose={() => !busy}
             >
               <p className="text-sm text-muted">
                 {t('automation.deleteFlowMessage', { name: deleteRule.name })}

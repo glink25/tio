@@ -18,7 +18,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { titleOf, type TioObject } from '@tio/core';
-import { t, i18n } from '@tio/i18n';
+import { t } from '@tio/i18n';
 import { IconButton, ObjectIcon, cn } from '@tio/ui';
 import { navigationOrder } from '@tio/workspace';
 import { ChevronRight, GripVertical, Plus } from 'lucide-react';
@@ -177,10 +177,7 @@ export function PageTree({
         onDragCancel={reset}
         accessibility={{
           screenReaderInstructions: {
-            draggable:
-              i18n.language === 'zh'
-                ? '空格开始拖动，上下键选择位置，右键移入、左键同级，空格放下，Escape 取消。'
-                : 'Space to drag, up/down to choose a position, right to nest, left for siblings, Space to drop, Escape to cancel.',
+            draggable: t('workspace.treeDragInstructions'),
           },
         }}
       >

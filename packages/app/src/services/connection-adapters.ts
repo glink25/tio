@@ -22,6 +22,7 @@ export interface ConnectionBinding {
   dispose?(): void;
   automation?(runtime: WorkspaceRuntime, workspaceId: string): AutomationProvider;
   identity: ConnectionIdentity;
+  repositoryPollMs?: number;
   adapter: ConnectionAdapter;
   repository(workspaceId: string, instanceId: string): WorkspaceRepository & { close(): void };
   discover(): Promise<TioObject[]>;
@@ -53,41 +54,49 @@ function searchable<T extends WorkspaceRepository & { close(): void }>(repositor
   return repository;
 }
 export const createConnectionBinding: ConnectionFactory = (connection, handle) => {
-  if (connection.kind === 'github') return githubBinding(connection);
-  if (connection.kind === 'device')
-    return {
-      identity: {
-        provider: 'local',
-        get name() {
-          return t(platform().deviceLabel);
+  switch (connection.kind) {
+    case 'github':
+      return githubBinding(connection);
+    case 'device':
+      return {
+        identity: {
+          provider: 'local',
+          get name() {
+            return t(platform().deviceLabel);
+          },
+          icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"%3E%3Crect x="3" y="5" width="18" height="14" rx="2"/%3E%3Cpath d="M3 14h18m-5 3h2"/%3E%3C/svg%3E',
+          details: [],
+          localOnly: true,
         },
-        icon: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="gray" stroke-width="2"%3E%3Crect x="3" y="5" width="18" height="14" rx="2"/%3E%3Cpath d="M3 14h18m-5 3h2"/%3E%3C/svg%3E',
-        details: [],
-        localOnly: true,
-      },
-      adapter: {
-        supportsSync: false,
-        getAccessState: async () => ({ code: 'available', scope: { connectionId: connection.id } }),
-        subscribe: () => () => {},
-        classifyError: (error) => connectionError(error, connection.id),
-      },
-      workspaceActions: (workspaceId) => ({
-        delete: directDelete(t('workspace.deleteDevice'), () =>
-          platform().deleteDevice(connection.id, workspaceId),
-        ),
-      }),
-      automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
-      repository: (workspaceId, instanceId) =>
-        searchable(platform().deviceRepository(workspaceId, instanceId)),
-      discover: async () => [],
-      content: () => {
-        throw new Error('Device connection has no remote endpoint');
-      },
-    };
-  const binding = platform().folder.binding(connection, handle);
-  const repository = binding.repository.bind(binding);
-  binding.repository = (workspace, instance) => searchable(repository(workspace, instance));
-  return binding;
+        adapter: {
+          supportsSync: false,
+          getAccessState: async () => ({
+            code: 'available',
+            scope: { connectionId: connection.id },
+          }),
+          subscribe: () => () => {},
+          classifyError: (error) => connectionError(error, connection.id),
+        },
+        workspaceActions: (workspaceId) => ({
+          delete: directDelete(t('workspace.deleteDevice'), () =>
+            platform().deleteDevice(connection.id, workspaceId),
+          ),
+        }),
+        automation: (runtime, workspaceId) => new AutomationRunner(runtime, workspaceId),
+        repository: (workspaceId, instanceId) =>
+          searchable(platform().deviceRepository(workspaceId, instanceId)),
+        discover: async () => [],
+        content: () => {
+          throw new Error('Device connection has no remote endpoint');
+        },
+      };
+    case 'folder': {
+      const binding = platform().folder.binding(connection, handle);
+      const repository = binding.repository.bind(binding);
+      binding.repository = (workspace, instance) => searchable(repository(workspace, instance));
+      return binding;
+    }
+  }
 };
 
 function directDelete(

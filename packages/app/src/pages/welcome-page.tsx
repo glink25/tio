@@ -1,10 +1,11 @@
 import { t } from '@tio/i18n';
 import { Button, IconButton, LoadingSkeleton } from '@tio/ui';
 import { EmptyStateIllustration } from '@tio/ui';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { AppWindow, ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { Brand } from '../components/brand';
+import { DesktopDragRegion, useDesktopChrome } from '../components/desktop-chrome';
 import { Identity } from '../components/identity';
 import { LoginHero } from '../components/login-hero';
 import { WelcomeSettings } from '../components/welcome-settings';
@@ -12,6 +13,8 @@ import type { WorkspaceController } from '../features/workspace/use-workspace';
 import { connectionEntries } from '../services/connection-entry';
 
 export function WelcomePage({ model: m }: { model: WorkspaceController }) {
+  const chrome = useDesktopChrome('Tio');
+  const drag = chrome.style && <DesktopDragRegion className="tio-welcome-drag tio-desktop-drag" />;
   const starting = useRef(false);
   const [startingEntry, setStartingEntry] = useState(false);
   const entries = connectionEntries({
@@ -33,7 +36,12 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
   }
   if (m.connection || m.loading || m.loadError)
     return (
-      <main className="tio-connection-page mx-auto flex w-full max-w-xl flex-col gap-8 p-6 md:py-16">
+      <main
+        className="tio-connection-page mx-auto flex w-full max-w-xl flex-col gap-8 p-6 md:py-16"
+        data-desktop-chrome={chrome.layout}
+        style={chrome.style}
+      >
+        {drag}
         <header className="flex shrink-0 items-center justify-between gap-4">
           {m.connection ? (
             <IconButton label={t('ui.back')} onClick={() => m.setLogoutOpen(true)}>
@@ -92,6 +100,15 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
                         </span>
                       )}
                     </Button>
+                    {m.canOpenWindow && (
+                      <IconButton
+                        label={`${t('workspace.openInNewWindow')} · ${s.name}`}
+                        disabled={m.busy || m.actionBusy}
+                        onClick={() => void m.openInNewWindow(s)}
+                      >
+                        <AppWindow size={16} />
+                      </IconButton>
+                    )}
                     {m.workspaceActions(s).delete && (
                       <IconButton
                         label={`${t('workspace.delete')} · ${s.name}`}
@@ -121,7 +138,8 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
       </main>
     );
   return (
-    <main className="login-page">
+    <main className="login-page" data-desktop-chrome={chrome.layout} style={chrome.style}>
+      {drag}
       <LoginHero />
       <section className="login-auth" aria-label={t('welcome.connections')}>
         <div className="login-actions">

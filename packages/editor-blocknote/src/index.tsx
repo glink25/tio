@@ -5,7 +5,7 @@ import {
   filterSuggestionItems,
 } from '@blocknote/core';
 import { SyntaxHighlightingExtension } from '@blocknote/core/extensions';
-import { zh, en } from '@blocknote/core/locales';
+import { en, zh } from '@blocknote/core/locales';
 import {
   createReactInlineContentSpec,
   createReactBlockSpec,
@@ -35,9 +35,10 @@ import { EditorInteraction, isolateInteractionNodeView } from './interaction';
 import { MentionMenu, SlashMenu } from './mention-menu';
 import { MobileEditorToolbar, TouchScroll, useTouchEditing } from './mobile-toolbar';
 import { useEditorMotion } from './motion';
+
 export { toEditor, fromEditor, type BlockContentCodec } from './codec';
 import type { Block } from '@tio/core';
-import { errorMessage, useT, useTranslation } from '@tio/i18n';
+import { errorMessage, type Language, resolveLanguage, useT, useTranslation } from '@tio/i18n';
 import {
   MentionLabel,
   EmptyNotice,
@@ -50,10 +51,19 @@ import {
 } from '@tio/ui';
 import type { NodeView } from '@tiptap/pm/view';
 import { FilePlus, Database, Code } from 'lucide-react';
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/shadcn/style.css';
+
+const blockNoteDictionaries: Partial<Record<Language, typeof en>> = { en, zh };
 const EmbedContext = createContext<(db: string, view: string) => React.ReactNode>(() => null);
 const DatabaseBlock = createReactBlockSpec(
   {
@@ -246,6 +256,7 @@ export function EditorContent({
   const t = useT();
   const { schema, codecs, slashItems } = useContext(EditorSchemaContext);
   const { i18n } = useTranslation();
+  const dictionary = blockNoteDictionaries[resolveLanguage(i18n.resolvedLanguage)] ?? en;
   const theme = useTheme();
   const touch = useTouchEditing();
   const portal = useContext(PortalContext);
@@ -254,6 +265,11 @@ export function EditorContent({
   const original = useRef(blocks);
   const applying = useRef(false);
   const sent = useRef(new Set<string>());
+  // BlockNote captures uploadFile at creation, while host edit access can change in place.
+  const latestUpload = useRef(upload);
+  useLayoutEffect(() => {
+    latestUpload.current = upload;
+  }, [upload]);
   const editor = useCreateBlockNote({
     schema,
     _tiptapOptions: {
@@ -335,14 +351,14 @@ export function EditorContent({
       }
     },
     dictionary: {
-      ...(i18n.language === 'zh' ? zh : en),
+      ...dictionary,
       placeholders: {
-        ...(i18n.language === 'zh' ? zh.placeholders : en.placeholders),
+        ...dictionary.placeholders,
         ...(placeholder ? { default: placeholder, emptyDocument: placeholder } : {}),
       },
     },
     initialContent: blocks.length ? toEditor(blocks, schema, codecs) : undefined,
-    uploadFile: upload,
+    uploadFile: (file) => latestUpload.current(file),
     dropCursor: { color: 'var(--color-muted)', width: 2 },
     resolveFileUrl: resolve,
   });

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 /** Shared timings for CSS and the editor's Floating UI adapters. */
-export const motion = { floating: { open: 140, close: 100 }, panel: { open: 200, close: 160 } };
+export const motion = { floating: { open: 140, close: 100 }, panel: { open: 400, close: 400 } };
 const OverlayOpenContext = createContext(true);
 export const useOverlayOpen = () => useContext(OverlayOpenContext);
 

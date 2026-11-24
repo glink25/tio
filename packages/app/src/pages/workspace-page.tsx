@@ -10,6 +10,7 @@ import { EditorSurface } from '@tio/web-editor';
 import { PanelLeft, Star, Move, Maximize2 } from 'lucide-react';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
+import { DesktopDragRegion, useDesktopChrome } from '../components/desktop-chrome';
 import { SyncStatus } from '../components/sync-status';
 import {
   assistantScope,
@@ -21,6 +22,7 @@ import { Breadcrumbs } from '../features/workspace/breadcrumbs';
 import { Sidebar, WorkspaceSwitcher } from '../features/workspace/sidebar';
 import { statusLabel } from '../features/workspace/status';
 import type { WorkspaceController } from '../features/workspace/use-workspace';
+import { platform } from '../platform';
 import { appSlice } from '../services/app-slice-permissions';
 import { setPresentation, usePresentation } from '../services/browser-presentation';
 
@@ -31,6 +33,11 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
     setAssistantLoaded(true);
     setAssistantOpen(true);
   };
+  const toggleAssistant = () => {
+    setAssistantLoaded(true);
+    setAssistantOpen((open) => !open);
+  };
+  const closeAssistant = () => setAssistantOpen(false);
   const quoteSelection = (selection: SelectionQuote) => {
     if (!m.connection || selection.workspaceId !== m.session?.workspaceId) return;
     const object = m.objects.find((o) => o.id === selection.objectId);
@@ -60,7 +67,10 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
     }
   }, [m.openingWorkspace]);
   const layoutRef = useRef<HTMLDivElement>(null);
+  const previousSidebarCollapsed = useRef(m.sidebarCollapsed);
   useLayoutEffect(() => {
+    if (previousSidebarCollapsed.current === m.sidebarCollapsed) return;
+    previousSidebarCollapsed.current = m.sidebarCollapsed;
     const element = layoutRef.current;
     if (!element) return;
     element.dataset.sidebarAnimating = '';
@@ -69,7 +79,25 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
   }, [m.sidebarCollapsed]);
   const presentation = usePresentation();
   const mobile = useMobile();
+  const { sidebar, setSidebar, setMenu } = m;
+  useEffect(() => {
+    if (mobile || !sidebar) return;
+    setSidebar(false);
+    setMenu(false);
+  }, [mobile, sidebar, setSidebar, setMenu]);
   const current = m.current;
+  const toggleSidebar = () => {
+    if (mobile) m.setSidebar(!m.sidebar);
+    else m.collapseSidebar();
+  };
+  const workspaceName = m.workspace?.name ?? m.session?.name;
+  const title = current ? titleOf(current) : workspaceName;
+  const chrome = useDesktopChrome(
+    title ? `${title} · Tio` : 'Tio',
+    m.graph ? undefined : { label: t('workspace.sidebar'), toggle: toggleSidebar },
+  );
+  const desktop = !!platform().desktopChrome;
+  const overlay = chrome.layout === 'overlay';
   const ancestors: TioObject[] = [];
   const visited = new Set<string>();
   let parent = m.nav.find(
@@ -81,7 +109,8 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
     parent = m.nav.find((o) => o.id === parent?.parentId);
   }
   const header = (actions: ReactNode, layout: { appMode: boolean }) =>
-    layout.appMode ? (
+    layout.appMode && !desktop ? (
+      chrome.layout !== 'headerbar' &&
       (mobile ? !m.sidebar : m.sidebarCollapsed) && (
         <div className="fixed top-[max(12px,var(--tio-safe-top))] left-[max(12px,var(--tio-safe-left))] z-20 rounded-lg border border-line bg-panel/95 shadow-sm">
           <IconButton
@@ -98,55 +127,89 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
       )
     ) : (
       <header className="tio-workspace-header sticky top-0 z-10 flex items-center justify-between gap-2 bg-panel/95 px-3 md:px-5">
-        <div className="flex min-w-0 items-center gap-1 text-sm text-muted">
-          <IconButton
-            label={t('workspace.sidebar')}
-            className={cn('p-1.5', !m.sidebarCollapsed && 'md:hidden')}
-            onClick={() => {
-              if (matchMedia('(min-width:768px)').matches) m.collapseSidebar();
-              else m.setSidebar(true);
-            }}
-          >
-            <PanelLeft size={18} />
-          </IconButton>
-          {(mobile || m.sidebarCollapsed) && !m.sidebar && <WorkspaceSwitcher model={m} compact />}
-          <Breadcrumbs ancestors={ancestors} current={current} navigate={m.navigate} />
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <SyncStatus model={m} />
-          {current && (
+        <div className="flex min-w-0 shrink items-center gap-1 text-sm text-muted">
+          {chrome.layout !== 'headerbar' && (
             <IconButton
-              label={t('workspace.favorite')}
-              className="p-1.5"
-              onClick={() => m.favorite(current)}
+              label={t('workspace.sidebar')}
+              className={cn('p-1.5', !overlay && !m.sidebarCollapsed && 'md:hidden')}
+              onClick={toggleSidebar}
             >
-              <Star
-                size={17}
-                className={m.session?.favorites?.includes(current.id) ? 'fill-ink text-ink' : ''}
-              />
+              <PanelLeft size={18} />
             </IconButton>
           )}
-          {actions}
+          {(overlay || mobile || m.sidebarCollapsed) && !m.sidebar && (
+            <WorkspaceSwitcher model={m} compact />
+          )}
+          {overlay && !layout.appMode && !m.sidebar && (
+            <span aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-line" />
+          )}
+          {!layout.appMode && (
+            <Breadcrumbs ancestors={ancestors} current={current} navigate={m.navigate} />
+          )}
         </div>
+        {overlay && <DesktopDragRegion className="tio-desktop-drag" />}
+        {!layout.appMode && (
+          <div className="flex shrink-0 items-center gap-1">
+            <SyncStatus model={m} />
+            {current && (
+              <IconButton
+                label={t('workspace.favorite')}
+                className="p-1.5"
+                onClick={() => m.favorite(current)}
+              >
+                <Star
+                  size={17}
+                  className={m.session?.favorites?.includes(current.id) ? 'fill-ink text-ink' : ''}
+                />
+              </IconButton>
+            )}
+            {actions}
+          </div>
+        )}
       </header>
     );
   const preview = m.objects.find((o) => o.id === m.previewId && !o.deleted);
+  const assistant = assistantLoaded && m.runtime && m.connection && !m.openingWorkspace && (
+    <Suspense fallback={assistantOpen ? <LoadingSkeleton layout="inline" /> : null}>
+      <AssistantHost
+        model={m}
+        mobile={mobile}
+        open={assistantOpen}
+        close={closeAssistant}
+        references={references}
+        onReferencesConsumed={consumeReferences}
+      />
+    </Suspense>
+  );
   return (
-    <div className="tio-workspace" data-assistant-open={assistantOpen && !mobile}>
-      {assistantLoaded && m.runtime && m.connection && !m.openingWorkspace && (
-        <Suspense fallback={null}>
-          <AssistantHost
-            model={m}
-            open={assistantOpen}
-            close={() => setAssistantOpen(false)}
-            references={references}
-            onReferencesConsumed={consumeReferences}
-          />
-        </Suspense>
-      )}
+    <div
+      className="tio-workspace"
+      data-assistant-open={assistantOpen && !mobile}
+      data-desktop-chrome={chrome.layout}
+      data-compact-chrome={chrome.compact || undefined}
+      style={chrome.style}
+    >
+      <aside
+        inert={(!mobile && !assistantOpen) || undefined}
+        aria-hidden={(!mobile && !assistantOpen) || undefined}
+        role={mobile ? 'presentation' : undefined}
+        style={mobile ? undefined : { paddingTop: 'var(--tio-safe-top)' }}
+        className={
+          mobile
+            ? 'contents'
+            : 'tio-assistant-panel fixed inset-y-0 right-0 z-40 flex flex-col overflow-hidden border-l border-line bg-panel'
+        }
+      >
+        {assistant}
+      </aside>
       {m.graph && m.runtime && (
         <Suspense fallback={<output>{t('links.updating')}</output>}>
-          <RelationshipGraph model={m} onOpenAssistant={openAssistant} />
+          <RelationshipGraph
+            model={m}
+            onToggleAssistant={toggleAssistant}
+            assistantOpen={assistantOpen}
+            desktopOverlay={overlay}
+          />
         </Suspense>
       )}
       <div
@@ -162,6 +225,7 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
       >
         {m.runtime ? (
           <EditorSurface
+            documentScrollRef={desktop ? m.documentScroll : undefined}
             onAskAssistant={quoteSelection}
             contentLinks={m.contentLinks}
             onOpenGraph={(id) => void m.openGraph(id)}
@@ -204,8 +268,11 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
               <>
                 <Sidebar
                   model={m}
+                  mobile={mobile}
                   pageActions={layout.navigationPageActions}
-                  onOpenAssistant={openAssistant}
+                  onToggleAssistant={toggleAssistant}
+                  assistantOpen={assistantOpen}
+                  chrome={chrome.layout}
                 />
                 {header(actions, layout)}
               </>
@@ -227,7 +294,13 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
           />
         ) : (
           <>
-            <Sidebar model={m} onOpenAssistant={openAssistant} />
+            <Sidebar
+              model={m}
+              mobile={mobile}
+              onToggleAssistant={toggleAssistant}
+              assistantOpen={assistantOpen}
+              chrome={chrome.layout}
+            />
             {header(null, { appMode: false })}
           </>
         )}

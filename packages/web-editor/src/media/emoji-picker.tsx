@@ -1,13 +1,22 @@
-import { useT, useTranslation } from '@tio/i18n';
+import { resolveLanguage, type Language, useT, useTranslation } from '@tio/i18n';
 import { LoadingIndicator } from '@tio/ui';
 import { useTheme } from '@tio/ui';
 import { useEffect, useRef, useState } from 'react';
+
+const english = {
+  locale: 'en',
+  load: () => import('@emoji-mart/data/i18n/en.json'),
+};
+const translations: Partial<Record<Language, typeof english>> = {
+  en: english,
+  zh: { locale: 'zh', load: () => import('@emoji-mart/data/i18n/zh.json') },
+};
 
 export default function EmojiPicker({ onSelect }: { onSelect: (icon: string) => void }) {
   const t = useT();
   const { i18n } = useTranslation();
   const theme = useTheme();
-  const locale = i18n.language.startsWith('zh') ? 'zh' : 'en';
+  const { locale, load } = translations[resolveLanguage(i18n.resolvedLanguage)] ?? english;
   const container = useRef<HTMLDivElement>(null);
   const select = useRef(onSelect);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -18,13 +27,7 @@ export default function EmojiPicker({ onSelect }: { onSelect: (icon: string) => 
     let disposed = false;
     let picker: HTMLElement | undefined;
     setStatus('loading');
-    void Promise.all([
-      import('emoji-mart'),
-      import('@emoji-mart/data'),
-      locale === 'zh'
-        ? import('@emoji-mart/data/i18n/zh.json')
-        : import('@emoji-mart/data/i18n/en.json'),
-    ])
+    void Promise.all([import('emoji-mart'), import('@emoji-mart/data'), load()])
       .then(([{ Picker }, { default: data }, { default: translations }]) => {
         if (disposed) return;
         picker = new Picker({
@@ -52,7 +55,7 @@ export default function EmojiPicker({ onSelect }: { onSelect: (icon: string) => 
       disposed = true;
       picker?.remove();
     };
-  }, [locale, theme]);
+  }, [load, locale, theme]);
   return (
     <>
       {status !== 'ready' && (

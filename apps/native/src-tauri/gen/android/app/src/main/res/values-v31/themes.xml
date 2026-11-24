@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.tio_native" parent="Theme.tio_native.Base">
+        <item name="android:windowSplashScreenBackground">@color/tio_startup_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/tio_launch_system_icon</item>
+    </style>
+</resources>

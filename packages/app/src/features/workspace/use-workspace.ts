@@ -1,8 +1,16 @@
 import { AssetResolver } from '@tio/assets/browser';
 import { isContentTarget, type ContentAnchor, type ContentTarget } from '@tio/core';
-import { id, visibility, editable, ConnectionAccessError, type TioObject } from '@tio/core';
+import {
+  id,
+  visibility,
+  editable,
+  ConnectionAccessError,
+  HostError,
+  type TioObject,
+} from '@tio/core';
 import type { WorkspaceSession, Connection } from '@tio/core';
-import { t, i18n, errorMessage } from '@tio/i18n';
+import { t, errorMessage } from '@tio/i18n';
+import { githubConnectionUserId } from '@tio/provider-github';
 import { exportZip, exportMarkdownZip, importZip } from '@tio/serialization';
 import type { SyncSnapshot } from '@tio/sync';
 import { toast } from '@tio/ui';
@@ -29,13 +37,15 @@ import {
   loginGitHub,
 } from '../../services/github-auth';
 import { logoutCoordinator } from '../../services/logout';
-import { contentUrl } from '../../services/navigation';
-import { readRoute, writeRoute } from '../../services/navigation';
+import { contentUrl, createContentRouter, readRoute } from '../../services/navigation';
 import { WorkspaceServices } from '../../services/workspace-services';
 import { statusModel } from './status';
 const emptyStore = createStore(() => emptyWorkspaceState);
 export function useWorkspace() {
   const [services] = useState(() => new WorkspaceServices());
+  const host = platform();
+  const windows = host.windows;
+  const [router] = useState(() => createContentRouter(!!host.mobile));
   const [runtime, setRuntime] = useState<WorkspaceRuntime | null>(null);
   const runtimeRef = useRef<WorkspaceRuntime | null>(null);
   const mediaResolver = useMemo(() => (runtime ? new AssetResolver(runtime) : null), [runtime]);
@@ -78,12 +88,13 @@ export function useWorkspace() {
     coordinator.current = logoutCoordinator(async () => {
       setLoggingOut(true);
       setLogoutOpen(true);
+      if (windows) await runtimeRef.current?.flush();
       await services.abandon();
       runtimeRef.current = null;
       setRuntime(null);
     });
     return () => coordinator.current?.close();
-  }, [services]);
+  }, [services, windows]);
   const [githubOpen, setGithubOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
@@ -94,6 +105,7 @@ export function useWorkspace() {
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const activating = useRef(false);
+  const documentScroll = useRef<HTMLDivElement>(null);
   const scrollPositions = useRef(new Map<string, number>());
   const [sidebar, setSidebar] = useState(false);
   const [query, setQuery] = useState('');
@@ -132,8 +144,11 @@ export function useWorkspace() {
     setActionBusy(true);
     setActionError('');
     try {
-      if (operation === 'delete') await services.deleteWorkspace(target);
-      else await action.execute();
+      if (operation === 'delete') {
+        const remove = () => services.deleteWorkspace(target);
+        if (windows) await windows.changeConnection(remove, target.id);
+        else await remove();
+      } else await action.execute();
       setWorkspaceAction(null);
       await refreshSessions();
     } catch (error) {
@@ -155,9 +170,19 @@ export function useWorkspace() {
         e.returnValue = '';
       }
     };
+    const saveWhenHidden = () => {
+      const active = runtimeRef.current;
+      if (document.hidden && active?.state.getState().pending) {
+        void active.flush().catch((error) => services.reportStatusError(error));
+      }
+    };
     window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, []);
+    if (windows) document.addEventListener('visibilitychange', saveWhenHidden);
+    return () => {
+      window.removeEventListener('beforeunload', warn);
+      document.removeEventListener('visibilitychange', saveWhenHidden);
+    };
+  }, [services, windows]);
   function reportError(error: unknown) {
     if (runtimeRef.current?.state.getState().error === error) return;
     if (sessionRef.current && error instanceof ConnectionAccessError) {
@@ -170,6 +195,9 @@ export function useWorkspace() {
   useEffect(() => {
     let disposed = false;
     let stopCallbacks: (() => void) | undefined;
+    let stopClose: (() => void) | undefined;
+    const stopAssignments = windows?.subscribeAssignments(() => services.refreshSyncAssignments());
+    router.start();
     services.onWorkspaceClosed = (id) => {
       if (sessionRef.current?.id !== id) return;
       runtimeRef.current = null;
@@ -182,12 +210,31 @@ export function useWorkspace() {
       setAutomationOpen(false);
       setPreviewId(null);
       setSyncStatus({ phase: 'idle' });
-      history.replaceState({}, '', location.pathname + location.search);
+      void windows?.release().catch(reportError);
+      router.clear();
     };
     services.onChange = () => {
       if (!disposed) void refreshSessions().catch((e) => reportError(e));
     };
     void (async () => {
+      if (windows) {
+        stopClose = await windows.onClose(async () => {
+          if (!window.dispatchEvent(new Event('tio:before-window-close', { cancelable: true })))
+            throw new HostError('pending');
+          try {
+            if (activating.current) throw new HostError('pending');
+            await runtimeRef.current?.flush();
+            await services.dispose();
+          } catch (error) {
+            reportError(error);
+            throw error;
+          }
+        });
+        if (disposed) {
+          stopClose();
+          return;
+        }
+      }
       let launchURL: string | undefined;
       const callbacks = platform().auth.callbacks;
       if (callbacks) {
@@ -198,9 +245,10 @@ export function useWorkspace() {
           exchanging = true;
           try {
             if (await finishGitHubLogin(callback)) {
-              if (services.connection?.id === 'github-' + credentials()?.userId)
+              const account = credentials();
+              if (account && githubConnectionUserId(services.connection?.id) === account.userId)
                 await services.credentialsChanged();
-              else await services.connect('github');
+              else await connect('github');
               setConnection(services.connection);
               services.startSync(setSyncStatus);
               await loadSpaces();
@@ -219,19 +267,25 @@ export function useWorkspace() {
       }
       const loggedIn = await finishGitHubLogin(launchURL);
       await services.initialize();
+      const account = credentials();
       const restoringAuthorization =
-        loggedIn && services.connection?.id === `github-${credentials()?.userId}`;
-      if (loggedIn && !restoringAuthorization) await services.connect('github');
+        loggedIn && account && githubConnectionUserId(services.connection?.id) === account.userId;
+      if (loggedIn && !restoringAuthorization) await connect('github');
       if (disposed) return;
       setConnection(services.connection);
       services.startSync(setSyncStatus);
       const active = await services.setting('active');
       setRecent(active);
       const available = await services.sessions();
-      const route = readRoute();
-      const selected =
-        available.find((s) => s.workspaceId === route?.workspaceId) ??
-        (!loggedIn || restoringAuthorization ? available.find((s) => s.id === active) : undefined);
+      const route = router.read();
+      const mayRestoreRecent = !windows || windows.restoreRecent;
+      const selected = windows?.session
+        ? available.find((s) => s.id === windows.session)
+        : (available.find((s) => s.workspaceId === route?.workspaceId) ??
+          (mayRestoreRecent && (!loggedIn || restoringAuthorization)
+            ? available.find((s) => s.id === active)
+            : undefined));
+      if (windows?.session && !selected) await windows.release();
       if (selected) {
         await activate(selected);
         await services.refreshRemote();
@@ -252,6 +306,8 @@ export function useWorkspace() {
     return () => {
       disposed = true;
       stopCallbacks?.();
+      stopClose?.();
+      stopAssignments?.();
       services.onChange = () => {};
       services.onWorkspaceClosed = () => {};
       void services.dispose().catch((e) => reportError(e));
@@ -261,18 +317,26 @@ export function useWorkspace() {
   }, [services]);
   async function activate(s: WorkspaceSession, fromHistory = false) {
     if (activating.current) return;
+    if (sessionRef.current?.id === s.id && !fromHistory) return true;
     activating.current = true;
     setOpeningWorkspace(true);
     setBusy(true);
     try {
       const initial = !sessionRef.current;
+      if (windows && !(await windows.claim(s.id))) {
+        const previous = sessionRef.current;
+        if (previous && fromHistory)
+          router.write(previous.workspaceId, previous.selectedId ?? '', true);
+        return;
+      }
       const next = await services.open(s);
       if (!next) return;
+      await windows?.commit(s.id);
       runtimeRef.current = next;
       setRuntime(next);
       setSession(s);
       sessionRef.current = s;
-      const route = readRoute();
+      const route = router.read();
       const target = fromHistory || route?.workspaceId === s.workspaceId ? route?.id : s.selectedId;
       const activeSession = { ...s, selectedId: target ?? '' };
       setSession(activeSession);
@@ -285,7 +349,7 @@ export function useWorkspace() {
         anchor: routed ? route.anchor : undefined,
         requestId: v.requestId + 1,
       }));
-      writeRoute(
+      router.write(
         s.workspaceId,
         target ?? '',
         fromHistory || initial,
@@ -312,17 +376,16 @@ export function useWorkspace() {
     } catch (error) {
       reportError(error);
       const previous = sessionRef.current;
-      if (previous) writeRoute(previous.workspaceId, previous.selectedId ?? '', true);
+      if (previous) router.write(previous.workspaceId, previous.selectedId ?? '', true);
     } finally {
+      if (windows) await windows.cancel().catch(reportError);
       activating.current = false;
       setOpeningWorkspace(false);
       setBusy(false);
     }
   }
   useEffect(() => {
-    const pop = () => {
-      const route = readRoute();
-      if (!route || history.state?.tioOverlay) return;
+    return router.subscribe((route) => {
       const currentSession = sessionRef.current;
       if (route.workspaceId !== currentSession?.workspaceId) {
         const next = sessions.find((item) => item.workspaceId === route.workspaceId);
@@ -330,34 +393,68 @@ export function useWorkspace() {
       } else {
         const runtime = runtimeRef.current;
         if (!runtime) return;
+        if (host.desktopChrome && currentSession && documentScroll.current?.clientHeight)
+          scrollPositions.current.set(
+            `${currentSession.workspaceId}/${currentSession.selectedId}`,
+            documentScroll.current.scrollTop,
+          );
         setGraph(route.graph);
         setSelected(route.id);
         setLocationTarget((v) => ({ anchor: route.anchor, requestId: v.requestId + 1 }));
-        const requestedHash = location.hash;
+        const requestedRoute = router.current();
         void runtime
           .loadTarget(route.id)
           .then(() => {
-            if (runtimeRef.current !== runtime || location.hash !== requestedHash) return;
+            if (runtimeRef.current !== runtime || router.current() !== requestedRoute) return;
             const target = runtime.snapshot().find((o) => o.id === route.id);
             if (target) navigate(target, true, route.anchor, route.graph);
           })
           .catch(reportError);
       }
-    };
-    window.addEventListener('popstate', pop);
-    window.addEventListener('hashchange', pop);
-    return () => {
-      window.removeEventListener('popstate', pop);
-      window.removeEventListener('hashchange', pop);
-    };
+    });
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions]);
+  }, [router, sessions]);
+  const desktopDocumentReady = !!host.desktopChrome && state.loads[selected] === 'ready';
+  const desktopAnchor = !!host.desktopChrome && locationTarget.anchor;
   useEffect(() => {
-    const frame = requestAnimationFrame(() =>
-      window.scrollTo(0, scrollPositions.current.get(`${session?.workspaceId}/${selected}`) ?? 0),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, [selected, session?.workspaceId, graph]);
+    const y = scrollPositions.current.get(`${session?.workspaceId}/${selected}`) ?? 0;
+    if (!host.desktopChrome) {
+      const frame = requestAnimationFrame(() => window.scrollTo(0, y));
+      return () => cancelAnimationFrame(frame);
+    }
+    const pane = documentScroll.current;
+    if (graph || !pane || desktopAnchor) return;
+
+    pane.scrollTop = desktopDocumentReady ? y : 0;
+    const body = pane.querySelector('main');
+    if (!desktopDocumentReady || !body || pane.scrollTop >= y - 1) return;
+
+    // Block layout can finish after the document has been loaded.
+    const observer = new ResizeObserver(() => {
+      pane.scrollTop = y;
+      if (pane.scrollTop >= y - 1) observer.disconnect();
+    });
+    observer.observe(body);
+    const stop = () => observer.disconnect();
+    const timeout = setTimeout(stop, 500);
+    pane.addEventListener('wheel', stop, { once: true, passive: true });
+    pane.addEventListener('pointerdown', stop, { once: true });
+    pane.addEventListener('keydown', stop, { once: true });
+    return () => {
+      stop();
+      clearTimeout(timeout);
+      pane.removeEventListener('wheel', stop);
+      pane.removeEventListener('pointerdown', stop);
+      pane.removeEventListener('keydown', stop);
+    };
+  }, [
+    selected,
+    session?.workspaceId,
+    graph,
+    host.desktopChrome,
+    desktopDocumentReady,
+    desktopAnchor,
+  ]);
   function resizeSidebar(width: number) {
     const next = Math.min(400, Math.max(220, width));
     setSidebarWidth(next);
@@ -412,9 +509,9 @@ export function useWorkspace() {
     if (!graph && !fromHistory)
       scrollPositions.current.set(
         `${sessionRef.current?.workspaceId}/${sessionRef.current?.selectedId}`,
-        window.scrollY,
+        host.desktopChrome ? (documentScroll.current?.scrollTop ?? 0) : window.scrollY,
       );
-    if (!fromHistory) writeRoute(o.workspaceId, o.id, false, anchor, showGraph);
+    if (!fromHistory) router.write(o.workspaceId, o.id, false, anchor, showGraph);
     setGraph(showGraph);
     setLocationTarget((v) => ({ anchor, requestId: v.requestId + 1 }));
     setPreviewId(null);
@@ -455,12 +552,13 @@ export function useWorkspace() {
       if (runtimeRef.current !== active) return;
       scrollPositions.current.set(
         `${sessionRef.current?.workspaceId}/${sessionRef.current?.selectedId}`,
-        window.scrollY,
+        host.desktopChrome ? (documentScroll.current?.scrollTop ?? 0) : window.scrollY,
       );
       setGraph(true);
       setSelected(id);
       setPreviewId(null);
-      writeRoute(sessionRef.current!.workspaceId, id, false, undefined, true);
+      setSidebar(false);
+      router.write(sessionRef.current!.workspaceId, id, false, undefined, true);
     } catch (error) {
       reportError(error);
     }
@@ -520,6 +618,51 @@ export function useWorkspace() {
       setLoading(false);
     }
   }
+  function connect(...args: Parameters<WorkspaceServices['connect']>) {
+    const work = () => services.connect(...args);
+    return windows ? windows.changeConnection(work) : work();
+  }
+  async function openInNewWindow(session?: WorkspaceSession) {
+    if (!windows?.enabled) return;
+    try {
+      await windows.open(session?.id);
+    } catch (error) {
+      reportError(error);
+    }
+  }
+  useEffect(() => {
+    if (!windows?.enabled || !host.desktopChrome) return;
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    void host.desktopChrome
+      .subscribe((action) => {
+        if (action === 'new-window') void openInNewWindow();
+      })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
+      .catch(reportError);
+    function shortcut(event: KeyboardEvent) {
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        !event.shiftKey ||
+        event.altKey ||
+        event.isComposing ||
+        event.code !== 'KeyN'
+      )
+        return;
+      event.preventDefault();
+      if (!event.repeat) void openInNewWindow();
+    }
+    window.addEventListener('keydown', shortcut);
+    return () => {
+      disposed = true;
+      unlisten?.();
+      window.removeEventListener('keydown', shortcut);
+    };
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [host, windows]);
   async function offline() {
     if (services.connection) {
       setCreating(true);
@@ -527,7 +670,7 @@ export function useWorkspace() {
     }
     setLoading(true);
     try {
-      await services.connect('device');
+      await connect('device');
       setConnection(services.connection);
       await loadSpaces();
     } catch (e) {
@@ -541,9 +684,7 @@ export function useWorkspace() {
     setBusy(true);
     setError('');
     try {
-      const s =
-        creation.current.session ??
-        (await services.create(starterWorkspace(name, i18n.language === 'en' ? 'en' : 'zh')));
+      const s = creation.current.session ?? (await services.create(starterWorkspace(name, t)));
       creation.current.session = s;
       await refreshSessions();
       if (await activate(s)) setCreating(false);
@@ -567,7 +708,7 @@ export function useWorkspace() {
         return;
       }
       await connectToken(token, expected);
-      if (!services.connection) await services.connect('github');
+      if (!services.connection) await connect('github');
       else if (services.connection.kind === 'github') await services.credentialsChanged();
       setConnection(services.connection);
       services.startSync(setSyncStatus);
@@ -584,7 +725,7 @@ export function useWorkspace() {
     try {
       const handle = await pickFolder();
       setBusy(true);
-      await services.connect('folder', handle);
+      await connect('folder', handle);
       setConnection(services.connection);
       services.startSync(setSyncStatus);
       await loadSpaces();
@@ -611,15 +752,14 @@ export function useWorkspace() {
     setLogoutError('');
     setLoggingOut(true);
     try {
-      await coordinator.current!.logout();
+      if (windows) await windows.changeConnection(() => coordinator.current!.logout());
+      else await coordinator.current!.logout();
     } catch (error) {
       setLogoutError(errorMessage(error));
     }
   }
   function addPage(parentId: string | null = null) {
-    const o = newPage(session!.workspaceId);
-    o.title = t('common.untitled');
-    o.parentId = parentId;
+    const o = newPage(session!.workspaceId, parentId, t);
     command((runtime) => {
       runtime.create([o]);
       setPreviewId(o.id);
@@ -628,15 +768,7 @@ export function useWorkspace() {
   }
 
   function addDatabase() {
-    const items = newDatabase(session!.workspaceId);
-    items[0].name = t('workspace.newDatabase');
-    if (i18n.language === 'en') {
-      items[0].fields![0].name = 'Name';
-      items[0].fields![1].name = 'Status';
-      items[0].fields![1].options![0].label = 'To do';
-      items[0].fields![1].options![1].label = 'Done';
-      items[1].name = 'Default view';
-    }
+    const items = newDatabase(session!.workspaceId, null, t);
     command((runtime) => {
       runtime.create(items);
       navigate(items[0]);
@@ -755,7 +887,7 @@ export function useWorkspace() {
     else {
       setSelected('');
       setPreviewId(null);
-      writeRoute(session.workspaceId, '', true);
+      router.write(session.workspaceId, '', true);
       const nextSession = { ...sessionRef.current!, selectedId: '' };
       sessionRef.current = nextSession;
       setSession(nextSession);
@@ -820,6 +952,7 @@ export function useWorkspace() {
   }
   return {
     graph,
+    documentScroll,
     locationTarget,
     navigateTarget,
     openGraph,
@@ -916,6 +1049,8 @@ export function useWorkspace() {
     setSearching,
     setMoveTarget,
     activate,
+    canOpenWindow: windows?.enabled ?? false,
+    openInNewWindow,
     offline,
     folder,
     authorize,

@@ -10,7 +10,7 @@ import {
   type TioObject,
 } from '@tio/core';
 
-import { createEvaluator, displayValue } from './index';
+import { createEvaluator, displayValue, exportDisplay } from './index';
 
 const choices = (type: string) => ['select', 'multiSelect', 'status'].includes(type);
 export function parseNumber(text: string): number | null {
@@ -72,7 +72,7 @@ export function convertValue(
   if (isDerivedField(target)) return undefined;
   if (value == null || value === '')
     return target.type === 'mention' && target.multiple !== false ? [] : null;
-  const text = displayValue(value, source, objects, 'en');
+  const text = displayValue(value, source, objects, exportDisplay);
   let next: unknown = null;
   if (['text', 'title'].includes(target.type)) next = text;
   else if (target.type === 'number')

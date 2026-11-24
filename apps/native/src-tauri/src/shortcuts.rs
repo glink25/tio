@@ -38,7 +38,7 @@ pub unsafe extern "C" fn tio_release_reply(reply: *mut c_char) {
 
 type Call = unsafe extern "C" fn(*const c_char) -> *mut c_char;
 type Free = unsafe extern "C" fn(*mut c_char);
-type Reset = unsafe extern "C" fn();
+type Reset = unsafe extern "C" fn(*const c_char);
 static FOLDER: std::sync::OnceLock<(Call, Free, Reset)> = std::sync::OnceLock::new();
 
 #[no_mangle]
@@ -46,14 +46,47 @@ pub extern "C" fn tio_register_folder(call: Call, free: Free, reset: Reset) {
     let _ = FOLDER.set((call, free, reset));
 }
 
-pub fn reset_foreground() {
+pub fn reset_foreground(owner: Option<&str>) {
     if let Some((_, _, reset)) = FOLDER.get() {
-        unsafe { reset() }
+        let owner = owner.and_then(|owner| CString::new(owner).ok());
+        unsafe {
+            reset(
+                owner
+                    .as_ref()
+                    .map_or(std::ptr::null(), |owner| owner.as_ptr()),
+            )
+        }
     }
 }
 
 #[tauri::command]
-pub async fn apple_folder(request: Value) -> Result<Value, String> {
+pub async fn apple_folder(
+    webview: tauri::Webview,
+    generation: String,
+    mut request: Value,
+) -> Result<Value, String> {
+    use tauri::Manager;
+    let locks = webview.state::<crate::folder::FolderLocks>();
+    locks.0.check(webview.label(), &generation)?;
+    let acquiring = request["action"] == "lock";
+    request["owner"] = json!(format!("foreground/{generation}"));
+    if request["action"] == "pick" {
+        request["scene"] = json!(crate::ipad_scenes::identifier(
+            webview.app_handle(),
+            webview.label()
+        ));
+    }
+    let reply = call_folder(request.clone()).await?;
+    if acquiring && reply.is_string() && locks.0.check(webview.label(), &generation).is_err() {
+        request["action"] = json!("unlock");
+        request["token"] = reply;
+        call_folder(request).await?;
+        return Err("closed".into());
+    }
+    Ok(reply)
+}
+
+pub async fn call_folder(request: Value) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || unsafe {
         let input = CString::new(request.to_string()).map_err(|_| "invalid")?;
         let (call, free, _) = FOLDER.get().ok_or("unavailable")?;

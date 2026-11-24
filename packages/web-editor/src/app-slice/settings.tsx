@@ -1,5 +1,5 @@
 import type { Block, TioObject } from '@tio/core';
-import { useTranslation } from '@tio/i18n';
+import { type TranslationKey, useT } from '@tio/i18n';
 import { OverlayPresence } from '@tio/ui';
 import { LoadingSkeleton } from '@tio/ui';
 import { Button, Drawer, Modal } from '@tio/ui';
@@ -13,6 +13,21 @@ import type { AppSliceLog } from './view';
 const HtmlEditor = lazy(() => import('./code-editor').then((m) => ({ default: m.HtmlEditor })));
 const input =
   'w-full rounded-md border border-line bg-panel px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-50';
+
+const tabs = [
+  { id: 'code', label: 'appSlice.code' },
+  { id: 'settings', label: 'appSlice.settingsTab' },
+  { id: 'logs', label: 'appSlice.logs' },
+] as const;
+type Tab = (typeof tabs)[number]['id'];
+const dataPermissionLabels = {
+  read: 'appSlice.readOnly',
+  readWrite: 'appSlice.readWrite',
+} satisfies Record<AppSlicePermission['data'], TranslationKey>;
+const dataPermissions = Object.entries(dataPermissionLabels) as [
+  AppSlicePermission['data'],
+  TranslationKey,
+][];
 
 function Toggle({
   label,
@@ -68,9 +83,8 @@ export default function AppSliceSettings({
   clearLogs: () => void;
   close: () => void;
 }) {
-  const { i18n } = useTranslation();
-  const tr = (zh: string, en: string) => (i18n.language === 'zh' ? zh : en);
-  const [tab, setTab] = useState('code');
+  const t = useT();
+  const [tab, setTab] = useState<Tab>('code');
   const [mode, setMode] = useState('edit');
   const [draft, setDraft] = useState(String(block.props.html));
   const [applied, setApplied] = useState(String(block.props.html));
@@ -78,7 +92,7 @@ export default function AppSliceSettings({
   const [previewRun, setPreviewRun] = useState(0);
   const [previewError, setPreviewError] = useState(false);
   const [confirm, setConfirm] = useState<'discard' | 'external' | null>(null);
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState<TranslationKey>();
   const [name, setName] = useState(String(block.props.title));
   const [height, setHeight] = useState(String(block.props.height));
   const canEdit = m.can(page) && !m.hostReadOnly;
@@ -108,10 +122,10 @@ export default function AppSliceSettings({
       );
     try {
       m.runtime.patch(page.id, { blocks: replace(current.blocks ?? []) }, true);
-      setFeedback(tr('已保存', 'Saved'));
+      setFeedback('appSlice.saved');
       return true;
     } catch {
-      setFeedback(tr('保存失败，请重试', 'Could not save. Try again.'));
+      setFeedback('appSlice.saveFailed');
       return false;
     }
   };
@@ -119,32 +133,28 @@ export default function AppSliceSettings({
     try {
       m.appSlice.permissionStore!.set(permissionKey, next);
       setPermission(next);
-      setFeedback(tr('已保存', 'Saved'));
+      setFeedback('appSlice.saved');
     } catch {
-      setFeedback(tr('权限保存失败，请重试', 'Could not save permission. Try again.'));
+      setFeedback('appSlice.permissionFailed');
     }
   };
-  const changeTab = (next: string) => {
+  const changeTab = (next: Tab) => {
     setTab(next);
     setMode('edit');
     setPreview('');
-    setFeedback('');
+    setFeedback(undefined);
   };
   const requestClose = () => (dirty ? setConfirm('discard') : close());
   return (
     <>
-      <Drawer
-        closeLabel={tr('关闭', 'Close')}
-        title={tr('App Slice 设置', 'App Slice settings')}
-        close={requestClose}
-      >
+      <Drawer closeLabel={t('appSlice.close')} title={t('appSlice.settings')} close={requestClose}>
         <div className="flex h-[calc(100dvh-53px)] min-h-0 flex-col px-6 pb-5 text-sm">
           <div
             role="tablist"
-            aria-label={tr('设置页面', 'Settings sections')}
+            aria-label={t('appSlice.sections')}
             className="flex shrink-0 gap-5 border-b border-line"
           >
-            {['code', 'settings', 'logs'].map((id, i) => (
+            {tabs.map(({ id, label }, i) => (
               <button
                 key={id}
                 role="tab"
@@ -153,10 +163,10 @@ export default function AppSliceSettings({
                 aria-selected={tab === id}
                 tabIndex={tab === id ? 0 : -1}
                 onKeyDown={(e) => {
-                  const ids = ['code', 'settings', 'logs'];
                   if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                     e.preventDefault();
-                    const next = ids[(i + (e.key === 'ArrowRight' ? 1 : 2)) % 3]!;
+                    const step = e.key === 'ArrowRight' ? 1 : -1;
+                    const next = tabs[(i + step + tabs.length) % tabs.length].id;
                     changeTab(next);
                     document.getElementById(`app-slice-tab-${block.id}-${next}`)?.focus();
                   }
@@ -164,19 +174,12 @@ export default function AppSliceSettings({
                 onClick={() => changeTab(id)}
                 className={`border-b-2 px-1 py-3 font-medium ${tab === id ? 'border-accent text-ink' : 'border-transparent text-muted'}`}
               >
-                {[tr('代码', 'Code'), tr('设置', 'Settings'), tr('日志', 'Logs')][i]}
+                {t(label)}
                 {id === 'logs' && logs.length > 0 ? ` (${logs.length})` : ''}
               </button>
             ))}
           </div>
-          {!canEdit && (
-            <p className="pt-3 text-xs text-muted">
-              {tr(
-                '当前无编辑权限，可以查看代码、设置和日志。',
-                'View only. Editing and permissions are unavailable.',
-              )}
-            </p>
-          )}
+          {!canEdit && <p className="pt-3 text-xs text-muted">{t('appSlice.viewOnly')}</p>}
           <div
             role="tabpanel"
             id={`app-slice-panel-${block.id}`}
@@ -195,7 +198,7 @@ export default function AppSliceSettings({
                         setPreview('');
                       }}
                     >
-                      {tr('代码', 'Code')}
+                      {t('appSlice.code')}
                     </Button>
                     <Button
                       className={mode === 'preview' ? 'bg-panel text-ink shadow-sm' : ''}
@@ -207,13 +210,11 @@ export default function AppSliceSettings({
                         setMode('preview');
                       }}
                     >
-                      {tr('预览', 'Preview')}
+                      {t('appSlice.preview')}
                     </Button>
                   </div>
                   {mode === 'preview' && (
-                    <span className="text-xs text-muted">
-                      {tr('只读预览', 'Read-only preview')}
-                    </span>
+                    <span className="text-xs text-muted">{t('appSlice.readOnlyPreview')}</span>
                   )}
                 </div>
                 <div hidden={mode !== 'edit'}>
@@ -241,19 +242,11 @@ export default function AppSliceSettings({
                   </div>
                 )}
                 {previewError && mode === 'preview' && (
-                  <p className="text-xs text-muted">
-                    {tr(
-                      '预览产生了运行信息，请在日志中查看详情。',
-                      'Preview produced runtime messages. See Logs for details.',
-                    )}
-                  </p>
+                  <p className="text-xs text-muted">{t('appSlice.previewMessages')}</p>
                 )}
                 {oversized && (
                   <p role="alert" className="text-sm text-red-600">
-                    {tr(
-                      '源码不能超过 512,000 个字符。',
-                      'Source must not exceed 512,000 characters.',
-                    )}
+                    {t('appSlice.sourceLimit')}
                   </p>
                 )}
               </div>
@@ -261,9 +254,9 @@ export default function AppSliceSettings({
             {tab === 'settings' && (
               <div className="mx-auto max-w-2xl space-y-7">
                 <fieldset disabled={!canEdit} className="space-y-4">
-                  <legend className="mb-3 font-medium">{tr('展示', 'Display')}</legend>
+                  <legend className="mb-3 font-medium">{t('appSlice.display')}</legend>
                   <label className="block space-y-2">
-                    <span>{tr('名称', 'Name')}</span>
+                    <span>{t('appSlice.name')}</span>
                     <input
                       className={input}
                       value={name}
@@ -276,16 +269,16 @@ export default function AppSliceSettings({
                     />
                   </label>
                   <div className="flex items-center justify-between">
-                    <span>{tr('自动高度', 'Auto height')}</span>
+                    <span>{t('appSlice.autoHeight')}</span>
                     <Toggle
-                      label={tr('自动高度', 'Auto height')}
+                      label={t('appSlice.autoHeight')}
                       checked={!!block.props.autoHeight}
                       onChange={() => update({ autoHeight: !block.props.autoHeight })}
                     />
                   </div>
                   {!block.props.autoHeight && (
                     <label className="block space-y-2">
-                      <span>{tr('高度（px）', 'Height (px)')}</span>
+                      <span>{t('appSlice.height')}</span>
                       <input
                         className={input}
                         type="number"
@@ -296,12 +289,7 @@ export default function AppSliceSettings({
                         onBlur={() => {
                           const n = Number(height);
                           if (!Number.isInteger(n) || n < 160 || n > 1200) {
-                            setFeedback(
-                              tr(
-                                '高度须为 160–1200 的整数',
-                                'Height must be an integer from 160 to 1200',
-                              ),
-                            );
+                            setFeedback('appSlice.heightInvalid');
                             setHeight(String(block.props.height));
                           } else if (n !== block.props.height) update({ height: n });
                         }}
@@ -310,11 +298,11 @@ export default function AppSliceSettings({
                   )}
                 </fieldset>
                 <fieldset disabled={!canEdit} className="space-y-4">
-                  <legend className="mb-3 font-medium">{tr('权限', 'Permissions')}</legend>
+                  <legend className="mb-3 font-medium">{t('appSlice.permissions')}</legend>
                   <fieldset className="space-y-2">
-                    <legend className="mb-2">{tr('数据权限', 'Data permission')}</legend>
+                    <legend className="mb-2">{t('appSlice.dataPermission')}</legend>
                     <div className="flex gap-5">
-                      {(['read', 'readWrite'] as const).map((value, i) => (
+                      {dataPermissions.map(([value, label]) => (
                         <label key={value} className="flex items-center gap-2">
                           <input
                             type="radio"
@@ -322,16 +310,16 @@ export default function AppSliceSettings({
                             checked={permission.data === value}
                             onChange={() => grant({ ...permission, data: value })}
                           />
-                          {i === 0 ? tr('只读', 'Read only') : tr('读写', 'Read & write')}
+                          {t(label)}
                         </label>
                       ))}
                     </div>
                   </fieldset>
                   <div>
                     <div className="flex items-center justify-between">
-                      <span>{tr('外部资源与网络', 'External resources & network')}</span>
+                      <span>{t('appSlice.external')}</span>
                       <Toggle
-                        label={tr('外部资源与网络', 'External resources & network')}
+                        label={t('appSlice.external')}
                         checked={permission.allowExternalResources}
                         onChange={() =>
                           permission.allowExternalResources
@@ -340,27 +328,22 @@ export default function AppSliceSettings({
                         }
                       />
                     </div>
-                    <p className="mt-2 text-xs text-muted">
-                      {tr(
-                        '允许加载外部资源，并向外部服务发送请求。',
-                        'Allow external resources and requests to external services.',
-                      )}
-                    </p>
+                    <p className="mt-2 text-xs text-muted">{t('appSlice.externalHelp')}</p>
                   </div>
                 </fieldset>
                 <div className="space-y-3 border-t border-line pt-5">
                   <div className="flex items-center justify-between">
-                    <h3 className="font-medium">{tr('运行', 'Runtime')}</h3>
+                    <h3 className="font-medium">{t('appSlice.runtime')}</h3>
                     <span className="text-xs text-muted">
-                      {running ? tr('运行中', 'Running') : tr('已停止', 'Stopped')}
+                      {running ? t('appSlice.running') : t('appSlice.stopped')}
                     </span>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setRunning(!running)}>
-                      {running ? tr('停止', 'Stop') : tr('运行', 'Run')}
+                      {running ? t('appSlice.stop') : t('appSlice.run')}
                     </Button>
                     <Button variant="outline" onClick={restart}>
-                      {tr('重新运行', 'Restart')}
+                      {t('appSlice.restart')}
                     </Button>
                   </div>
                 </div>
@@ -370,7 +353,7 @@ export default function AppSliceSettings({
               <div className="space-y-3">
                 <div className="flex justify-end">
                   <Button disabled={!logs.length} onClick={clearLogs}>
-                    {tr('清空', 'Clear')}
+                    {t('appSlice.clear')}
                   </Button>
                 </div>
                 {logs.length ? (
@@ -378,7 +361,7 @@ export default function AppSliceSettings({
                     {logs.map((entry, i) => (
                       <li key={i} className="p-3">
                         <span className="text-xs text-muted">
-                          {entry.source === 'live' ? tr('正式运行', 'Live') : tr('预览', 'Preview')}
+                          {entry.source === 'live' ? t('appSlice.live') : t('appSlice.preview')}
                         </span>
                         <pre className="mt-1 font-mono text-xs break-all whitespace-pre-wrap">
                           {entry.message}
@@ -387,19 +370,14 @@ export default function AppSliceSettings({
                     ))}
                   </ol>
                 ) : (
-                  <div className="py-20 text-center text-muted">
-                    {tr('暂无运行日志', 'No runtime logs')}
-                  </div>
+                  <div className="py-20 text-center text-muted">{t('appSlice.noLogs')}</div>
                 )}
               </div>
             )}
           </div>
           <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line pt-4">
             <output className="text-xs text-muted">
-              {feedback ||
-                (dirty
-                  ? tr('有未应用的修改', 'Unapplied changes')
-                  : tr('所有更改已应用', 'All changes applied'))}
+              {feedback ? t(feedback) : dirty ? t('appSlice.unapplied') : t('appSlice.applied')}
             </output>
             <Button
               variant="primary"
@@ -411,7 +389,7 @@ export default function AppSliceSettings({
                 }
               }}
             >
-              {tr('应用更改', 'Apply changes')}
+              {t('appSlice.apply')}
             </Button>
           </div>
         </div>
@@ -419,24 +397,15 @@ export default function AppSliceSettings({
       <OverlayPresence>
         {confirm && (
           <Modal
-            title={
-              confirm === 'discard'
-                ? tr('丢弃未应用的修改？', 'Discard unapplied changes?')
-                : tr('允许外部访问？', 'Allow external access?')
-            }
+            title={confirm === 'discard' ? t('appSlice.discardTitle') : t('appSlice.externalTitle')}
             close={() => setConfirm(null)}
           >
             <p className="mb-5 text-sm text-secondary">
-              {confirm === 'discard'
-                ? tr('关闭后，未应用的代码修改将丢失。', 'Unapplied code changes will be lost.')
-                : tr(
-                    '网页可能向外部服务发送页面及表格数据。',
-                    'This code may send page and database data to external services.',
-                  )}
+              {confirm === 'discard' ? t('appSlice.discardHelp') : t('appSlice.externalWarning')}
             </p>
             <div className="flex justify-end gap-2">
               <Button onClick={() => setConfirm(null)}>
-                {confirm === 'discard' ? tr('继续编辑', 'Continue editing') : tr('取消', 'Cancel')}
+                {confirm === 'discard' ? t('appSlice.continueEditing') : t('appSlice.cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -446,7 +415,7 @@ export default function AppSliceSettings({
                   setConfirm(null);
                 }}
               >
-                {confirm === 'discard' ? tr('丢弃修改', 'Discard changes') : tr('允许', 'Allow')}
+                {confirm === 'discard' ? t('appSlice.discard') : t('appSlice.allow')}
               </Button>
             </div>
           </Modal>

@@ -373,6 +373,45 @@ body,
   height: calc(48px + var(--tio-safe-top));
   padding-top: var(--tio-safe-top);
 }
+.tio-desktop-drag {
+  align-self: stretch;
+  flex: 1 0 20px;
+  app-region: drag;
+}
+.tio-welcome-drag {
+  position: fixed;
+  z-index: 20;
+  inset: 0 var(--tio-caption-right) auto var(--tio-caption-left);
+  height: var(--tio-chrome-height);
+}
+[data-desktop-chrome='overlay'] {
+  --tio-chrome-row: max(48px, var(--tio-chrome-height));
+}
+.tio-connection-page[data-desktop-chrome='overlay'] {
+  padding-top: max(52px, calc(var(--tio-chrome-row) + 12px));
+}
+[data-desktop-chrome='overlay'] .tio-workspace-header,
+[data-desktop-chrome='overlay'] .tio-graph-header {
+  min-height: var(--tio-chrome-row);
+  padding-inline: calc(12px + var(--tio-caption-left)) calc(12px + var(--tio-caption-right));
+}
+[data-desktop-chrome='headerbar'] .tio-workspace-header {
+  position: static;
+  min-height: 40px;
+  height: auto;
+  background: transparent;
+}
+[data-desktop-chrome='overlay'] .tio-sidebar,
+[data-desktop-chrome='overlay'] .tio-assistant-panel {
+  top: var(--tio-chrome-row);
+  height: calc(var(--tio-screen-height) - var(--tio-chrome-row));
+}
+@media (min-width: 768px) {
+  [data-desktop-chrome='overlay'].tio-workspace .tio-graph-header {
+    margin-right: calc(-1 * var(--tio-assistant-inset));
+    transition: margin-right var(--tio-assistant-transition);
+  }
+}
 .tio-sidebar,
 .tio-loading-sidebar {
   box-sizing: border-box;
@@ -421,9 +460,6 @@ body,
   );
 }
 
-.tio-workspace[data-assistant-open='true'] {
-  padding-right: min(400px, 48vw);
-}
 .tio-assistant-panel,
 .tio-assistant-mobile,
 .chaty-root {
@@ -434,6 +470,148 @@ body,
   --chaty-border: var(--color-line);
 }
 
-.tio-workspace[data-assistant-open='true'] .tio-graph {
-  right: min(400px, 48vw);
+@media (min-width: 768px) {
+  .tio-workspace {
+    --tio-assistant-width: min(400px, 48vw);
+    --tio-assistant-inset: 0px;
+    --tio-assistant-transition: var(--tio-motion-panel-enter) var(--tio-motion-panel-ease);
+    padding-right: var(--tio-assistant-inset);
+    transition: padding-right var(--tio-assistant-transition);
+  }
+  .tio-workspace[data-assistant-open='true'] {
+    --tio-assistant-inset: var(--tio-assistant-width);
+  }
+  .tio-assistant-panel {
+    width: var(--tio-assistant-width);
+    visibility: hidden;
+    transform: translateX(100%);
+    transition:
+      transform var(--tio-assistant-transition),
+      visibility var(--tio-assistant-transition);
+  }
+  .tio-workspace[data-assistant-open='true'] .tio-assistant-panel {
+    visibility: visible;
+    transform: translateX(0);
+  }
+  .tio-workspace .tio-graph {
+    right: var(--tio-assistant-inset);
+    transition: right var(--tio-assistant-transition);
+  }
+}
+
+/* Native WebView chrome does not act as selectable document content. */
+html[data-tio-native-mobile] {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+html[data-tio-native-mobile]
+  :is(
+    input:not([type]),
+    input:is(
+      [type='text'],
+      [type='search'],
+      [type='email'],
+      [type='url'],
+      [type='tel'],
+      [type='password'],
+      [type='number']
+    ),
+    textarea,
+    [contenteditable]:not([contenteditable='false']),
+    .bn-editor,
+    .cm-content
+  ),
+html[data-tio-native-mobile] .bn-editor .bn-inline-content {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+html[data-tio-native-mobile]
+  :is(
+    button,
+    [role='button'],
+    [role^='menuitem'],
+    [role='tab'],
+    [role='toolbar'],
+    .bn-editor [data-content-type='file'] a
+  ) {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* The desktop window stays still. Each pane owns its own scroll viewport. */
+html[data-tio-native-desktop],
+html[data-tio-native-desktop] body {
+  height: 100%;
+  overflow: hidden;
+  overflow: clip;
+  overscroll-behavior: none;
+}
+html[data-tio-native-desktop] .login-page {
+  height: var(--tio-screen-height);
+  overflow: auto;
+  overscroll-behavior: none;
+}
+html[data-tio-native-desktop] .tio-workspace-content,
+html[data-tio-native-desktop] .tio-editor-viewport {
+  height: var(--tio-screen-height);
+}
+html[data-tio-native-desktop] .tio-workspace-content {
+  padding-bottom: 0;
+}
+.tio-editor-viewport {
+  display: flex;
+  flex-direction: column;
+}
+.tio-document-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: none;
+}
+[data-tio-native-desktop] .tio-sidebar [data-tio-sidebar-scroll] {
+  overscroll-behavior: contain;
+}
+[data-tio-native-desktop] .tio-workspace-header {
+  position: relative;
+  flex: none;
+  border-bottom: 1px solid var(--color-line);
+  background: var(--color-panel);
+  -webkit-user-select: none;
+  user-select: none;
+}
+[data-tio-native-desktop] [data-desktop-chrome='overlay'] .tio-editor-viewport {
+  padding-top: var(--tio-chrome-row);
+}
+[data-tio-native-desktop] [data-desktop-chrome='overlay'] .tio-workspace-header {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 41;
+  height: var(--tio-chrome-row);
+  margin: 0;
+  background: var(--color-surface);
+}
+[data-tio-native-desktop] [data-desktop-chrome='overlay'] .tio-graph-header {
+  flex: none;
+  background: var(--color-surface);
+}
+
+.tio-workspace[data-compact-chrome='true'] :is(.tio-workspace-header, .tio-graph-header) {
+  --tio-caption-offset: calc(2 * var(--tio-caption-center) - var(--tio-chrome-row));
+  padding-block: max(0px, var(--tio-caption-offset)) max(0px, -1 * var(--tio-caption-offset));
+  border-bottom: 0;
+  box-shadow: inset 0 -1px var(--color-line);
+}
+.tio-workspace[data-compact-chrome='true']
+  :is(.tio-workspace-header, .tio-graph-header)
+  :is(button, input) {
+  padding-block: 2px;
+}
+.tio-workspace[data-compact-chrome='true'] .tio-graph-header {
+  gap: 6px;
+  align-content: center;
 }

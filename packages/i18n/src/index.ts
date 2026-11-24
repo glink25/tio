@@ -9,32 +9,43 @@ import { StorageError } from '@tio/storage';
 import i18n from 'i18next';
 import { initReactI18next, useTranslation } from 'react-i18next';
 
-import { en, zh } from './locales';
-export type Language = 'en' | 'zh';
-export type TranslationKey = keyof typeof en;
+import { locales, type Language, type TranslationKey } from './locales';
+export type { Language, TranslationKey };
+export const languages = Object.keys(locales).filter(isLanguage);
+export const fallbackLanguage: Language = 'en';
+export const initialLanguage: Language = 'zh';
+export function isLanguage(value: unknown): value is Language {
+  return typeof value === 'string' && Object.hasOwn(locales, value);
+}
+export function resolveLanguage(value: unknown, fallback = fallbackLanguage): Language {
+  return isLanguage(value) ? value : fallback;
+}
+const options = {
+  resources: Object.fromEntries(
+    languages.map((language) => [language, { translation: locales[language].translation }]),
+  ),
+  fallbackLng: fallbackLanguage,
+  supportedLngs: languages,
+  interpolation: { escapeValue: false },
+  returnNull: false as const,
+  initAsync: false,
+  keySeparator: false as const,
+};
 export function createLanguageInstance(language: Language) {
   const instance = i18n.createInstance();
   void instance.init({
-    resources: { en: { translation: en }, zh: { translation: zh } },
+    ...options,
     lng: language,
-    fallbackLng: 'en',
-    supportedLngs: ['en', 'zh'],
-    interpolation: { escapeValue: false },
-    returnNull: false,
-    initAsync: false,
-    keySeparator: false,
   });
   return instance;
 }
-export const initialLanguage: Language = 'zh';
-void i18n.use(initReactI18next).init({
-  resources: { en: { translation: en }, zh: { translation: zh } },
-  lng: initialLanguage,
-  fallbackLng: 'en',
-  interpolation: { escapeValue: false },
-  initAsync: false,
-  keySeparator: false,
-});
+void i18n.use(initReactI18next).init({ ...options, lng: initialLanguage });
+export function formatLocale(language: Language) {
+  return locales[language].formatLocale;
+}
+export function languageLabel(language: Language) {
+  return locales[language].label;
+}
 export function useT() {
   const { t } = useTranslation();
   return (key: TranslationKey, options?: Record<string, unknown>): string =>

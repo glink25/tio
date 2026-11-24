@@ -9,11 +9,7 @@ import java.util.concurrent.TimeUnit
 class SyncWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
     override suspend fun doWork(): Result {
         return try {
-            val results = NativeKernel.run(applicationContext) { isStopped }
-            val failed = (0 until results.length()).any {
-                results.getJSONObject(it).getString("status") !in setOf("synced", "manual", "permission")
-            }
-            if (failed) Result.retry() else Result.success()
+            if (NativeKernel.needsRetry(applicationContext) { isStopped }) Result.retry() else Result.success()
         } catch (error: TimeoutCancellationException) {
             if (isStopped) throw error
             Result.retry()

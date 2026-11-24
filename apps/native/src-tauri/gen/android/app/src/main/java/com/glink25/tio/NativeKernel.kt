@@ -23,10 +23,10 @@ internal object NativeKernel {
     class Failure(val code: String) : RuntimeException(code)
     private const val BUDGET_MILLIS = 8 * 60 * 1000L
 
-    suspend fun run(context: Context, stopped: () -> Boolean): JSONArray = withTimeout(BUDGET_MILLIS) {
+    suspend fun needsRetry(context: Context, stopped: () -> Boolean): Boolean = withTimeout(BUDGET_MILLIS) {
         val root = File(context.applicationInfo.dataDir)
         val database = File(root, "catalog.sqlite3")
-        if (!database.exists()) return@withTimeout JSONArray()
+        if (!database.exists()) return@withTimeout false
         val deadline = android.os.SystemClock.elapsedRealtime() + BUDGET_MILLIS
         val selectedReply = JSONObject(nativeCall(database.path, "{\"action\":\"kernelBegin\"}"))
         if (selectedReply.has("error")) throw Failure(selectedReply.getString("error"))
@@ -126,7 +126,7 @@ internal object NativeKernel {
             } else File(selected.getString("path")).readText()
             js.evaluate<Unit>(kernel + "\nvoid 0;")
             js.evaluate<Unit>("globalThis.tioBackgroundResult = JSON.stringify(await TioKernel.runBackground());", asModule = true)
-            JSONArray(js.evaluate<String>("globalThis.tioBackgroundResult"))
+            JSONObject(js.evaluate<String>("globalThis.tioBackgroundResult")).getBoolean("retry")
 
         } finally {
             try { runtime?.close() } finally {

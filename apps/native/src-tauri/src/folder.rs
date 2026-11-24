@@ -1,33 +1,28 @@
 use crate::catalog::Catalog;
 use rusqlite::{params, OptionalExtension};
 use serde_json::{json, Value};
-use std::{
-    collections::HashMap,
-    fs::{self, File},
-    sync::Mutex,
-};
-use tauri::{AppHandle, Manager};
+use std::fs::{self, File};
+use tauri::{AppHandle, Manager, Webview};
 
 #[derive(Default)]
-pub struct FolderLocks(Mutex<HashMap<String, File>>);
-
-impl FolderLocks {
-    #[cfg(not(target_os = "ios"))]
-    pub fn reset(&self) {
-        if let Ok(mut locks) = self.0.lock() {
-            locks.clear()
-        }
-    }
-}
+pub struct FolderLocks(pub crate::window_locks::WindowLocks);
 
 #[tauri::command]
-pub async fn native_folder(app: AppHandle, request: Value) -> Result<Value, String> {
+pub async fn native_folder(
+    app: AppHandle,
+    webview: Webview,
+    generation: String,
+    request: Value,
+) -> Result<Value, String> {
+    app.state::<FolderLocks>()
+        .0
+        .check(webview.label(), &generation)?;
     let action = request["action"].as_str().ok_or("invalid")?;
     if matches!(
         action,
         "lock" | "unlock" | "stateRead" | "stateWrite" | "stateEntries" | "stateDelete"
     ) {
-        return journal(&app, action, &request).map_err(str::to_owned);
+        return journal(&app, webview.label(), generation, action, &request).map_err(str::to_owned);
     }
     #[cfg(desktop)]
     {
@@ -52,7 +47,13 @@ pub async fn native_folder(app: AppHandle, request: Value) -> Result<Value, Stri
     }
 }
 
-fn journal(app: &AppHandle, action: &str, request: &Value) -> Result<Value, &'static str> {
+fn journal(
+    app: &AppHandle,
+    label: &str,
+    owner: String,
+    action: &str,
+    request: &Value,
+) -> Result<Value, &'static str> {
     let grant = request["grant"].as_str().ok_or("invalid")?;
     let space = request["workspace"].as_str().ok_or("invalid")?;
     if grant.len() != 64
@@ -65,6 +66,7 @@ fn journal(app: &AppHandle, action: &str, request: &Value) -> Result<Value, &'st
     {
         return Err("invalid");
     }
+    let locks = app.state::<FolderLocks>();
     if action == "lock" {
         let dir = app
             .path()
@@ -84,20 +86,12 @@ fn journal(app: &AppHandle, action: &str, request: &Value) -> Result<Value, &'st
             Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => return Ok(Value::Null),
             Err(_) => return Err("unavailable"),
         }
-        let token = uuid::Uuid::new_v4().to_string();
-        app.state::<FolderLocks>()
-            .0
-            .lock()
-            .map_err(|_| "unavailable")?
-            .insert(token.clone(), file);
-        return Ok(Value::String(token));
+        return Ok(Value::String(locks.0.hold(label, owner, file)?));
     }
     if action == "unlock" {
-        app.state::<FolderLocks>()
+        locks
             .0
-            .lock()
-            .map_err(|_| "unavailable")?
-            .remove(request["token"].as_str().ok_or("invalid")?);
+            .release(&owner, request["token"].as_str().ok_or("invalid")?)?;
         return Ok(Value::Null);
     }
     let state = app.state::<Catalog>();

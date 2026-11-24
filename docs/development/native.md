@@ -80,6 +80,20 @@ macOS 的正式构建使用 Actions 中的 Developer ID 证书与 App 专用公�
 - Windows GNU 目标的 Rust 编译检查已通过，仍需对应系统上的 MSVC 构建、安装与运行；继续完成 Linux 构建运行、macOS 正式归档、签名更新升级演练及各渠道发布汇集。发布流水线已按独立平台策略改造；远程签名与发布尚待配置凭据后演练。Chaty 使用 npm 发布版。
 - 部署后的真实 GitHub OAuth、原身份恢复和远端后台同步仍待验收；本次未部署授权服务或发布产物。
 
+## 桌面标题栏
+
+VS Code 在同一行放置工作区控件及系统窗口按钮，并允许 Linux 用户使用系统窗口框。Firefox 也将标题栏独立设为可选。Tio 沿用现有工作区工具栏和快捷键，系统窗口按钮由各平台负责。 [VS Code 窗口配置](https://github.com/microsoft/vscode/blob/main/src/vs/platform/windows/electron-main/windows.ts) · [VS Code Linux 行为](https://code.visualstudio.com/updates/v1_98) · [Firefox 工具栏设置](https://support.mozilla.org/en-US/kb/customize-firefox-controls-buttons-and-toolbars)
+
+- macOS 使用 Tauri 的 Overlay 标题栏。工作区栏给红绿灯留出空间，空白区域支持拖动，系统菜单提供「新建窗口」。 [Tauri 窗口自定义](https://v2.tauri.app/learn/window-customization/)
+- Windows 通过 DWM 将内容延伸到标题区，保留原生窗口按钮。WebView2 的可拖动区域处理标题栏拖动、右键系统菜单和双击。高对比度启动或无法扩展窗口框时使用系统标题栏。 [Microsoft DWM 窗口框](https://learn.microsoft.com/en-us/windows/win32/dwm/customframe) · [WebView2 可拖动区域](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2settings9) · [Windows 11 贴靠布局](https://learn.microsoft.com/en-us/windows/apps/desktop/modernize/ui/apply-snap-layout-menu)
+- Linux 在 GTK 窗口显示前装配原生 `GtkHeaderBar`。窗口按钮位置沿用桌面环境设置，原生栏提供侧栏开关与新建窗口入口，文档导航和编辑操作沿用工作区。 [GTK HeaderBar](https://docs.gtk.org/gtk3/class.HeaderBar.html) · [GTK 标题栏安装](https://docs.gtk.org/gtk3/method.Window.set_titlebar.html)
+
+桌面验收覆盖窄窗口、浅色和深色、全屏、切换侧栏、双击标题栏、系统菜单、窗口缩放和系统窗口按钮。Windows 11 额外验证贴靠布局、高对比度和跨显示器 DPI。Linux 分别验证 GNOME、KDE 及 Wayland、X11 的按钮布局和窗口控制。
+
+本次在 macOS 调试宿主的隔离应用数据中验证了真实窗口和 WebView 布局、不同空间分窗、重复打开同一空间、关闭时保留另一窗口的锁，以及关闭后重开。Windows GNU 目标通过 Rust 交叉编译检查，Linux ARM64 在 Debian 的 GTK 和 WebKit 环境通过 `cargo check --locked`。
+
+本次在 iPad 模拟器的原生场景中验证了双窗口空间隔离、重复打开时聚焦已有场景、重载时按窗口隔离锁，以及关闭背景场景后保留原窗口路由。Android API 35 模拟器验证了原生开屏失败后的重试和系统返回键。macOS 系统窗口按钮与菜单、iOS 键盘辅助栏、Windows 11 贴靠布局和 Linux 不同合成器下的窗口操作待手动验收。
+
 ## Android 文件夹可恢复发布
 
 SAF 写入先持久化底层发布日志，再写唯一命名的临时文件，核对哈希后将旧文件重命名为备份、临时文件重命名为目标。完成后清理备份和日志。权威文件不会被截断写入。提供方须支持文档重命名；不支持时拒绝发布，保留已有文件。
@@ -104,11 +118,11 @@ SAF 写入先持久化底层发布日志，再写唯一命名的临时文件，�
 
 另在隔离的临时目录预置一项授权记录，通过实际原生桥接完成文件写入、替换、读取、列举、删除，并核对目录穿越请求被拒绝。此验证覆盖 Linux 原生文件 I/O，但没有经过系统目录选择器，也未覆盖安装包、真实云端文件夹或签名更新。
 
-## Android 返回与弹层
+## 移动端导航与弹层
 
-菜单、子菜单和锚点弹层与对话框使用同一返回历史；移动底部弹层由其对话框登记，避免一次打开产生两项记录。Android 模拟器的 WebView 对相同 URL 的 `pushState` 不计入原生 `canGoBack()`，因此宿主结合 `history.state.tioOverlay` 判断是否拦截返回，并使用 HTML 历史执行遍历。异步读取返回状态时按修订号丢弃过期结果，根界面关闭拦截。清单显式启用 `enableOnBackInvokedCallback`，做法遵循 [Android 预测返回指南](https://developer.android.com/guide/navigation/custom-back/predictive-back-gesture)。
+iOS 和 Android 的内容导航使用内存路由。模态、窄屏侧栏抽屉和设置子页使用临时 hash 历史，实际呈现为模态的选择器只登记一次。Android 仅在有模态可返回时拦截系统返回，由前端执行逐层遍历与草稿保护。所有模态关闭后交还系统。原生窄屏的侧栏和页面型模态共享侧滑交互。移动 WebView 由宿主关闭整页捏合缩放，文本选择仅在输入和正文编辑区启用。Web 和桌面宿主沿用内容链接及浏览器历史。
 
-在 Android 15 Pixel Tablet 模拟器验证了系统返回按键逐层关闭外观选择与设置、欢迎页保留；另以系统边缘手势验证取消拖动保留选择层、完成手势只关闭当前层，以及根界面返回和重新打开。没有用 JavaScript 触发返回替代这些系统输入。此次未验证真机动画观感、中文输入法和软键盘交互。浏览器既有 10 项编辑主流程在弹层改动后再次通过，没有新增长期展示测试。
+改造前，在 Android 15 Pixel Tablet 模拟器验证了系统返回按键逐层关闭外观选择与设置、系统边缘手势只关闭当前层，以及根界面返回和重新打开。
 
 ## 独立平台发布与动态包验收
 

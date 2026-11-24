@@ -1,6 +1,6 @@
 {
   "identifier": "main",
-  "windows": ["main"],
+  "windows": ["main", "tio-window-*"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",

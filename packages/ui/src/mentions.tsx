@@ -6,7 +6,6 @@ import {
   type MentionResolution,
 } from '@tio/core';
 import { useT } from '@tio/i18n';
-import { useTranslation } from '@tio/i18n';
 import { createContext, useContext, useEffect, useState, useMemo, useRef } from 'react';
 
 import { useNotify } from './overlays';
@@ -23,8 +22,8 @@ export function MentionLabel({
   showIcon?: boolean;
 }) {
   const service = useContext(MentionContext);
-  const { i18n } = useTranslation();
-  const zh = i18n.language === 'zh';
+  const t = useT();
+
   const { workspaceId, kind, id } = reference;
   const login = reference.kind === 'github-user' ? reference.login : undefined;
   const stableReference = useMemo<MentionReference>(
@@ -48,6 +47,7 @@ export function MentionLabel({
   const notify = useNotify();
   const notifyRef = useRef(notify);
   notifyRef.current = notify;
+  const loadFailed = t('mention.loadFailed');
   useEffect(() => {
     let live = true,
       generation = 0;
@@ -70,8 +70,7 @@ export function MentionLabel({
             });
         },
         () => {
-          if (live && current === generation)
-            notifyRef.current(zh ? '提及目标读取失败' : 'Failed to load reference');
+          if (live && current === generation) notifyRef.current(loadFailed);
           if (live && current === generation)
             setResolved((previous) => ({
               service,
@@ -91,32 +90,24 @@ export function MentionLabel({
       live = false;
       stop?.();
     };
-  }, [service, stableReference, zh]);
+  }, [service, stableReference, loadFailed]);
   const title =
     result?.status === 'ready'
       ? result.title
       : !result
         ? ''
         : result.status === 'deleted'
-          ? zh
-            ? '提及目标已删除'
-            : 'Deleted reference'
+          ? t('mention.deleted')
           : result.status === 'denied'
-            ? zh
-              ? '无访问权限'
-              : 'Access denied'
+            ? t('mention.denied')
             : result.status === 'error'
-              ? zh
-                ? '提及目标读取失败'
-                : 'Failed to load reference'
-              : zh
-                ? '提及目标不可用'
-                : 'Reference unavailable';
+              ? t('mention.loadFailed')
+              : t('mention.unavailable');
   return (
     <button
       type="button"
       contentEditable={false}
-      title={failed ? (zh ? '提及目标读取失败' : 'Failed to load reference') : undefined}
+      title={failed ? t('mention.loadFailed') : undefined}
       data-refresh-error={failed || undefined}
       style={failed ? { textDecorationStyle: 'wavy' } : undefined}
       className={`inline-flex max-w-full items-center gap-1 rounded px-1 align-baseline underline ${result?.status === 'ready' ? '' : 'text-muted'}`}
@@ -124,10 +115,8 @@ export function MentionLabel({
         event.preventDefault();
         event.stopPropagation();
         if (result?.status === 'ready') service?.navigate(reference);
-        else if (result?.status === 'error')
-          notifyRef.current(zh ? '提及目标读取失败' : 'Failed to load reference');
-        else if (result?.status === 'deleted')
-          notifyRef.current(zh ? '提及目标已被删除' : 'The referenced target has been deleted');
+        else if (result?.status === 'error') notifyRef.current(loadFailed);
+        else if (result?.status === 'deleted') notifyRef.current(t('mention.deletedNotification'));
       }}
     >
       {showIcon && <ReferenceIcon kind={reference.kind} />}
@@ -149,8 +138,7 @@ export function MentionPicker({
   label?: string;
 }) {
   const service = useContext(MentionContext);
-  const { i18n } = useTranslation();
-  const zh = i18n.language === 'zh';
+
   const [active, setActive] = useState(inline);
   const [query, setQuery] = useState('');
   const t = useT();
@@ -172,7 +160,7 @@ export function MentionPicker({
   const items = page.items;
   return (
     <ReferencePicker
-      label={label ?? (zh ? '搜索提及目标' : 'Search mention targets')}
+      label={label ?? t('mention.search')}
       inline={inline}
       multiple={multiple}
       tabs={[
@@ -187,7 +175,7 @@ export function MentionPicker({
       selected={mentionReferences(value).map((ref) => ({
         id: mentionKey(ref),
         kind: ref.kind,
-        text: zh ? '提及' : 'Mention',
+        text: t('mention.insert'),
         label: <MentionLabel reference={ref} showIcon={false} />,
       }))}
       options={items.map((item) => ({

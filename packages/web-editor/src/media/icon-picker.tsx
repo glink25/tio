@@ -4,7 +4,7 @@ import {
   type BuiltinIconName,
   type DocumentIcon,
 } from '@tio/core';
-import { useT, useTranslation } from '@tio/i18n';
+import { languages, useT, useTranslation } from '@tio/i18n';
 import { BuiltinIcon, Popover } from '@tio/ui';
 import { Search } from 'lucide-react';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -48,7 +48,7 @@ export default function IconPicker({
     .map((category) => ({
       ...category,
       icons: category.icons.filter((name) =>
-        [name, ...['en', 'zh'].map((language) => i18n.getFixedT(language)(`media.icon.${name}`))]
+        [name, ...languages.map((language) => i18n.getFixedT(language)(`media.icon.${name}`))]
           .join(' ')
           .toLocaleLowerCase()
           .includes(term),

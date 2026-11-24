@@ -49,11 +49,12 @@ export function Notifications() {
 }
 export function useMobile() {
   const [mobile, setMobile] = useState(
-    () => typeof matchMedia !== 'undefined' && matchMedia('(max-width: 767px)').matches,
+    () => typeof matchMedia !== 'undefined' && !matchMedia('(min-width: 768px)').matches,
   );
   useEffect(() => {
-    const media = matchMedia('(max-width: 767px)');
-    const update = () => setMobile(media.matches);
+    const media = matchMedia('(min-width: 768px)');
+    const update = () => setMobile(!media.matches);
+    update();
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
@@ -85,7 +86,7 @@ export function Menu({
     onOpenChange?.(next);
   };
   const interaction = useOverlayInteraction(active, () => change(false));
-  useOverlayBack(() => change(false), active);
+  useOverlayBack(() => change(false), active, undefined, 'floating');
   return (
     <MenuPrimitive.Root open={active} onOpenChange={change}>
       <MenuPrimitive.Trigger asChild>{trigger}</MenuPrimitive.Trigger>
@@ -139,7 +140,7 @@ export function MenuSub({
 }) {
   const container = useContext(PortalContext);
   const [open, setOpen] = useState(false);
-  useOverlayBack(() => setOpen(false), open);
+  useOverlayBack(() => setOpen(false), open, undefined, 'floating');
   return (
     <MenuPrimitive.Sub open={open} onOpenChange={setOpen}>
       <MenuPrimitive.SubTrigger
@@ -202,7 +203,12 @@ export function Popover({
   };
   const interaction = useOverlayInteraction(active, () => change(false), restoreFocus);
   // Mobile sheets register through Modal; anchored and desktop popovers own their entry.
-  useOverlayBack(() => change(false), active && (!mobile || mobilePlacement === 'anchor'));
+  useOverlayBack(
+    () => change(false),
+    active && (!mobile || mobilePlacement === 'anchor'),
+    undefined,
+    'floating',
+  );
   if (mobile && mobilePlacement !== 'anchor')
     return (
       <>

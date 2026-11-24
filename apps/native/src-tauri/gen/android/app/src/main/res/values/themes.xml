@@ -1,6 +1,6 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
-    <style name="Theme.tio_native" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+<resources>
+    <style name="Theme.tio_native.Base" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">@drawable/tio_launch_background</item>
     </style>
+    <style name="Theme.tio_native" parent="Theme.tio_native.Base" />
 </resources>

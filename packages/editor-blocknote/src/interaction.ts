@@ -8,7 +8,19 @@ import {
   withinInteraction,
 } from '@tio/ui';
 import { Plugin, TextSelection } from '@tiptap/pm/state';
-import type { NodeView } from '@tiptap/pm/view';
+import type { EditorView, NodeView } from '@tiptap/pm/view';
+
+export function clearEditorRange(view: EditorView) {
+  if (view.composing) return;
+  const selection = view.dom.ownerDocument.getSelection();
+  if (
+    selection?.anchorNode &&
+    selection.focusNode &&
+    view.dom.contains(selection.anchorNode) &&
+    view.dom.contains(selection.focusNode)
+  )
+    selection.removeAllRanges();
+}
 
 /** Transfer selection ownership before native focus can restore an obsolete range. */
 export const EditorInteraction = createExtension(() => ({
@@ -27,17 +39,6 @@ export const EditorInteraction = createExtension(() => ({
           const owner = interactionOwner(document);
           return withinInteraction(owner, content.scope) && interactionHasKind(owner, 'widget');
         };
-        const clearDocumentRange = () => {
-          if (view.composing) return;
-          const selection = document.getSelection();
-          if (
-            selection?.anchorNode &&
-            selection.focusNode &&
-            view.dom.contains(selection.anchorNode) &&
-            view.dom.contains(selection.focusNode)
-          )
-            selection.removeAllRanges();
-        };
         const pointer = (event: PointerEvent) => {
           if (event.defaultPrevented || !(event.target instanceof HTMLElement)) return;
           const next = interactionScopeAt(event.target);
@@ -45,7 +46,7 @@ export const EditorInteraction = createExtension(() => ({
           if (interactionHasKind(next, 'widget')) {
             // Keep ProseMirror's mapped bookmark, but don't leave a native range
             // for Safari/Chromium to reuse while the canvas owns interaction.
-            clearDocumentRange();
+            clearEditorRange(view);
           } else if (
             next === content.scope &&
             widgetOwnsSelection() &&
@@ -69,7 +70,7 @@ export const EditorInteraction = createExtension(() => ({
           claimInteraction(document, next);
         };
         const focus = () => {
-          if (widgetOwnsSelection()) clearDocumentRange();
+          if (widgetOwnsSelection()) clearEditorRange(view);
         };
         view.dom.addEventListener('pointerdown', pointer, true);
         document.addEventListener('focusin', focus, true);

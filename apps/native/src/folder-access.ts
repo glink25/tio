@@ -7,20 +7,22 @@ import {
 } from '@tio/core';
 import { NativeFolderProvider, type FolderGrant } from '@tio/native-core/folder';
 import { StorageError } from '@tio/storage';
-export async function nativeFolderCall<T>(request: Record<string, unknown>): Promise<T> {
-  try {
-    return await invoke<T>(
-      import.meta.env.VITE_TIO_PLATFORM === 'ios' ? 'apple_folder' : 'native_folder',
-      { request },
-    );
-  } catch (code) {
-    if (code === 'cancelled') throw new DOMException('Cancelled', 'AbortError');
-    if (code === 'permission') throw new StorageError('permission', 'Folder permission required');
-    if (code === 'pending' || code === 'conflict' || code === 'invalid') throw new HostError(code);
-    throw new HostError('unavailable');
-  }
-}
-export const pickFolder = () => nativeFolderCall<FolderGrant>({ action: 'pick' });
+export const createNativeFolderCall =
+  (generation: string) =>
+  async <T>(request: Record<string, unknown>): Promise<T> => {
+    try {
+      return await invoke<T>(
+        import.meta.env.VITE_TIO_PLATFORM === 'ios' ? 'apple_folder' : 'native_folder',
+        { request, generation },
+      );
+    } catch (code) {
+      if (code === 'cancelled') throw new DOMException('Cancelled', 'AbortError');
+      if (code === 'permission') throw new StorageError('permission', 'Folder permission required');
+      if (code === 'closed' || code === 'pending' || code === 'conflict' || code === 'invalid')
+        throw new HostError(code);
+      throw new HostError('unavailable');
+    }
+  };
 const isGrant = (value?: unknown): value is FolderGrant =>
   !!value && typeof value === 'object' && 'kind' in value && value.kind === 'native-folder';
 export class NativeFolderAdapter implements ConnectionAdapter {
@@ -29,6 +31,7 @@ export class NativeFolderAdapter implements ConnectionAdapter {
   constructor(
     private id: string,
     private provider: NativeFolderProvider,
+    private pickFolder: () => Promise<FolderGrant>,
   ) {}
   subscribe(fn: (state: ConnectionAccessState) => void) {
     this.listeners.add(fn);
@@ -51,7 +54,7 @@ export class NativeFolderAdapter implements ConnectionAdapter {
   }
   async reauthorize(): Promise<'success' | 'cancelled' | 'failed'> {
     try {
-      const selected = await pickFolder();
+      const selected = await this.pickFolder();
       if (!isGrant(selected) || selected.id !== this.provider.grant.id) return 'failed';
       const state = await this.getAccessState();
       for (const fn of this.listeners) fn(state);

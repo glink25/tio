@@ -1,0 +1,7 @@
+<resources>
+    <color name="tio_startup_background">#FFFFFF</color>
+    <color name="tio_startup_ink">#111111</color>
+    <string name="tio_startup_loading">Loading Tio</string>
+    <string name="tio_startup_failed">Tio couldn’t start</string>
+    <string name="tio_startup_retry">Retry</string>
+</resources>

@@ -31,7 +31,7 @@ if (
 if (process.env.TIO_PUBLISH_PLAY === 'true') {
   execFileSync(
     'node',
-    ['apps/native/release/play.mjs', bundle, join(directory, 'store-state.json')],
+    ['apps/native/release/play.mjs', bundle, join(directory, 'store-state.json'), receipt.track],
     { stdio: 'inherit' },
   );
   receipt.checksums['store-state.json'] = hash(await readFile(join(directory, 'store-state.json')));

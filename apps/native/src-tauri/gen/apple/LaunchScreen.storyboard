@@ -3,7 +3,7 @@
     <dependencies>
         <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="17122"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
-        <capability name="System colors in document resources" minToolsVersion="11.0"/>
+        <capability name="Named colors" minToolsVersion="9.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
@@ -14,8 +14,28 @@
                     <view key="view" contentMode="scaleToFill" id="5EZ-qb-Rvc">
                         <rect key="frame" x="0.0" y="0.0" width="414" height="896"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <imageView userInteractionEnabled="NO" contentMode="scaleAspectFit" image="TioStartupSymbol" translatesAutoresizingMaskIntoConstraints="NO" id="tio-symbol">
+                                <rect key="frame" x="171" y="412" width="72" height="72"/>
+                                <color key="tintColor" name="TioStartupInk"/>
+                            </imageView>
+                            <imageView userInteractionEnabled="NO" contentMode="scaleAspectFit" image="TioStartupDot" translatesAutoresizingMaskIntoConstraints="NO" id="tio-dot">
+                                <rect key="frame" x="171" y="412" width="72" height="72"/>
+                                <color key="tintColor" name="TioStartupInk"/>
+                            </imageView>
+                        </subviews>
                         <viewLayoutGuide key="safeArea" id="vDu-zF-Fre"/>
-                        <color key="backgroundColor" systemColor="systemBackgroundColor"/>
+                        <color key="backgroundColor" name="TioStartupBackground"/>
+                        <constraints>
+                            <constraint firstItem="tio-symbol" firstAttribute="centerX" secondItem="5EZ-qb-Rvc" secondAttribute="centerX" id="symbol-x"/>
+                            <constraint firstItem="tio-symbol" firstAttribute="centerY" secondItem="5EZ-qb-Rvc" secondAttribute="centerY" id="symbol-y"/>
+                            <constraint firstItem="tio-symbol" firstAttribute="width" constant="72" id="symbol-w"/>
+                            <constraint firstItem="tio-symbol" firstAttribute="height" constant="72" id="symbol-h"/>
+                            <constraint firstItem="tio-dot" firstAttribute="centerX" secondItem="tio-symbol" secondAttribute="centerX" id="dot-x"/>
+                            <constraint firstItem="tio-dot" firstAttribute="centerY" secondItem="tio-symbol" secondAttribute="centerY" id="dot-y"/>
+                            <constraint firstItem="tio-dot" firstAttribute="width" secondItem="tio-symbol" secondAttribute="width" id="dot-w"/>
+                            <constraint firstItem="tio-dot" firstAttribute="height" secondItem="tio-symbol" secondAttribute="height" id="dot-h"/>
+                        </constraints>
                     </view>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="Ief-a0-LHa" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
@@ -23,8 +43,9 @@
         </scene>
     </scenes>
     <resources>
-        <systemColor name="systemBackgroundColor">
-            <color white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
-        </systemColor>
+        <image name="TioStartupDot" width="72" height="72"/>
+        <image name="TioStartupSymbol" width="72" height="72"/>
+        <namedColor name="TioStartupBackground"><color red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></namedColor>
+        <namedColor name="TioStartupInk"><color red="0.0666667" green="0.0666667" blue="0.0666667" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></namedColor>
     </resources>
 </document>

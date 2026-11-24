@@ -3,26 +3,57 @@ import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
 import type { AppPlatform } from '@tio/app/platform';
 import { folderBinding } from '@tio/app/services/folder-binding';
 import { FileWorkspaceContent, FileRepository } from '@tio/file-storage';
-import { NativeFolderProvider, FolderState } from '@tio/native-core/folder';
+import { NativeFolderProvider, FolderState, type FolderGrant } from '@tio/native-core/folder';
 import { NativeRepository } from '@tio/native-core/native-repository';
 import { withProcessLock } from '@tio/native-core/process-lock';
 import type { Credentials } from '@tio/provider-github/credentials';
 
 import { createHostCatalog, restoreNativeBindings } from './catalog';
-import { nativeFolderCall, NativeFolderAdapter, pickFolder } from './folder-access';
+import { createDesktopChrome } from './desktop-chrome';
+import { createNativeFolderCall, NativeFolderAdapter } from './folder-access';
 import { confirmFrontendUpdate, type UpdateDiagnostics } from './frontend-update';
 import { execute, deleteNativeWorkspace } from './native-ipc';
 import { NativeRemoteCache } from './native-remote-cache';
 import { NativeReplica } from './native-replica';
+import { reportMobileStartup } from './splash';
 import { startResourceUpdate } from './updates';
-const lock = <T>(name: string, work: () => Promise<T>) =>
-  withProcessLock(name, work, (name, token) =>
-    invoke<string | null>('process_lock', { name, token }),
-  );
+import { createWindowHost } from './window-host';
 const vault = (action: string, value?: string) =>
   invoke<string | null>('github_credentials', { action, value });
 export async function createNativePlatform(): Promise<AppPlatform> {
+  const host = await createWindowHost();
+  const nativeFolderCall = createNativeFolderCall(host.generation);
+  const pickFolder = () => nativeFolderCall<FolderGrant>({ action: 'pick' });
+  const lock = <T>(name: string, work: () => Promise<T>) =>
+    withProcessLock(name, work, (name, token) =>
+      invoke<string | null>('process_lock', { name, token, generation: host.generation }),
+    );
   await restoreNativeBindings();
+  const attempts = {
+    getItem: (key: string) => localStorage.getItem(key),
+    setItem: (key: string, value: string) =>
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          ...JSON.parse(value),
+          origin: host.label,
+        }),
+      ),
+    removeItem: (key: string) => localStorage.removeItem(key),
+  };
+  const callbacksForWindow = async (urls: string[]) => {
+    const input = attempts.getItem('tio.github.login');
+    if (!input) return [];
+    try {
+      const pending = JSON.parse(input);
+      const matching = urls.filter(
+        (url) => new URL(url).searchParams.get('state') === pending.state,
+      );
+      return matching.length && (await host.canHandleCallback(pending.origin)) ? matching : [];
+    } catch {
+      return [];
+    }
+  };
   let saved: Credentials | undefined;
   const fresh = async () => {
     const value = await vault('read');
@@ -38,8 +69,13 @@ export async function createNativePlatform(): Promise<AppPlatform> {
     return undefined;
   });
   const scheme = 'tio:';
+  const target = import.meta.env.VITE_TIO_PLATFORM;
   return {
+    mobile: target === 'ios' || target === 'android' ? target : undefined,
     deviceLabel: 'welcome.device',
+    windows: host.windows,
+    desktopChrome: host.desktop ? createDesktopChrome() : undefined,
+    onStartupReady: () => reportMobileStartup('ready'),
     catalog: createHostCatalog,
     deviceRepository: (workspace) => new NativeRepository(workspace, execute),
     deleteDevice: (_connection, workspace) => deleteNativeWorkspace(workspace),
@@ -50,7 +86,7 @@ export async function createNativePlatform(): Promise<AppPlatform> {
       binding(connection, handle) {
         const grant = handle?.kind === 'native-folder' ? handle : undefined;
         const provider = grant ? new NativeFolderProvider(grant, nativeFolderCall) : undefined;
-        const adapter = new NativeFolderAdapter(connection.id, provider!);
+        const adapter = new NativeFolderAdapter(connection.id, provider!, pickFolder);
         return folderBinding(connection, {
           adapter,
           provider,
@@ -82,7 +118,7 @@ export async function createNativePlatform(): Promise<AppPlatform> {
     },
     auth: {
       origin: import.meta.env.VITE_GITHUB_AUTH_URL ?? 'https://tio-api.linkai.work',
-      attempts: () => localStorage,
+      attempts: () => attempts,
       read: () => saved,
       readFresh: fresh,
       persist: async (value) => {
@@ -109,8 +145,11 @@ export async function createNativePlatform(): Promise<AppPlatform> {
       },
       open: (url) => invoke('open_github_login', { url }),
       callbacks: {
-        current: async () => (await getCurrent()) ?? [],
-        subscribe: (listener) => onOpenUrl(listener),
+        current: async () => callbacksForWindow((await getCurrent()) ?? []),
+        subscribe: (listener) =>
+          onOpenUrl((urls) => {
+            void callbacksForWindow(urls).then(listener);
+          }),
       },
     },
     sync: {
@@ -140,18 +179,23 @@ export async function createNativePlatform(): Promise<AppPlatform> {
         });
         staged ||= content?.status === 'staged';
       }
-      const host = await invoke<{ status: string; version?: string; pendingVersion?: string }>(
-        'host_update',
-        { action, version },
-      );
+      const install = () =>
+        invoke<{ status: string; version?: string; pendingVersion?: string }>('host_update', {
+          action,
+          version,
+        });
+      const update =
+        action === 'install' && host.desktop
+          ? await host.windows.changeConnection(install)
+          : await install();
       return {
-        ...host,
+        ...update,
         status:
           action === 'capabilities' && diagnostics.enabled
             ? 'enabled'
-            : staged && ['store', 'current', 'disabled'].includes(host.status)
+            : staged && ['store', 'current', 'disabled'].includes(update.status)
               ? 'runtime-staged'
-              : host.status,
+              : update.status,
         diagnostics,
       };
     },
@@ -162,6 +206,7 @@ export async function createNativePlatform(): Promise<AppPlatform> {
           if (key.startsWith('tio.') || key.startsWith('tio-')) storage.removeItem(key);
     },
     async afterReady() {
+      if (!(await host.takeMaintenance())) return;
       await confirmFrontendUpdate();
       if (ready) await ready().catch((error) => console.warn('Resource update unavailable', error));
       await invoke('frontend_update', { action: 'download' });

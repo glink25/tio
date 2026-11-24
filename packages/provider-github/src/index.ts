@@ -9,6 +9,15 @@ export class GitHubError extends Error {
     super(message);
   }
 }
+export const githubConnectionId = (userId: number) => `github-${userId}`;
+export function githubConnectionUserId(connectionId: string | undefined): number | undefined {
+  const match = connectionId && /^github-([1-9][0-9]*)$/.exec(connectionId);
+  if (!match) return;
+  const id = Number(match[1]);
+  return Number.isSafeInteger(id) ? id : undefined;
+}
+export const githubEndpointsKey = (connectionId: string) => `tio.github.endpoints.${connectionId}`;
+
 export interface GitHubRepository {
   id: number;
   name: string;

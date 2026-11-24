@@ -1,4 +1,9 @@
 import { HostError, type WorkspaceSession } from '@tio/core';
+import {
+  githubConnectionUserId,
+  githubEndpointsKey,
+  type GitHubEndpoint,
+} from '@tio/provider-github';
 
 async function request<T>(action: string, args: Record<string, unknown> = {}): Promise<T> {
   const { invoke } = await import('@tauri-apps/api/core');
@@ -21,7 +26,7 @@ class NativeCatalog {
   removeSession(id: string) {
     return request<void>('removeSession', { id });
   }
-  read(key: string): Promise<any> {
+  read<T = unknown>(key: string): Promise<T> {
     return request('read', { key });
   }
   write(key: string, value: unknown) {
@@ -41,9 +46,9 @@ export async function restoreNativeBindings() {
   const catalog = new NativeCatalog();
   const connections = new Set((await catalog.sessions()).map((session) => session.connectionId));
   for (const connection of connections) {
-    if (!connection.startsWith('github-')) continue;
-    const key = 'tio.github.endpoints.' + connection;
-    const endpoints = await catalog.read(key);
+    if (githubConnectionUserId(connection) === undefined) continue;
+    const key = githubEndpointsKey(connection);
+    const endpoints = await catalog.read<[string, GitHubEndpoint][]>(key);
     if (endpoints) localStorage.setItem(key, JSON.stringify(endpoints));
     else localStorage.removeItem(key);
   }

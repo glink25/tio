@@ -4,8 +4,9 @@
 .tio-editor {
   --tio-motion-enter: 140ms;
   --tio-motion-exit: 100ms;
-  --tio-motion-panel-enter: 200ms;
-  --tio-motion-panel-exit: 160ms;
+  --tio-motion-panel-enter: 400ms;
+  --tio-motion-panel-exit: 400ms;
+  --tio-motion-panel-ease: cubic-bezier(0.32, 0.72, 0, 1);
   --tio-motion-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
   --tio-motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
 }
@@ -60,27 +61,41 @@
 .tio-dialog,
 .tio-drawer {
   --tio-motion-x: 0px;
-  --tio-motion-y: 8px;
+  --tio-motion-y: 100dvh;
+  --tio-motion-hidden-opacity: 1;
   --tio-panel-rest: none;
   --tio-panel-position: translate(0, 0);
-  animation: tio-panel-in var(--tio-motion-panel-enter) var(--tio-motion-ease-enter) both !important;
+  animation: tio-panel-in var(--tio-motion-panel-enter) var(--tio-motion-panel-ease) both !important;
 }
-.tio-drawer {
-  --tio-motion-x: 100%;
+:is(.tio-dialog, .tio-drawer)[data-motion='right'] {
+  --tio-motion-x: 100vw;
   --tio-motion-y: 0px;
 }
 .tio-dialog[data-motion='left'] {
   --tio-motion-x: -100%;
   --tio-motion-y: 0px;
 }
+.tio-dialog[data-motion='center'] {
+  --tio-motion-y: 0px;
+  --tio-motion-hidden-opacity: 0;
+}
 :is(.tio-dialog, .tio-drawer)[data-state='closed'] {
   pointer-events: none;
-  animation: tio-panel-out var(--tio-motion-panel-exit) var(--tio-motion-ease-exit) both !important;
+  animation: tio-panel-out var(--tio-motion-panel-exit) var(--tio-motion-panel-ease) both !important;
 }
-@media (max-width: 767px) {
-  .tio-dialog[data-motion='sheet'] {
-    --tio-motion-y: 24px;
-  }
+.tio-modal-layer[data-skip-enter] > :is(.tio-overlay, [data-tio-swipe-panel]),
+.tio-modal-layer[data-managed-motion] > :is(.tio-overlay, [data-tio-swipe-panel]),
+.tio-modal-layer[data-swipe] > :is(.tio-overlay, [data-tio-swipe-panel]) {
+  animation: none !important;
+}
+.tio-modal-layer[data-managed-motion]:not([data-motion-ready]) > * {
+  visibility: hidden;
+}
+.tio-modal-layer[data-swipe] > [data-tio-swipe-panel] {
+  transform: translate3d(var(--tio-swipe-offset, 0px), 0, 0);
+}
+.tio-modal-layer[data-swipe] > .tio-overlay {
+  opacity: var(--tio-swipe-opacity, 0);
 }
 @keyframes tio-floating-in {
   from {
@@ -108,7 +123,7 @@
 }
 @keyframes tio-panel-in {
   from {
-    opacity: 0;
+    opacity: var(--tio-motion-hidden-opacity);
     transform: var(--tio-panel-position, translate(0, 0))
       translate(var(--tio-motion-x), var(--tio-motion-y));
   }
@@ -123,7 +138,7 @@
     transform: var(--tio-panel-rest, none);
   }
   to {
-    opacity: 0;
+    opacity: var(--tio-motion-hidden-opacity);
     transform: var(--tio-panel-position, translate(0, 0))
       translate(var(--tio-motion-x), var(--tio-motion-y));
   }

@@ -5,7 +5,7 @@ import { BuiltinIcon, useMediaUrl, type MediaResolver } from './media';
 export { BuiltinIcon, coverPresets, useMediaUrl, type MediaResolver } from './media';
 export { EditHistoryContext, useDraftHistory, type EditHistory } from './edit-history';
 import * as Dialog from '@radix-ui/react-dialog';
-import { useT } from '@tio/i18n';
+import { isLanguage, languageLabel, languages, type Language, useT } from '@tio/i18n';
 import { clsx, type ClassValue } from 'clsx';
 import { X, FileText, Database } from 'lucide-react';
 import {
@@ -13,11 +13,10 @@ import {
   useCallback,
   useContext,
   forwardRef,
-  useEffect,
   useState,
-  useRef,
   type ButtonHTMLAttributes,
   type ReactNode,
+  type Ref,
 } from 'react';
 export { MentionContext, MentionLabel, MentionPicker } from './mentions';
 export const PortalContext = createContext<HTMLElement | undefined>(undefined);
@@ -27,8 +26,13 @@ import { useOverlayOpen } from './motion';
 export { OverlayPresence, useOverlayOpen, useReducedMotion, motion } from './motion';
 
 import { useMobileDialogPosition } from './mobile-dialog';
-import { registerOverlay } from './overlay-history';
+import { useModalHost, useOverlayBack } from './modal-provider';
+export { ModalProvider, navigateFromOverlay, useOverlayBack } from './modal-provider';
+export { isOverlayHistoryTraversal } from './overlay-history';
 import { useOverlayInteraction } from './overlay-interaction';
+import { useMobile } from './overlays';
+import { inSwipeEdge, isTopPanel, useNativePanelMotion, usePanelSwipe } from './panel-swipe';
+export { SidebarDrawer } from './sidebar-drawer';
 import { ChoiceSelect } from './select';
 export function cn(...values: ClassValue[]) {
   return twMerge(clsx(values));
@@ -78,9 +82,23 @@ export function Modal({
   footer,
   hideHeader = false,
   restoreFocus,
+  canClose,
+  dismissOnOutside = true,
+  hideClose = false,
+  leading,
+  titleRef,
+  skipEnter = false,
+  onPanelReady,
+  covered = false,
+  hidden = false,
 }: {
+  leading?: ReactNode;
+  titleRef?: Ref<HTMLHeadingElement>;
+  canClose?: () => boolean;
+  dismissOnOutside?: boolean;
+  hideClose?: boolean;
   restoreFocus?: () => void;
-  layout?: 'default' | 'workspace';
+  layout?: 'default' | 'page' | 'workspace';
   hideHeader?: boolean;
   trackHistory?: boolean;
   header?: ReactNode;
@@ -92,24 +110,56 @@ export function Modal({
   description?: string;
   close: () => void;
   children: ReactNode;
+  skipEnter?: boolean;
+  onPanelReady?: () => void;
+  covered?: boolean;
+  hidden?: boolean;
 }) {
   const t = useT();
   const open = useOverlayOpen();
-  useOverlayBack(close, trackHistory && open);
+  const requestClose = () => {
+    if (canClose && !canClose()) return false;
+    close();
+    return true;
+  };
+  useOverlayBack(close, trackHistory && open, canClose);
+  const panelMotion = useModalSwipe({
+    open,
+    close,
+    canClose,
+    covered,
+    skipEnter,
+    onPanelReady,
+    sidebar: sheet,
+    page: mobilePlacement !== 'center' && (wide || layout !== 'default'),
+  });
   const position = useMobileDialogPosition();
-  const interaction = useOverlayInteraction(open, close, restoreFocus);
+  const interaction = useOverlayInteraction(
+    open && !covered,
+    () => dismissOnOutside && requestClose(),
+    restoreFocus,
+  );
   return (
     <Dialog.Root
       open={open}
       onOpenChange={(open) => {
-        if (!open) close();
+        if (!open) requestClose();
       }}
     >
       <Dialog.Portal forceMount container={useContext(PortalContext)}>
-        <div className="tio-modal-layer" data-state={open ? 'open' : 'closed'}>
+        <div
+          ref={panelMotion.layer}
+          className="tio-modal-layer"
+          data-state={open ? 'open' : 'closed'}
+          data-managed-motion={panelMotion.managed ? '' : undefined}
+          data-covered={covered ? '' : undefined}
+          hidden={hidden}
+          data-skip-enter={skipEnter && open ? '' : undefined}
+        >
           <Dialog.Overlay className="tio-overlay fixed inset-0 z-50 bg-black/40 backdrop-blur-xs" />
           <Dialog.Content
             {...interaction}
+            onPointerDownOutside={dismissOnOutside ? undefined : (event) => event.preventDefault()}
             onEscapeKeyDown={(event) => {
               // Floating controls are portalled; their Escape must not dismiss the containing dialog.
               const floating = [
@@ -120,9 +170,13 @@ export function Modal({
               if (floating.some((element) => !element.closest('[aria-hidden="true"]')))
                 event.preventDefault();
             }}
-            inert={!open || undefined}
-            data-motion={sheet ? 'left' : mobilePlacement}
-            data-placement={sheet ? 'sidebar' : layout === 'workspace' ? 'full' : mobilePlacement}
+            inert={!open || covered || undefined}
+            data-tio-swipe-panel=""
+            data-motion={
+              panelMotion.motion ??
+              (panelMotion.nativeNarrow && mobilePlacement === 'center' ? 'center' : 'vertical')
+            }
+            data-placement={sheet ? 'sidebar' : layout === 'default' ? mobilePlacement : 'full'}
             data-wide={wide || undefined}
             data-layout={layout}
             data-headerless={hideHeader || undefined}
@@ -139,6 +193,7 @@ export function Modal({
                   layout === 'workspace'
                     ? 'shrink-0 items-start border-b border-line px-4 py-3 md:items-center md:px-6'
                     : 'px-4 py-3 md:px-5 md:py-4',
+                  layout === 'page' && 'border-b border-line',
                 )}
               >
                 {header ? (
@@ -147,13 +202,24 @@ export function Modal({
                     {header}
                   </>
                 ) : (
-                  <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {leading}
+                    <Dialog.Title
+                      ref={titleRef}
+                      tabIndex={titleRef ? -1 : undefined}
+                      className="text-lg font-semibold outline-none"
+                    >
+                      {title}
+                    </Dialog.Title>
+                  </div>
                 )}
-                <Dialog.Close asChild>
-                  <IconButton label={t('common.close')} className="p-1">
-                    <X size={20} />
-                  </IconButton>
-                </Dialog.Close>
+                {!hideClose && (
+                  <Dialog.Close asChild>
+                    <IconButton label={t('common.close')} className="p-1">
+                      <X size={20} />
+                    </IconButton>
+                  </Dialog.Close>
+                )}
               </div>
             )}
             {description && (
@@ -164,7 +230,7 @@ export function Modal({
             <div
               className={cn(
                 'tio-dialog-body min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-y-contain',
-                layout === 'default' && !hideHeader && 'px-4 pb-4 md:px-5 md:pb-5',
+                layout !== 'workspace' && !hideHeader && 'px-4 pb-4 md:px-5 md:pb-5',
               )}
             >
               {children}
@@ -197,6 +263,7 @@ export function Drawer({
   const position = useMobileDialogPosition();
   const [portalContainer, setPortalContainer] = useState<HTMLDivElement | null>(null);
   const open = useOverlayOpen();
+  const panelMotion = useModalSwipe({ open, close, page: true });
   useOverlayBack(close, open);
   const { ref: attachInteraction, ...interaction } = useOverlayInteraction(open, close);
   const attach = useCallback(
@@ -214,13 +281,21 @@ export function Drawer({
       }}
     >
       <Dialog.Portal forceMount container={useContext(PortalContext)}>
-        <div className="tio-modal-layer" data-drawer="" data-state={open ? 'open' : 'closed'}>
+        <div
+          ref={panelMotion.layer}
+          className="tio-modal-layer"
+          data-drawer=""
+          data-managed-motion={panelMotion.managed ? '' : undefined}
+          data-state={open ? 'open' : 'closed'}
+        >
           <Dialog.Overlay className="tio-overlay fixed inset-0 z-40 bg-black/40 backdrop-blur-xs" />
           <Dialog.Content
             inert={!open || undefined}
             style={position}
             {...interaction}
             ref={attach}
+            data-tio-swipe-panel=""
+            data-motion={panelMotion.motion ?? 'vertical'}
             aria-describedby={undefined}
             className="tio-drawer fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col overflow-hidden bg-panel shadow-xl"
           >
@@ -246,12 +321,57 @@ export function Drawer({
     </Dialog.Root>
   );
 }
+
+function useModalSwipe({
+  open,
+  close,
+  canClose,
+  covered,
+  skipEnter = false,
+  onPanelReady,
+  page,
+  sidebar,
+}: {
+  open: boolean;
+  close: () => void;
+  canClose?: () => boolean;
+  covered?: boolean;
+  skipEnter?: boolean;
+  onPanelReady?: () => void;
+  page: boolean;
+  sidebar?: boolean;
+}) {
+  const narrow = useMobile();
+  const host = useModalHost();
+  const native = host === 'ios' || host === 'android';
+  const swipe = native && narrow && (page || !!sidebar);
+  const side = sidebar ? 'left' : 'right';
+  const [layer, attach] = useState<HTMLDivElement | null>(null);
+  useNativePanelMotion(layer, swipe ? side : undefined, open, skipEnter, onPanelReady);
+  usePanelSwipe(layer, {
+    enabled: swipe && open && !covered,
+    direction: sidebar ? -1 : 1,
+    canStart: (x, target, panel) =>
+      panel.contains(target) &&
+      (sidebar || (native && inSwipeEdge(host, x))) &&
+      !panel.getAnimations().some((animation) => animation.playState === 'running'),
+    isActive: (panel) => open && !covered && isTopPanel(panel),
+    canCommit: canClose,
+    commit: close,
+  });
+  return {
+    layer: attach,
+    managed: swipe,
+    motion: sidebar || swipe ? side : undefined,
+    nativeNarrow: native && narrow,
+  };
+}
 export function LanguageSwitcher({
   value,
   onChange,
 }: {
-  value: 'en' | 'zh';
-  onChange: (value: 'en' | 'zh') => void;
+  value: Language;
+  onChange: (value: Language) => void;
 }) {
   const t = useT();
 
@@ -261,12 +381,9 @@ export function LanguageSwitcher({
       value={value}
       className="w-36"
       search={false}
-      options={[
-        { id: 'zh', text: '简体中文', label: '简体中文' },
-        { id: 'en', text: 'English', label: 'English' },
-      ]}
+      options={languages.map((id) => ({ id, text: languageLabel(id), label: languageLabel(id) }))}
       onValueChange={(language) => {
-        if (language === 'zh' || language === 'en') onChange(language);
+        if (isLanguage(language)) onChange(language);
       }}
     />
   );
@@ -349,17 +466,6 @@ export {
   toast,
   useMobile,
 } from './overlays';
-export function useOverlayBack(close: () => void, enabled = true) {
-  const open = useOverlayOpen();
-  enabled = enabled && open;
-  const closeRef = useRef(close);
-  closeRef.current = close;
-  useEffect(() => {
-    if (!enabled) return;
-    return registerOverlay(() => closeRef.current());
-  }, [enabled]);
-}
-
 export { ReferencePicker, ReferenceIcon, type ReferenceOption } from './reference-picker';
 
 export {
@@ -372,7 +478,7 @@ export { ChoiceSelect, SelectInput } from './select';
 
 export { usePagedOptions } from './use-paged-options';
 
-export { SettingsGroup, SettingsRow, SettingsAction } from './settings';
+export { SettingsGroup, SettingsRow, SettingsAction, SettingsLink } from './settings';
 
 export {
   InteractionBoundary,

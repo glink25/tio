@@ -35,10 +35,8 @@ fn main() {
     let product: serde_json::Value =
         serde_json::from_slice(&std::fs::read("../../../package.json").expect("product metadata"))
             .expect("product JSON");
-    println!(
-        "cargo:rustc-env=TIO_COMPILED_PRODUCT_VERSION={}",
-        product["version"].as_str().expect("product version")
-    );
+    let product_version = product["version"].as_str().expect("product version");
+    println!("cargo:rustc-env=TIO_COMPILED_PRODUCT_VERSION={product_version}");
     println!("cargo:rerun-if-changed=../release-plan.json");
     let release: serde_json::Value =
         serde_json::from_slice(&std::fs::read("../release-plan.json").expect("release plan"))
@@ -49,7 +47,7 @@ fn main() {
     );
     println!("cargo:rerun-if-env-changed=TIO_UPDATE_TRACK");
     let track = std::env::var("TIO_UPDATE_TRACK").unwrap_or_else(|_| {
-        if product["version"].as_str().unwrap().contains("-rc.") {
+        if product_version.split_once('-').is_some() {
             "preview".into()
         } else {
             "stable".into()

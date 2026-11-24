@@ -7,6 +7,7 @@ import { FileWorkspaceContent } from '@tio/file-storage';
 import { t } from '@tio/i18n';
 import {
   GitHubClient,
+  githubEndpointsKey,
   GitHubProvider,
   GitHubError,
   type GitHubEndpoint,
@@ -18,7 +19,7 @@ import type { ConnectionBinding } from './connection-adapters';
 import { accessToken, credentials, loginGitHub } from './github-auth';
 
 export function githubBinding(connection: Connection): ConnectionBinding {
-  const storageKey = `tio.github.endpoints.${connection.id}`;
+  const storageKey = githubEndpointsKey(connection.id);
   const endpoints = new Map<string, GitHubEndpoint>(
     JSON.parse(localStorage.getItem(storageKey) ?? '[]'),
   );
@@ -153,6 +154,7 @@ export function githubBinding(connection: Connection): ConnectionBinding {
   >();
   const replicas = new Map<string, Replica>();
   return {
+    repositoryPollMs: 60000,
     dispose: () => {
       collaborators.clear();
       caches.clear();

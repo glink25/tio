@@ -4,6 +4,7 @@ import { FileWorkspaceContent } from '@tio/file-storage';
 import {
   GitHubClient,
   GitHubProvider,
+  githubConnectionUserId,
   type GitHubEndpoint,
   type GitHubSnapshotState,
 } from '@tio/provider-github';
@@ -27,9 +28,9 @@ export async function syncGitHub(
   input: { connection: string; instance: string; endpoint: GitHubEndpoint },
   host: HeadlessSyncHost,
 ) {
-  if (!/^github-[1-9][0-9]*$/.test(input.connection)) throw new HostError('invalid');
+  const user = githubConnectionUserId(input.connection);
+  if (user === undefined) throw new HostError('invalid');
   const { endpoint } = input;
-  const user = Number(input.connection.slice(7));
   const instance = input.instance + '/' + endpoint.repositoryId + '/' + endpoint.branch;
   const store = new ReplicaRepository(instance, endpoint.workspaceId, (space, action, args) =>
     host.execute(space, action, args),

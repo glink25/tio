@@ -55,7 +55,9 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
       <OverlayPresence>
         {m.automationOpen && m.runtime && m.session && <AutomationEntry model={m} />}
       </OverlayPresence>
-      <OverlayPresence>{m.settingsOpen && <SettingsDialog model={m} />}</OverlayPresence>
+      <OverlayPresence>
+        {m.settingsOpen && <SettingsDialog model={m} close={() => m.setSettingsOpen(false)} />}
+      </OverlayPresence>
       <OverlayPresence>
         {m.renameId && (
           <Modal mobilePlacement="center" title={t('ui.rename')} close={() => m.setRenameId(null)}>
@@ -137,12 +139,17 @@ export function WorkspaceDialogs({ model: m }: { model: WorkspaceController }) {
 }
 
 function AutomationEntry({ model: m }: { model: WorkspaceController }) {
-  const requestClose = useRef(() => m.setAutomationOpen(false));
-  useOverlayBack(() => requestClose.current());
+  const canClose = useRef<() => boolean>(() => true);
+  useOverlayBack(
+    () => m.setAutomationOpen(false),
+    true,
+    () => canClose.current(),
+  );
   return (
     <Suspense
       fallback={
         <Modal
+          layout="workspace"
           trackHistory={false}
           title={t('automation.center')}
           close={() => m.setAutomationOpen(false)}
@@ -155,8 +162,8 @@ function AutomationEntry({ model: m }: { model: WorkspaceController }) {
         runtime={m.runtime!}
         workspaceId={m.session!.workspaceId}
         close={() => m.setAutomationOpen(false)}
-        registerClose={(close) => {
-          requestClose.current = close;
+        registerGuard={(guard) => {
+          canClose.current = guard;
         }}
       />
     </Suspense>
