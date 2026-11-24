@@ -20,10 +20,10 @@ const { values } = parseArgs({
     targets: { type: 'string' },
     out: { type: 'string' },
     tag: { type: 'string' },
-    automatic: { type: 'boolean' },
   },
 });
 const config = readJSON('apps/native/release-plan.json');
+const nativeChannels = channels.filter((channel) => channel !== 'web');
 const version = productVersion();
 const track = trackFor(version);
 if (values.tag && values.tag !== 'v' + version)
@@ -42,11 +42,9 @@ if (
   !config.apple.reason?.trim()
 )
   throw new Error('Declare iOS release intent and reason');
-if (!['tag', 'manual'].includes(config.web?.deployment))
-  throw new Error('Declare Web deployment policy');
 if (
   !Array.isArray(config.forceHost) ||
-  config.forceHost.some((channel) => !channels.includes(channel) || channel === 'web')
+  config.forceHost.some((channel) => !nativeChannels.includes(channel))
 )
   throw new Error('Invalid forced host selection');
 const selected = values.targets ? values.targets.split(',') : config.targets;
@@ -54,7 +52,7 @@ if (
   selected !== 'auto' &&
   (!Array.isArray(selected) ||
     !selected.length ||
-    selected.some((c) => !channels.includes(c)) ||
+    selected.some((c) => !nativeChannels.includes(c)) ||
     new Set(selected).size !== selected.length)
 )
   throw new Error('Invalid target selection');
@@ -88,8 +86,8 @@ const workspacePackages = new Map(
       return [manifest.name, { directory: file.slice(0, -'/package.json'.length), manifest }];
     }),
 );
-function runtimeDirectories(channel) {
-  const start = channel === 'web' ? 'apps/web' : 'apps/native';
+function runtimeDirectories() {
+  const start = 'apps/native';
   const directories = new Set([start]);
   const pending = [...workspacePackages.values()].filter((pkg) => pkg.directory === start);
   while (pending.length) {
@@ -107,15 +105,14 @@ function runtimeDirectories(channel) {
   }
   return directories;
 }
-function runtimeFile(file, channel) {
+const runtimePackageDirectories = [...runtimeDirectories()];
+function runtimeFile(file) {
   if (file.endsWith('.md')) return false;
   if (file.startsWith('packages/'))
-    return [...runtimeDirectories(channel)].some((dir) => file.startsWith(dir + '/'));
-  if (channel === 'web' && file.startsWith('apps/web/')) return true;
+    return runtimePackageDirectories.some((dir) => file.startsWith(dir + '/'));
   if (
-    channel !== 'web' &&
-    (/^apps\/native\/(src\/|index\.html|vite\.|kernel\/)/.test(file) ||
-      file === 'apps/native/release/lib.mjs')
+    /^apps\/native\/(src\/|index\.html|vite\.|kernel\/)/.test(file) ||
+    file === 'apps/native/release/lib.mjs'
   )
     return true;
   return (
@@ -132,9 +129,9 @@ function fingerprint(predicate, extra) {
   );
 }
 const matrix = [];
-for (const channel of channels) {
+const entryManifest = readJSON('apps/native/package.json');
+for (const channel of nativeChannels) {
   const appleStore = ['ios-store'].includes(channel);
-  if (values.automatic && channel === 'web' && config.web?.deployment === 'manual') continue;
   if (selected !== 'auto' && !selected.includes(channel)) continue;
   const path = values.baseline && join(values.baseline, track, channel + '.json');
   const previous = path && existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : undefined;
@@ -148,51 +145,37 @@ for (const channel of channels) {
     join(values.baseline, track === 'stable' ? 'preview' : 'stable', channel + '.json');
   const other =
     otherPath && existsSync(otherPath) ? JSON.parse(readFileSync(otherPath, 'utf8')) : undefined;
-  const hostContract = channel === 'web' ? null : contract(channel);
-  const nativeFingerprint =
-    channel === 'web'
-      ? null
-      : fingerprint((f) => nativeFile(f, channel), {
-          contract: hostContract,
-          tooling: readJSON('apps/native/package.json').devDependencies['@tauri-apps/cli'],
-          trustKeys: {
-            resource: process.env.TIO_RESOURCE_PUBLIC_KEY ?? '',
-            updater: channel.endsWith('-direct')
-              ? (process.env.TIO_UPDATER_PUBLIC_KEY ?? '')
-              : null,
-          },
-        });
-  const entryManifest = readJSON(
-    channel === 'web' ? 'apps/web/package.json' : 'apps/native/package.json',
-  );
-  const runtimeFingerprint = fingerprint((f) => runtimeFile(f, channel), {
+  const hostContract = contract(channel);
+  const nativeFingerprint = fingerprint((f) => nativeFile(f, channel), {
+    contract: hostContract,
+    tooling: entryManifest.devDependencies['@tauri-apps/cli'],
+    trustKeys: {
+      resource: process.env.TIO_RESOURCE_PUBLIC_KEY ?? '',
+      updater: channel.endsWith('-direct') ? (process.env.TIO_UPDATER_PUBLIC_KEY ?? '') : null,
+    },
+  });
+  const runtimeFingerprint = fingerprint(runtimeFile, {
     entry: {
       scripts: entryManifest.scripts ?? {},
       dependencies: entryManifest.dependencies ?? {},
       devDependencies: entryManifest.devDependencies ?? {},
     },
   });
-  const storageFingerprint =
-    channel === 'web'
-      ? null
-      : fingerprint(
-          (f) =>
-            /^packages\/core\/src\/(index|content|fields|json|references|automation|assistant)\.ts$/.test(
-              f,
-            ) || f === 'packages/file-storage/src/chunks.ts',
-          {},
-        );
-  const bridgeFingerprint =
-    channel === 'web'
-      ? null
-      : fingerprint(
-          (f) =>
-            (nativeFile(f, channel) && /\/(workspace|catalog|folder|headless_io)\.rs$/.test(f)) ||
-            /^packages\/native-core\/src\/(native-repository|folder|replica)\.ts$/.test(f) ||
-            f === 'apps/native/src/native-ipc.ts',
-          {},
-        );
-  if (previous && channel !== 'web') {
+  const storageFingerprint = fingerprint(
+    (f) =>
+      /^packages\/core\/src\/(index|content|fields|json|references|automation|assistant)\.ts$/.test(
+        f,
+      ) || f === 'packages/file-storage/src/chunks.ts',
+    {},
+  );
+  const bridgeFingerprint = fingerprint(
+    (f) =>
+      (nativeFile(f, channel) && /\/(workspace|catalog|folder|headless_io)\.rs$/.test(f)) ||
+      /^packages\/native-core\/src\/(native-repository|folder|replica)\.ts$/.test(f) ||
+      f === 'apps/native/src/native-ipc.ts',
+    {},
+  );
+  if (previous) {
     for (const [kind, fingerprint, field] of [
       ['storage', storageFingerprint, 'storageEpoch'],
       ['bridge', bridgeFingerprint, 'bridgeApiVersion'],
@@ -208,20 +191,18 @@ for (const channel of channels) {
       }
     }
   }
+  const previousNativeFingerprint = appleStore
+    ? previous?.nativeFingerprint
+    : previous?.host?.nativeFingerprint;
   let mode =
-    channel === 'web'
-      ? 'web'
-      : !(appleStore ? previous?.nativeFingerprint : previous?.host?.nativeFingerprint) ||
-          (appleStore ? previous.nativeFingerprint : previous.host.nativeFingerprint) !==
-            nativeFingerprint
-        ? 'host'
-        : previous.runtimeFingerprint !== runtimeFingerprint
-          ? 'runtime'
-          : 'skip';
-  if (mode === 'web' && previous?.runtimeFingerprint === runtimeFingerprint) mode = 'skip';
+    previousNativeFingerprint !== nativeFingerprint
+      ? 'host'
+      : previous.runtimeFingerprint !== runtimeFingerprint
+        ? 'runtime'
+        : 'skip';
   if (config.forceHost.includes(channel)) mode = 'host';
   if (appleStore && mode === 'runtime' && config.apple.intent === 'review-required') mode = 'host';
-  if (config.content && mode === 'skip' && channel !== 'web') mode = 'content';
+  if (config.content && mode === 'skip') mode = 'content';
   if (
     appleStore &&
     mode === 'host' &&
@@ -236,9 +217,7 @@ for (const channel of channels) {
     previous.sourceCommit === sourceCommit &&
     previous.releaseRevision === config.revision &&
     previous.runtimeFingerprint === runtimeFingerprint &&
-    (channel === 'web' ||
-      (appleStore ? previous.nativeFingerprint : previous.host?.nativeFingerprint) ===
-        nativeFingerprint);
+    previousNativeFingerprint === nativeFingerprint;
   const retry = alreadyPublished && selected !== 'auto';
   if (alreadyPublished && !retry) continue;
   if (retry) mode = previous.mode;
@@ -282,7 +261,7 @@ for (const channel of channels) {
 }
 if (
   process.env.CI &&
-  matrix.some((row) => row.channel !== 'web') &&
+  matrix.length > 0 &&
   Buffer.from(process.env.TIO_RESOURCE_PUBLIC_KEY ?? '', 'base64').length !== 32
 )
   throw new Error('Configure the release metadata public key');

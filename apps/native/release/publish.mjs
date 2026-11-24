@@ -60,8 +60,9 @@ if (receipt.mode === 'host' || receipt.mode === 'runtime') {
 }
 if (
   !channels.includes(receipt.channel) ||
+  receipt.channel === 'web' ||
   receipt.distTag !== distTag(receipt.version, receipt.channel) ||
-  !['host', 'runtime', 'content', 'web'].includes(receipt.mode)
+  !['host', 'runtime', 'content'].includes(receipt.mode)
 )
   throw new Error('Invalid release target');
 if (receipt.mode === 'content') {
@@ -198,7 +199,6 @@ await changeIndex(receipt.track, receipt.channel, async (previous) => {
       throw new Error('Content target mismatch');
     for (const id of content.compatibleRuntimeIds) update.contents[id] = lookup('content.json');
   }
-  if (receipt.channel === 'web') update.runtimeFingerprint = receipt.runtimeFingerprint;
   // Replaying a completed publication is idempotent, not a new deployment.
   if (previous && canonical({ ...update, revision: previous.revision }) === canonical(previous))
     return null;

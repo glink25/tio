@@ -53,7 +53,6 @@ jobs:
         run: |
           set -eu
           args=(--tag "$TIO_TAG" --baseline "$RUNNER_TEMP/baselines" --out "$RUNNER_TEMP/release-plan.json")
-          if [ '${{ github.event_name }}' = push ]; then args+=(--automatic); fi
           if [ -n "$TIO_TARGETS" ]; then args+=(--targets "$TIO_TARGETS"); fi
           node apps/native/release/plan.mjs "${args[@]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

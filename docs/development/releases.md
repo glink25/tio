@@ -8,11 +8,10 @@ iOS 使用 Xcode Cloud 构建并交给 TestFlight／App Store；Android 使用 G
 
 - `revision`：递增的动态包版本号。
 - `hostBuild`：Android 和桌面安装包的构建号，须同时高于该平台稳定、预览两个渠道已发布构建号。iOS 采用 Xcode Cloud 自增的 `CI_BUILD_NUMBER`，不与其他平台共享计数器。
-- `targets`：`auto` 或 `ios-store`、`macos-direct`、`windows-direct`、`linux-direct`、`android-play`、`web` 的数组。
+- `targets`：`auto` 或 `ios-store`、`macos-direct`、`windows-direct`、`linux-direct`、`android-play` 的数组。
 - `forceHost`：主动重建安装包的渠道数组。
 - `apple.intent`、`apple.reason`：iOS 变更是已有行为修复还是需要审核的新功能。
 - `compatibility.storage`、`compatibility.bridge`：协议输入变化须声明 `compatible` 或 `breaking` 并说明原因；不兼容变动还须增加契约版本。
-- `web.deployment`：`tag` 随标签部署；`manual` 仅通过手动发布入口部署。
 - `storeNotes`：商店语言的发布说明。Play 自动写入轨道说明；Apple 的商店元数据仍在 App Store Connect 管理。
 - 可选 `content.translations`：仅覆盖已发布运行时已知的翻译键。
 
@@ -39,7 +38,7 @@ node apps/native/release/tag.mjs --plan tests/tmp/release/plan.json --push
 - Actions 的 `Release` 监听源码 `v*`，按平台独立执行。iOS 行只构建、签署相应动态包及宿主请求元数据，不读取或回传 Apple 安装包，不要求 Apple API key。
 - Android 构建签名 AAB 后，调用 Play API 上传内容库并更新轨道：RC 为 `internal`，正式版为 `production`。首次须在 Play 控制台完成应用与上传证书初始化。没有生产发布权限的服务账号不能推正式轨道。
 - macOS 在 Actions 构建 arm64／x86_64 通用包，验证 Developer ID、版本、架构、公证与 DMG 票据后发布。Windows、Linux 独立验证安装包和 Tauri 更新签名。
-- Web 正式标签部署生产，RC 部署预览；设为手动时，在同一工作流选择 `targets=web` 与 `publish`。
+- Web 由 Cloudflare Pages 的 Git 集成部署。`web-production` 对应生产，`preview-*` 对应预览。发布经过验证的提交见 [Cloudflare Pages 部署](deployment.md)。
 
 手动 `Release` 默认只构建和验证产物，启用 `publish` 才执行 Play 上传、公开下载和更新索引。质量检查统一按 frozen lockfile 安装 npm 发布的 Chaty。
 
@@ -71,8 +70,7 @@ Play 上传完成不等于审核通过。索引记录 `processing`；可选的�
 | `windows-direct-build` | `WINDOWS_CERTIFICATE_BASE64`、密码和摘要；Tauri 更新私钥及密码                                                                                                   |
 | `linux-direct-build`   | `TAURI_SIGNING_PRIVATE_KEY`、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`                                                                                                |
 | `release-publish`      | `TIO_RESOURCE_PRIVATE_KEY_BASE64`；可选的 Play 只读状态凭据                                                                                                      |
-| `web-release`          | 同一索引签名凭据、Cloudflare account ID 与 Pages 部署 token                                                                                                      |
 
 macOS 的 `APPLE_PASSWORD` 是专用于公证的 Apple App 专用密码，不是 Apple 账户登录密码。Play 服务账号只授权 Tio 应用所需轨道，不授予其他应用、财务或 Google Cloud 项目角色。私钥仅解码到 runner 临时目录；完成后清理，不进入日志或公开资产。
 
-启用统一发布前须关闭 Pages 原有 Git 自动构建，以免合并 main 就部署生产。保留 Pages 项目、域名和独立鉴权 Worker。0.2.0 前不兼容旧更新协议，不增加旧格式迁移或兼容入口。
+0.2.0 前不兼容旧更新协议，不增加旧格式迁移或兼容入口。

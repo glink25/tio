@@ -3,9 +3,6 @@
   "revision": 1010,
   "hostBuild": 1010,
   "targets": ["linux-direct"],
-  "web": {
-    "deployment": "tag"
-  },
   "compatibility": {
     "storage": "unchanged",
     "bridge": "breaking",

@@ -16,14 +16,6 @@ function run(args) {
   const r = spawnSync('node', args, { stdio: 'inherit' });
   if (r.status !== 0) throw new Error(args[0] + ' failed');
 }
-if (plan.mode === 'web') {
-  const result = spawnSync(
-    'tar',
-    ['-czf', join(values.out, 'web.tar.gz'), '-C', 'apps/web/dist', '.'],
-    { stdio: 'inherit' },
-  );
-  if (result.status !== 0) throw new Error('Web archive failed');
-}
 if (plan.mode === 'runtime' || plan.mode === 'host')
   run([
     'apps/native/updates/frontend-pack.mjs',

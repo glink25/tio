@@ -15,6 +15,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   build:
+    if: fromJSON(inputs.target).channel != 'web'
     permissions:
       contents: read
       actions: read
@@ -139,8 +140,6 @@ jobs:
             *) platform=desktop ;;
           esac
           corepack pnpm --filter @tio/native build --outDir "dist/$platform"
-      - if: steps.reuse.outputs.reuse != 'true' && fromJSON(inputs.target).mode == 'web'
-        run: corepack pnpm build
       - if: steps.reuse.outputs.reuse != 'true'
         name: Validate and stage unsigned release artifacts
         run: |
@@ -195,7 +194,7 @@ jobs:
     needs: [build, candidate]
     if: ${{ always() && inputs.publish && (needs.candidate.result == 'success' || needs.candidate.result == 'skipped') && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
-    environment: ${{ fromJSON(inputs.target).channel == 'web' && 'web-release' || 'release-publish' }}
+    environment: release-publish
     permissions:
       contents: write
     env:
@@ -225,14 +224,6 @@ jobs:
           if [ '${{ fromJSON(inputs.target).mode }}' = host ]; then node apps/native/version.mjs --prepare-host; fi
       - if: needs.build.outputs.published != 'true'
         run: node apps/native/release/finalize.mjs "$RUNNER_TEMP/download"
-      - if: fromJSON(inputs.target).channel == 'web'
-        env:
-          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-        run: |
-          corepack enable
-          node scripts/install-ci.mjs
-          node apps/native/release/deploy-web.mjs "$RUNNER_TEMP/download"
       - run: node apps/native/release/publish.mjs --dir "$RUNNER_TEMP/download"
       - if: always()
         run: node --input-type=module -e 'import {rmSync} from "node:fs"; rmSync(process.env.RUNNER_TEMP+"/tio-release-key.pem",{force:true});'

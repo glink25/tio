@@ -1,19 +1,22 @@
 # Cloudflare Pages 部署
 
-前端继续使用 Cloudflare Pages 项目 `tio`，与原生平台共用 [Release 工作流](releases.md)。不迁移现有域名，也不将站点改成 Workers 静态资源托管。
+Cloudflare Pages 项目 `tio` 通过 GitHub 集成拉取源码并构建 Web。GitHub CI 验证代码，原生发布走 [Release 工作流](releases.md)。
 
 ## 发布方式
 
-在 `apps/native/release-plan.json` 中配置 `web.deployment`：
+- `web-production` 是生产分支。将通过 `main` 质量检查的提交推到该分支即可发布，合并 `main` 只更新开发分支。
+- `preview-*` 是预览分支。将候选提交推到以 `preview-` 开头的分支，Pages 会生成预览地址。
 
-- `tag`：默认策略。受影响的 Web 随正式版本标签自动部署到 Pages 生产分支；RC 标签部署预览分支。
-- `manual`：自动标签发布跳过 Web；在同一个 `Release` 工作流选择源码标签、指定 `targets=web` 并启用 `publish`。
+例如，在 `v0.1.0-rc.8` 通过质量检查后推送预览分支。正式发布时将验证通过的提交推到 `web-production`。
 
-平台也可通过 `targets` 数组单独选择或排除 Web。未受影响的平台不重建。工作流按锁文件安装 npm 依赖，执行根目录完整构建，保留独立编辑器构建与 CSS 作用域检查。
+```sh
+git push origin v0.1.0-rc.8:refs/heads/preview-0.1.0-rc.8
+git push origin "${release_commit}:refs/heads/web-production"
+```
 
-部署使用已经构建并校验摘要的站点归档，Cloudflare token 和 account ID 存放在 `web-release` 环境。启用标签发布前应先关闭现有 main 自动构建；新部署任务也通过 API 关闭 Pages Git 集成的生产和预览自动构建，避免第二条生产发布链；生产分支取自现有项目设置。也可以由项目所有者先在 Pages 设置中关闭自动构建。
+`release_commit` 取已验收的提交 SHA。
 
-此前 main 自动部署是云端设置。本次仅修改发布代码与文档，尚未连接 Cloudflare 修改该设置或部署站点。正式启用前应确认 `web-release` 环境具备 Pages 编辑与部署权限，详见[发布环境配置](releases.md#发布环境配置)。
+Pages 从仓库根目录运行 `corepack pnpm install --frozen-lockfile && corepack pnpm build`，产物目录为 `apps/web/dist`。发布后在 Pages 的 Deployments 核对环境、提交和部署状态。需要回退时，在 Pages 回退到上一份已验收的生产部署。
 
 ## 域名与鉴权
 
