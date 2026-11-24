@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { readFile, readdir, mkdir, writeFile, rm } from 'node:fs/promises';
+import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -55,39 +55,39 @@ async function collect(dir, prefix = '') {
 }
 await collect(root);
 if (!files['index.html'] || Object.keys(files).length > 10000) throw new Error('Invalid frontend');
+const maxArchiveSize = 32 * 1024 * 1024;
+// Stream the archive from the bundle directory so tar never sees a Windows drive letter.
+const result = spawnSync('tar', ['-czf', '-', '.'], {
+  cwd: root,
+  env: { ...process.env, COPYFILE_DISABLE: '1' },
+  stdio: ['ignore', 'pipe', 'inherit'],
+  maxBuffer: maxArchiveSize + 1,
+});
+if (result.error?.code === 'ENOBUFS' || result.stdout?.length > maxArchiveSize)
+  throw new Error('Archive exceeds host limit');
+if (result.status !== 0) throw result.error ?? new Error('Archive failed');
+const archive = result.stdout;
+const archiveSha256 = hash(archive);
+const name = `tio-${values.channel}-frontend-${archiveSha256}.tar.gz`;
+const payload = {
+  format: 1,
+  kind: 'frontend-patch',
+  channel: values.channel,
+  productVersion: productVersion(),
+  revision,
+  compatibleContractIds,
+  runtimeId: meta.runtimeId,
+  archiveUrl: assetURL(productVersion(), values.channel, name),
+  archiveSha256,
+  kernelSha256,
+  files,
+};
 await mkdir(output, { recursive: true });
-const temp = join(output, '.frontend-' + process.pid + '.tar.gz');
-try {
-  const result = spawnSync('tar', ['-czf', temp, '-C', root, '.'], {
-    env: { ...process.env, COPYFILE_DISABLE: '1' },
-    stdio: 'inherit',
-  });
-  if (result.status !== 0) throw result.error ?? new Error('Archive failed');
-  const archive = await readFile(temp);
-  if (archive.length > 32 * 1024 * 1024) throw new Error('Archive exceeds host limit');
-  const archiveSha256 = hash(archive);
-  const name = `tio-${values.channel}-frontend-${archiveSha256}.tar.gz`;
-  const payload = {
-    format: 1,
-    kind: 'frontend-patch',
-    channel: values.channel,
-    productVersion: productVersion(),
-    revision,
-    compatibleContractIds,
-    runtimeId: meta.runtimeId,
-    archiveUrl: assetURL(productVersion(), values.channel, name),
-    archiveSha256,
-    kernelSha256,
-    files,
-  };
-  await writeFile(join(output, name), archive);
-  await writeFile(join(output, 'runtime-payload.json'), JSON.stringify(payload));
-  if (values['private-key'])
-    await writeFile(
-      join(output, 'runtime.json'),
-      JSON.stringify(signed(payload, await readFile(values['private-key']))),
-    );
-  await writeFile(join(output, 'runtime-metadata.json'), JSON.stringify(meta, null, 2));
-} finally {
-  await rm(temp, { force: true });
-}
+await writeFile(join(output, name), archive);
+await writeFile(join(output, 'runtime-payload.json'), JSON.stringify(payload));
+if (values['private-key'])
+  await writeFile(
+    join(output, 'runtime.json'),
+    JSON.stringify(signed(payload, await readFile(values['private-key']))),
+  );
+await writeFile(join(output, 'runtime-metadata.json'), JSON.stringify(meta, null, 2));

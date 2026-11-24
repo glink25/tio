@@ -5,7 +5,7 @@ Tio 的 Windows 预览安装包由项目证书自签名。请从 [Tio GitHub Rel
 先运行 `Get-FileHash -Algorithm SHA256 <安装包文件名>`，与对应 Release 公布的安装包摘要核对。在 PowerShell 中将 `$installer` 改为实际的安装包文件名，再执行以下命令。证书文件和安装包内的签名证书都必须匹配项目公布的 SHA-256 指纹。`$signature.Status` 显示当前 Windows 对该签名的判断。
 
 ```powershell
-$installer = '.\Tio_0.1.0-rc.10_x64-setup.exe'
+$installer = '.\Tio_0.1.0-rc.11_x64-setup.exe'
 $certificate = '.\tio-windows-signing.cer'
 $expected = '57B0176FF6F7D51577F75D339A48D1A578E956427F45069D9E523F465264B085'
 
