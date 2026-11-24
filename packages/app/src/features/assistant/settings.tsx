@@ -9,13 +9,15 @@ import {
 import { t } from '@tio/i18n';
 import {
   Button,
+  IconButton,
   LoadingSkeleton,
   Modal,
   OverlayPresence,
   SettingsLink,
   SettingsRow,
 } from '@tio/ui';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { WorkspaceController } from '../workspace/use-workspace';
@@ -217,6 +219,8 @@ export function AssistantConfigForm({
   openAdvanced?: () => void;
 }) {
   const [baseline] = useState(model.workspace);
+  const apiKeyId = useId();
+  const [showApiKey, setShowApiKey] = useState(false);
   const settings = baseline?.assistant ?? emptySettings;
   const original = settings.configs.find((config) => config.id === configId);
   const [config, setConfig] = useState<AssistantApiConfig>(
@@ -386,16 +390,34 @@ export function AssistantConfigForm({
               />
             </label>
           ))}
-          <label className="block text-sm">
-            {t('assistant.apiKey')}
-            <input
-              type="password"
-              autoComplete="off"
-              className="mt-1 w-full"
-              value={decodeKey(config.apiKey)}
-              onChange={(event) => patch({ apiKey: encodeKey(event.target.value) })}
-            />
-          </label>
+          <div className="text-sm">
+            <label htmlFor={apiKeyId}>{t('assistant.apiKey')}</label>
+            <div className="relative mt-1">
+              <input
+                id={apiKeyId}
+                type={showApiKey ? 'text' : 'password'}
+                autoComplete="off"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                className="w-full pr-11"
+                value={decodeKey(config.apiKey)}
+                onChange={(event) => patch({ apiKey: encodeKey(event.target.value) })}
+              />
+              <IconButton
+                type="button"
+                label={t(showApiKey ? 'assistant.hideApiKey' : 'assistant.showApiKey')}
+                aria-controls={apiKeyId}
+                className="absolute inset-y-0 right-0 w-11 p-0"
+                onPointerDown={(event) => {
+                  if (document.activeElement?.id === apiKeyId) event.preventDefault();
+                }}
+                onClick={() => setShowApiKey((shown) => !shown)}
+              >
+                {showApiKey ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
+              </IconButton>
+            </div>
+          </div>
         </>
         {!openAdvanced && (
           <details open={advanced || undefined}>

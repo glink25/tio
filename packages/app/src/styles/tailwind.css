@@ -499,6 +499,17 @@ body,
   }
 }
 
+/* While a full-screen panel owns the screen, keep the editor out of the keyboard backdrop. */
+@media (max-width: 767px) {
+  html[data-tio-native-mobile='ios'][data-tio-keyboard-open]
+    body:has(
+      > .tio-modal-layer[data-state='open'] > :is(.tio-dialog[data-placement='full'], .tio-drawer)
+    )
+    > #root {
+    opacity: 0;
+  }
+}
+
 /* Native WebView chrome does not act as selectable document content. */
 html[data-tio-native-mobile] {
   -webkit-user-select: none;

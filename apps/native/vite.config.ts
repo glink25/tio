@@ -42,11 +42,17 @@ export default defineConfig(({ mode }) => {
               'utf8',
             ),
           );
-          if (mobilePlatform)
+          if (mobilePlatform) {
+            if (mobilePlatform === 'ios')
+              html = html.replace(
+                'interactive-widget=resizes-content',
+                'interactive-widget=resizes-visual',
+              );
             return html
               .replace(/\s*<!-- web-boot -->[\s\S]*?<!-- \/web-boot -->/g, '')
-              .replace('<html ', '<html data-tio-native-mobile ')
+              .replace('<html ', `<html data-tio-native-mobile="${mobilePlatform}" `)
               .replace('initial-scale=1,', 'initial-scale=1, maximum-scale=1, user-scalable=no,');
+          }
           return html.replace(
             '<!--tio-boot-logo-->',
             readFileSync(new URL('../../packages/app/src/brand/logo.svg', import.meta.url), 'utf8'),

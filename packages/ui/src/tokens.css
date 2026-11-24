@@ -43,7 +43,7 @@
 }
 /* Full-screen geometry and content clearance are separate contracts. */
 :root {
-  --tio-screen-height: 100dvh;
+  --tio-screen-height: var(--tio-native-screen-height, 100dvh);
   --tio-safe-top: env(safe-area-inset-top, 0px);
   --tio-safe-right: env(safe-area-inset-right, 0px);
   --tio-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -51,7 +51,7 @@
 }
 @media (display-mode: standalone) {
   :root {
-    --tio-screen-height: 100vh;
+    --tio-screen-height: var(--tio-native-screen-height, 100vh);
   }
 }
 .tio-modal-layer {
@@ -211,7 +211,7 @@ a[href] {
   .tio-modal-layer {
     display: block;
     position: fixed;
-    top: 0;
+    top: var(--tio-layer-top, 0px);
     left: 0;
     width: 100%;
     height: var(--tio-screen-height);

@@ -151,6 +151,7 @@ private final class StartupOverlay: UIView {
 func tioShowStartup(_ pointer: UnsafeRawPointer) {
     let webView = Unmanaged<WKWebView>.fromOpaque(pointer).takeUnretainedValue()
     webView.scrollView.pinchGestureRecognizer?.isEnabled = false
+    KeyboardViewport.attach(to: webView)
     StartupOverlay.attach(to: webView)
 }
 

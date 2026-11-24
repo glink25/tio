@@ -2,6 +2,12 @@ import { useLayoutEffect } from 'react';
 
 import { isTopPanel } from './panel-swipe';
 
+declare global {
+  interface Window {
+    __tioKeyboardViewport?: { height: number; visibleHeight: number };
+  }
+}
+
 const editableInputTypes = new Set(['text', 'search', 'url', 'tel', 'email', 'password', 'number']);
 
 function isEditable(element: Element | null): element is HTMLElement {
@@ -42,7 +48,10 @@ export function useMobileDialogPosition(layer: HTMLDivElement | null, active: bo
     if (!active || !layer || !panel || !viewport) return;
 
     let frame = 0;
+    let layerTop = 0;
     const clear = () => {
+      layerTop = 0;
+      layer.style.removeProperty('--tio-layer-top');
       panel.removeAttribute('data-keyboard');
       panel.style.removeProperty('--tio-visible-top');
       panel.style.removeProperty('--tio-visible-bottom');
@@ -51,7 +60,9 @@ export function useMobileDialogPosition(layer: HTMLDivElement | null, active: bo
     const update = () => {
       frame = 0;
       const field = document.activeElement;
+      const native = window.__tioKeyboardViewport;
       if (
+        (native && native.visibleHeight === native.height) ||
         !isEditable(field) ||
         !panel.contains(field) ||
         !isTopPanel(panel) ||
@@ -63,11 +74,26 @@ export function useMobileDialogPosition(layer: HTMLDivElement | null, active: bo
 
       // On narrow screens the portal defines the containing block. On wide
       // screens its display: contents leaves fixed panels in the layout viewport.
-      const shell = layer.getBoundingClientRect();
+      let shell = layer.getBoundingClientRect();
+      if (native && shell.height && layer.parentElement === document.body) {
+        // WKWebView can pan the whole document when moving between input types.
+        // Keep the fixed surface in WebView coordinates before laying out its body.
+        const shift = Math.round(shell.top);
+        if (shift) {
+          layerTop -= shift;
+          layer.style.setProperty('--tio-layer-top', `${layerTop}px`);
+          shell = layer.getBoundingClientRect();
+        }
+      }
       const layoutTop = shell.height ? shell.top : 0;
-      const layoutBottom = shell.height ? shell.bottom : document.documentElement.clientHeight;
-      const visibleTop = Math.max(layoutTop, viewport.offsetTop);
-      const visibleBottom = Math.min(layoutBottom, viewport.offsetTop + viewport.height);
+      const layoutBottom = shell.height
+        ? shell.bottom
+        : (native?.height ?? document.documentElement.clientHeight);
+      const visibleTop = Math.max(layoutTop, native ? 0 : viewport.offsetTop);
+      const visibleBottom = Math.min(
+        layoutBottom,
+        native?.visibleHeight ?? viewport.offsetTop + viewport.height,
+      );
       const top = visibleTop - layoutTop;
       const bottom = layoutBottom - visibleBottom;
       if (visibleBottom <= visibleTop || Math.max(top, bottom) <= 1) {
@@ -86,6 +112,7 @@ export function useMobileDialogPosition(layer: HTMLDivElement | null, active: bo
     };
     schedule();
     window.addEventListener('resize', schedule);
+    window.addEventListener('tio:keyboard-viewport', schedule);
     document.addEventListener('focusin', schedule);
     document.addEventListener('focusout', schedule);
     viewport.addEventListener('resize', schedule);
@@ -94,6 +121,7 @@ export function useMobileDialogPosition(layer: HTMLDivElement | null, active: bo
       cancelAnimationFrame(frame);
       clear();
       window.removeEventListener('resize', schedule);
+      window.removeEventListener('tio:keyboard-viewport', schedule);
       document.removeEventListener('focusin', schedule);
       document.removeEventListener('focusout', schedule);
       viewport.removeEventListener('resize', schedule);
