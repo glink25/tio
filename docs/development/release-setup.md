@@ -30,3 +30,5 @@ Xcode Cloud 工作流 `Tio iOS Host` 已启用宿主标签自动归档。App Sto
 `host/ios-store/v0.1.0-rc.6` 的 Build 5 和随后重建的 Build 6 仍含 Rustls，App Store Connect 将两者标为缺少出口合规证明。自 RC7 起，iOS 更新下载使用 `URLSession`，更新签名由 CryptoKit 验证。TestFlight 按当前归档的实际依赖填写加密问卷。参见 [Apple 出口合规说明](https://developer.apple.com/help/app-store-connect/reference/app-information/export-compliance-documentation-for-encryption/)。
 
 Pages 通过 Git 集成从 `web-production` 发布生产，从 `preview-*` 发布预览。初始 `web-production` 指向切换时线上正在服务的提交，发布流程见 [Cloudflare Pages 部署](deployment.md)。
+
+Windows 预览使用项目自签名的代码签名证书。GitHub 的 `windows-direct-build` 使用受限的 PFX 凭据，安装者可按 [Windows 安装说明](windows-install.md) 核对公开证书、安装包签名及指纹。

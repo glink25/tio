@@ -57,6 +57,7 @@ targets:
             CFBundleURLSchemes: [tio]
         BGTaskSchedulerPermittedIdentifiers: [com.glink25.tio.sync]
         UIBackgroundModes: [processing]
+        ITSAppUsesNonExemptEncryption: false
         LSRequiresIPhoneOS: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
