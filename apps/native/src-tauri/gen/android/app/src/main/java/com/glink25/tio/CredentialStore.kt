@@ -13,8 +13,8 @@ import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
 internal class CredentialStore(context: Context) {
-    private val storage = AtomicFile(File(context.noBackupFilesDir, "github.credential"))
-    private val alias = "tio.github.aes"
+    private val storage = AtomicFile(File(context.noBackupFilesDir, "git.credential"))
+    private val alias = "tio.git.aes"
     private fun key(create: Boolean): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         val key = store.getKey(alias, null) as? SecretKey

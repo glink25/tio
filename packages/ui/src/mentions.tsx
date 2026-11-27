@@ -25,10 +25,12 @@ export function MentionLabel({
   const t = useT();
 
   const { workspaceId, kind, id } = reference;
-  const login = reference.kind === 'github-user' ? reference.login : undefined;
+  const login = 'login' in reference ? reference.login : undefined;
   const stableReference = useMemo<MentionReference>(
     () =>
-      kind === 'github-user' ? { workspaceId, kind, id, login: login! } : { workspaceId, kind, id },
+      kind === 'github-user' || kind === 'gitee-user'
+        ? { workspaceId, kind, id, login: login! }
+        : { workspaceId, kind, id },
     [workspaceId, kind, id, login],
   );
   const [resolved, setResolved] = useState<{

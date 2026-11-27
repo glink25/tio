@@ -1,6 +1,8 @@
-import { object } from '@tio/core';
+import { object, type ConnectionAccessState } from '@tio/core';
+import { FileWorkspaceContent } from '@tio/file-storage';
 import { LocalCatalog, LocalStore, RecoveryJournal, deleteLocalWorkspace } from '@tio/local-store';
-import { MemoryRepository } from '@tio/provider-memory';
+import { MemoryProvider, MemoryRepository } from '@tio/provider-memory';
+import { StorageError } from '@tio/storage';
 import { WorkspaceRuntime } from '@tio/workspace';
 import { afterEach, expect, it, vi } from 'vitest';
 
@@ -343,5 +345,183 @@ it('initializes a manual remote replica progressively through the shared host an
   } finally {
     blocked.resolve();
     await services.dispose();
+  }
+});
+
+// Regression: a stalled folder publication used to block the durable save and space switch.
+it('reopens saved folder edits while the endpoint needs authorization and resumes only that endpoint', async () => {
+  const values = new Map<string, string>();
+  vi.stubGlobal('localStorage', {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => values.set(key, value),
+    removeItem: (key: string) => values.delete(key),
+  });
+  vi.stubGlobal('document', {
+    visibilityState: 'visible',
+    addEventListener() {},
+    removeEventListener() {},
+  });
+  const { WorkspaceServices } =
+    await import('../../../packages/app/src/services/workspace-services');
+  const { folderBinding } = await import('../../../packages/app/src/services/folder-binding');
+  const handle = { kind: 'native-folder' as const, name: 'Folder', id: 'a'.repeat(64) };
+  const otherHandle = { ...handle, id: 'b'.repeat(64) };
+  const workspaceId = crypto.randomUUID();
+  const secondId = crypto.randomUUID();
+  const workspace = object('workspace', workspaceId, {
+    id: workspaceId,
+    name: 'First',
+    manualSync: true,
+  });
+  const second = object('workspace', secondId, { id: secondId, name: 'Second', manualSync: true });
+  const initialPage = object('page', workspaceId, { id: 'p', title: 'Remote', blocks: [] });
+  const files = Object.assign(new MemoryProvider(), {
+    workspaceIds: async () => [workspaceId, secondId],
+  });
+  const otherFiles = Object.assign(new MemoryProvider(), {
+    workspaceIds: async () => [workspaceId],
+  });
+  const remote = new FileWorkspaceContent(files, workspaceId);
+  const otherRemote = new FileWorkspaceContent(otherFiles, workspaceId);
+  for (const value of [workspace, initialPage]) {
+    await remote.write(value);
+    await otherRemote.write(value);
+  }
+  await new FileWorkspaceContent(files, secondId).write(second);
+  const authorized = new Map<string, boolean>();
+  class FolderReplica extends LocalStore {
+    constructor(instance: string, _workspace: string) {
+      super(instance);
+    }
+    get storageComplete() {
+      return values.get(this.instanceId) === 'true';
+    }
+    isComplete() {
+      return this.storageComplete;
+    }
+    async setComplete() {
+      values.set(this.instanceId, 'true');
+    }
+  }
+  const createServices = () =>
+    new WorkspaceServices((connection) => {
+      const endpoint = connection.id === 'folder-' + handle.id ? files : otherFiles;
+      const access = (): ConnectionAccessState => ({
+        code: authorized.get(connection.id) === false ? 'reauthorization-required' : 'available',
+        scope: { connectionId: connection.id },
+      });
+      return folderBinding(connection, {
+        adapter: {
+          supportsSync: true,
+          getAccessState: async () => access(),
+          subscribe: () => () => {},
+          classifyError: () => access(),
+          reauthorize: async () => {
+            authorized.set(connection.id, true);
+            return 'success';
+          },
+        },
+        Replica: FolderReplica,
+        provider: endpoint,
+        remove: async (workspace, instance) => {
+          for (const { path } of await endpoint.list('workspaces/' + workspace + '/'))
+            await endpoint.delete(path);
+          await deleteLocalWorkspace(instance);
+        },
+      });
+    });
+  const services = createServices();
+  const reopened = createServices();
+  const gate = deferred();
+  const publishing = deferred();
+  const deleting = deferred();
+  const finalWrite = deferred();
+  let removal: Promise<void> | undefined;
+  let publish: Promise<void> | undefined;
+  try {
+    await services.connect('folder', handle);
+    await services.refreshRemote();
+    const sessions = await services.sessions();
+    const firstSession = sessions.find((value) => value.workspaceId === workspaceId)!;
+    const secondSession = sessions.find((value) => value.workspaceId === secondId)!;
+    const runtime = await services.open(firstSession);
+    await vi.waitFor(() => expect(services.contentReady).toBe(true));
+    runtime.patch('p', { title: 'Saved before publication' });
+    await runtime.flush();
+    files.beforeWrite = async () => {
+      publishing.resolve();
+      await gate.promise;
+      authorized.set(firstSession.connectionId, false);
+      throw new StorageError('permission', 'Permission revoked during publication');
+    };
+    publish = services.sync();
+    await publishing.promise;
+    runtime.patch('p', { title: 'Saved during stalled publication' });
+    await runtime.flush();
+    expect(runtime.state.getState().status).toBe('saved');
+    await services.open(secondSession);
+    gate.resolve();
+    await publish;
+    await services.dispose();
+
+    await reopened.initialize();
+    const offline = await reopened.open(firstSession);
+    await offline.ensure(['p']);
+    expect(offline.snapshot().find((value) => value.id === 'p')?.title).toBe(
+      'Saved during stalled publication',
+    );
+    offline.patch('p', { title: 'Saved after offline restart' });
+    await offline.flush();
+    await reopened.sync();
+    expect(reopened.access?.code).toBe('reauthorization-required');
+    expect((await remote.read('p'))?.title).toBe('Remote');
+
+    files.beforeWrite = undefined;
+    await reopened.connect('folder', otherHandle);
+    await reopened.refreshRemote();
+    const other = (await reopened.sessions()).find((value) => value.workspaceId === workspaceId)!;
+    await reopened.open(other);
+    await vi.waitFor(() => expect(reopened.contentReady).toBe(true));
+    await reopened.sync();
+    expect((await otherRemote.read('p'))?.title).toBe('Remote');
+
+    await reopened.connect('folder', handle);
+    await reopened.open(firstSession);
+    await reopened.authorize();
+    await reopened.sync();
+    expect((await remote.read('p'))?.title).toBe('Saved after offline restart');
+    expect((await otherRemote.read('p'))?.title).toBe('Remote');
+
+    const active = await reopened.open(firstSession);
+    active.patch('p', { title: 'In-flight when the workspace is deleted' });
+    await active.flush();
+    const catalog = new LocalCatalog();
+    try {
+      files.beforeWrite = async () => {
+        finalWrite.resolve();
+        await deleting.promise;
+      };
+      publish = reopened.sync();
+      await finalWrite.promise;
+      removal = reopened.deleteWorkspace(firstSession);
+      await vi.waitFor(async () =>
+        expect(await catalog.read('workspace-lifecycle/' + firstSession.id)).toBe('deleting'),
+      );
+      expect((await remote.read('p'))?.title).toBe('Saved after offline restart');
+      deleting.resolve();
+      await removal;
+    } finally {
+      await catalog.close();
+    }
+    expect(await remote.read('p')).toBeUndefined();
+    expect((await otherRemote.read('p'))?.title).toBe('Remote');
+    await expect(reopened.open(firstSession)).rejects.toMatchObject({ code: 'closed' });
+  } finally {
+    gate.resolve();
+    deleting.resolve();
+    await publish;
+    await removal;
+    await services.dispose();
+    await reopened.dispose();
   }
 });

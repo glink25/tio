@@ -106,7 +106,7 @@ export function AgentPermissionSettings() {
       <AgentConnectionSettings />
       <SettingsGroup title={t('agent.settings')}>
         <p className="py-3 text-sm text-muted">{t('agent.localDescription')}</p>
-        {!grants.length && <p className="pb-3 text-sm text-muted">{t('agent.noGrants')}</p>}
+        {!grants.length && <p className="py-3 text-sm text-muted">{t('agent.noGrants')}</p>}
         {grants.map((grant) => (
           <SettingsRow key={grant.key} title={grant.workspace} description={grant.connection}>
             <ChoiceSelect
@@ -125,9 +125,11 @@ export function AgentPermissionSettings() {
           </SettingsRow>
         ))}
         {!!grants.length && (
-          <SettingsAction danger onClick={() => act(clearGrants)}>
-            {t('agent.clearAll')}
-          </SettingsAction>
+          <div className="flex justify-end py-3">
+            <SettingsAction danger onClick={() => act(clearGrants)}>
+              {t('agent.clearAll')}
+            </SettingsAction>
+          </div>
         )}
         {error && (
           <p role="alert" className="py-2 text-sm">

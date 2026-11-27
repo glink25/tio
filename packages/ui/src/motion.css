@@ -68,7 +68,7 @@
   animation: tio-panel-in var(--tio-motion-panel-enter) var(--tio-motion-panel-ease) both !important;
 }
 :is(.tio-dialog, .tio-drawer)[data-motion='right'] {
-  --tio-motion-x: 100vw;
+  --tio-motion-x: 100%;
   --tio-motion-y: 0px;
 }
 .tio-dialog[data-motion='left'] {
@@ -179,5 +179,26 @@
   .tio-editor [data-slot='select-content'],
   .tio-editor [data-slot='tooltip-content'] {
     animation: none !important;
+  }
+}
+
+/* Settings layers share the root scrim, with the parent visible through the page transition. */
+.tio-modal-layer[data-dialog-stack] > .tio-dialog {
+  transition: visibility 0s;
+}
+.tio-modal-layer[data-dialog-stack][data-covered] > .tio-dialog {
+  visibility: hidden;
+  transition-delay: var(--tio-motion-panel-enter);
+}
+@media (min-width: 768px) {
+  .tio-modal-layer[data-dialog-stack='child'] > .tio-dialog {
+    --tio-motion-y: 0px;
+    --tio-motion-hidden-opacity: 0;
+  }
+}
+@media (max-width: 767px) {
+  .tio-modal-layer[data-dialog-stack='child'] > .tio-dialog {
+    --tio-motion-x: 100%;
+    --tio-motion-y: 0px;
   }
 }

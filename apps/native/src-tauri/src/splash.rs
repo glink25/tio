@@ -87,12 +87,20 @@ async fn mobile_call(
     command: &str,
     args: serde_json::Value,
 ) -> Result<(), String> {
+    mobile_reply(app, command, args).await.map(|_| ())
+}
+
+#[cfg(target_os = "android")]
+pub(crate) async fn mobile_reply(
+    app: &tauri::AppHandle,
+    command: &str,
+    args: serde_json::Value,
+) -> Result<serde_json::Value, String> {
     use tauri::Manager;
     app.state::<AndroidHostUi>()
         .0
         .run_mobile_plugin_async::<serde_json::Value>(command, args)
         .await
-        .map(|_| ())
         .map_err(|error| error.to_string())
 }
 

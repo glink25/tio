@@ -2,6 +2,15 @@ import Foundation
 import JavaScriptCore
 import Security
 
+private final class NoBackgroundRedirects: NSObject, URLSessionTaskDelegate {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
 enum BackgroundIO {
     private final class ResponseBox: @unchecked Sendable {
         let mutex = NSLock()
@@ -29,7 +38,7 @@ enum BackgroundIO {
             let query: [String: Any] = [
                 kSecClass as String: kSecClassGenericPassword,
                 kSecAttrService as String: service,
-                kSecAttrAccount as String: "github"
+                kSecAttrAccount as String: "git"
             ]
             if action == "read" {
                 var lookup = query
@@ -65,13 +74,17 @@ enum BackgroundIO {
             locks.insert(acquired)
             return acquired
         }
+        let network = URLSession(configuration: .ephemeral, delegate: NoBackgroundRedirects(), delegateQueue: nil)
+        defer { network.finishTasksAndInvalidate() }
         let fetch: @convention(block) (String, String) -> String = { address, options in
             let config = native("{\"action\":\"authOrigin\"}")
             let configData = config.data(using: .utf8) ?? Data()
             let configFields = (try? JSONSerialization.jsonObject(with: configData)) as? [String: Any]
             let authOrigin = (configFields?["value"] as? String ?? "").trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             guard !cancelled(), let url = URL(string: address), url.scheme == "https",
-                  (url.host == "api.github.com" || url.absoluteString == authOrigin + "/api/github/refresh"),
+                  (url.host == "api.github.com" ||
+                   (url.host == "gitee.com" && url.path.hasPrefix("/api/v5/")) ||
+                   ["/api/github/refresh", "/api/gitee/refresh"].contains(where: { url.absoluteString == authOrigin + $0 })),
                   let data = options.data(using: .utf8),
                   let fields = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 return encode(["error": "invalid"])
@@ -85,7 +98,7 @@ enum BackgroundIO {
             }
             let box = ResponseBox()
             let done = DispatchSemaphore(value: 0)
-            let task = URLSession.shared.dataTask(with: request) { bytes, response, error in
+            let task = network.dataTask(with: request) { bytes, response, error in
                 defer { done.signal() }
                 guard error == nil, let response = response as? HTTPURLResponse,
                       let bytes, bytes.count <= 32 * 1024 * 1024 else { return }

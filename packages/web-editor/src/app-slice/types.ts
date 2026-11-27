@@ -17,6 +17,19 @@ export interface AppSliceOptions {
   runtimeUrl?: string;
   namespace?: string;
 }
+export type AppSliceErrorReason =
+  | 'slice_read_only'
+  | 'database_out_of_scope'
+  | 'field_unavailable'
+  | 'version_mismatch'
+  | 'host_permission';
+
+export interface AppSliceDiagnostic {
+  method: string;
+  code: string;
+  reason?: AppSliceErrorReason;
+  fieldKey?: string;
+}
 export function memoryPermissions(): AppSlicePermissionStore {
   const values = new Map<string, AppSlicePermission>();
   const listeners = new Map<string, Set<() => void>>();
@@ -41,6 +54,8 @@ export class AppSliceError extends Error {
   constructor(
     readonly code: string,
     message = code,
+    readonly reason?: AppSliceErrorReason,
+    readonly fieldKey?: string,
   ) {
     super(message);
   }

@@ -3,7 +3,11 @@ import { isContentTarget, type ContentTarget } from './targets';
 
 export type MentionReference =
   | ContentTarget
-  | { workspaceId: string; id: string; kind: 'github-user'; login: string };
+  | { workspaceId: string; id: string; kind: PersonMentionKind; login: string };
+export type PersonMentionKind = 'github-user' | 'gitee-user';
+export const isPersonMentionKind = (kind: unknown): kind is PersonMentionKind =>
+  kind === 'github-user' || kind === 'gitee-user';
+
 export interface MentionCandidate {
   reference: MentionReference;
   title: string;
@@ -12,7 +16,7 @@ export interface MentionCandidate {
 export interface MentionPage {
   items: MentionCandidate[];
   next?: string;
-  sourceErrors?: ('github' | 'content')[];
+  sourceErrors?: ('github' | 'gitee' | 'content')[];
 }
 export interface MentionQuery {
   kind?: 'page' | 'database' | 'record';
@@ -20,10 +24,10 @@ export interface MentionQuery {
   after?: string;
   limit: number;
 }
-export function githubMentionUrl(ref: MentionReference): string | undefined {
-  return ref.kind === 'github-user'
-    ? `https://github.com/${encodeURIComponent(ref.login)}`
-    : undefined;
+export function personMentionUrl(ref: MentionReference): string | undefined {
+  if (!('login' in ref)) return undefined;
+  const host = ref.kind === 'gitee-user' ? 'gitee.com' : 'github.com';
+  return `https://${host}/${encodeURIComponent(ref.login)}`;
 }
 export function recordTitle(record: TioObject, objects: TioObject[]): string {
   const database = objects.find(
@@ -37,34 +41,29 @@ export function recordTitle(record: TioObject, objects: TioObject[]): string {
 export function isMentionReference(value: unknown): value is MentionReference {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const v = value as MentionReference;
+  const person = isPersonMentionKind(v.kind);
   return (
-    ['page', 'database', 'record', 'github-user'].includes(v.kind) &&
+    ['page', 'database', 'record', 'github-user', 'gitee-user'].includes(v.kind) &&
     typeof v.workspaceId === 'string' &&
     /^[a-zA-Z0-9_-]+$/.test(v.workspaceId) &&
     typeof v.id === 'string' &&
     /^[a-zA-Z0-9_-]+$/.test(v.id) &&
-    (v.kind !== 'github-user' ||
+    (!person ||
       (/^[0-9]+$/.test(v.id) &&
+        'login' in v &&
         typeof v.login === 'string' &&
-        /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,38})$/.test(v.login))) &&
-    (v.kind === 'github-user' || isContentTarget(v)) &&
+        (v.kind === 'gitee-user'
+          ? /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/
+          : /^[a-zA-Z0-9][a-zA-Z0-9-]{0,38}$/
+        ).test(v.login))) &&
+    (person || isContentTarget(v)) &&
     Object.keys(v).every((k) =>
-      [
-        'workspaceId',
-        'kind',
-        'id',
-        ...(v.kind === 'github-user' ? ['login'] : ['anchor']),
-      ].includes(k),
+      ['workspaceId', 'kind', 'id', ...(person ? ['login'] : ['anchor'])].includes(k),
     )
   );
 }
 export const mentionKey = (ref: MentionReference) =>
-  JSON.stringify([
-    ref.workspaceId,
-    ref.kind,
-    ref.id,
-    ref.kind === 'github-user' ? null : (ref.anchor ?? null),
-  ]);
+  JSON.stringify([ref.workspaceId, ref.kind, ref.id, 'login' in ref ? null : (ref.anchor ?? null)]);
 /** Read references from a scalar or array value; validation remains the field registry's job. */
 export function mentionReferences(value: unknown): MentionReference[] {
   return (Array.isArray(value) ? value : [value]).filter(isMentionReference);
@@ -89,7 +88,7 @@ export function blockMentions(blocks: Block[]): MentionReference[] {
   return blocks.flatMap((b) => [...contentMentions(b.content), ...blockMentions(b.children)]);
 }
 export function mentionTitle(ref: MentionReference, objects: TioObject[]): string | undefined {
-  if (ref.kind === 'github-user') return `@${ref.login}`;
+  if ('login' in ref) return `@${ref.login}`;
   const target = objects.find(
     (o) =>
       o.id === ref.id && o.workspaceId === ref.workspaceId && o.type === ref.kind && !o.deleted,

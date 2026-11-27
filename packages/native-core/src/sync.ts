@@ -1,13 +1,16 @@
+import { giteeAccessError } from '@tio/adapter-gitee';
 import { githubAccessError } from '@tio/adapter-github';
 import { HostError } from '@tio/core';
 import { FileWorkspaceContent } from '@tio/file-storage';
+import { GiteeClient, GiteeError, GiteeProvider } from '@tio/provider-gitee';
 import {
   GitHubClient,
+  GitHubError,
   GitHubProvider,
-  githubConnectionUserId,
   type GitHubEndpoint,
   type GitHubSnapshotState,
 } from '@tio/provider-github';
+import { gitConnection } from '@tio/provider-github/credentials';
 import { SyncCore, executeSyncBatch } from '@tio/sync';
 
 import { withProcessLock } from './process-lock';
@@ -24,12 +27,13 @@ export interface HeadlessSyncHost {
 }
 
 /** System hosts inject I/O and cancellation. All merge and publication semantics remain shared. */
-export async function syncGitHub(
+export async function syncGit(
   input: { connection: string; instance: string; endpoint: GitHubEndpoint },
   host: HeadlessSyncHost,
 ) {
-  const user = githubConnectionUserId(input.connection);
-  if (user === undefined) throw new HostError('invalid');
+  const account = gitConnection(input.connection);
+  if (!account) throw new HostError('invalid');
+  const { provider: kind, userId: user } = account;
   const { endpoint } = input;
   const instance = input.instance + '/' + endpoint.repositoryId + '/' + endpoint.branch;
   const store = new ReplicaRepository(instance, endpoint.workspaceId, (space, action, args) =>
@@ -45,17 +49,39 @@ export async function syncGitHub(
     ]) +
     '/';
   const client = new GitHubClient(() => host.token(user), host.transport);
-  const provider = new GitHubProvider(client, endpoint, {
+  const cache = {
     getSnapshot: () => host.read<GitHubSnapshotState>(prefix + 'snapshot'),
-    setSnapshot: (value) => host.write(prefix + 'snapshot', value),
-    async getBlob(sha) {
+    setSnapshot: (value: GitHubSnapshotState) => host.write(prefix + 'snapshot', value),
+    async getBlob(sha: string) {
       const bytes = await host.read<number[]>(prefix + 'blob/' + sha);
       return bytes ? Uint8Array.from(bytes) : undefined;
     },
-    putBlob: (sha, value) => host.write(prefix + 'blob/' + sha, Array.from(value)),
-  });
+    putBlob: (sha: string, value: Uint8Array) =>
+      host.write(prefix + 'blob/' + sha, Array.from(value)),
+  };
+  const provider =
+    kind === 'github'
+      ? new GitHubProvider(client, endpoint, cache)
+      : new GiteeProvider(
+          new GiteeClient(async () => {
+            try {
+              return await host.token(user);
+            } catch (error) {
+              if (error instanceof GitHubError) throw new GiteeError(error.status, error.retryAt);
+              throw error;
+            }
+          }, host.transport),
+          endpoint,
+          cache,
+        );
   const key =
-    user + '/' + endpoint.repositoryId + '/' + endpoint.branch + '/' + endpoint.workspaceId;
+    (kind === 'gitee' ? input.connection : user) +
+    '/' +
+    endpoint.repositoryId +
+    '/' +
+    endpoint.branch +
+    '/' +
+    endpoint.workspaceId;
   const completeKey = 'replica-complete/' + instance;
   const core = new SyncCore(
     store,
@@ -88,7 +114,9 @@ export async function syncGitHub(
           signal: host.signal,
         });
         host.signal.throwIfAborted();
-        const access = core.issues.map((issue) => githubAccessError(input.connection, issue.error));
+        const access = core.issues.map((issue) =>
+          (kind === 'gitee' ? giteeAccessError : githubAccessError)(input.connection, issue.error),
+        );
         const permission = access.some((state) =>
           ['reauthorization-required', 'forbidden', 'unrecoverable'].includes(state.code),
         );

@@ -19,9 +19,10 @@ import { validateAssetSize } from '@tio/core';
 import { errorMessage, useT } from '@tio/i18n';
 import { Button, FilePicker, useAssetPolicy } from '@tio/ui';
 import { FileUp, Image, Music, Video } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 
 import { AskAssistantButton } from './assistant-selection';
+import { EditorImagePreviewButton } from './image-preview';
 
 function mediaKind(type?: string) {
   return type === 'image' || type === 'video' || type === 'audio' ? type : 'file';
@@ -197,7 +198,10 @@ export function EditorFormattingToolbar() {
       <AskAssistantButton />
       {getFormattingToolbarItems().map((item) =>
         item.key === 'replaceFileButton' ? (
-          <EditorFileReplaceButton key="replaceFileButton" />
+          <Fragment key="replaceFileButton">
+            <EditorFileReplaceButton />
+            <EditorImagePreviewButton />
+          </Fragment>
         ) : (
           item
         ),

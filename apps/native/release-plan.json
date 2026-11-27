@@ -1,30 +1,30 @@
 {
   "format": 1,
-  "revision": 1014,
-  "hostBuild": 1014,
+  "revision": 1015,
+  "hostBuild": 1015,
   "targets": ["ios-store", "macos-direct", "windows-direct", "linux-direct", "android-play"],
   "compatibility": {
-    "storage": "unchanged",
-    "bridge": "unchanged",
-    "reason": "The iOS viewport bridge delivers transient layout geometry inside its WebView. Persisted data and native command interfaces are unchanged."
+    "storage": "breaking",
+    "bridge": "breaking",
+    "reason": "Folder workspaces now use SQLite editing replicas, and account credentials and provider mentions use revised representations. The native bridge changes folder and credential commands and adds Git authentication and assistant HTTP capabilities."
   },
   "storeNotes": {
     "ios-store": {
-      "en-US": "Fixed blank space and background content showing through when the iOS keyboard opens in settings. Added a visibility toggle for AI API keys.",
-      "zh-Hans": "修复 iOS 设置页弹出键盘后出现空白、遮住输入框和露出编辑器的问题，增加 AI API 密钥显示开关。"
+      "en-US": "Connect to Gitee repositories, edit folder workspaces offline, browse images in the editor, and manage assistant permissions per workspace.",
+      "zh-Hans": "支持连接 Gitee 仓库、离线编辑文件夹工作空间、在编辑器中浏览大图，以及按工作空间管理助手授权。"
     },
     "android-play": {
-      "en-US": "Show or hide your AI API key while editing its configuration.",
-      "zh-CN": "编辑 AI 配置时可以显示或隐藏 API 密钥。"
+      "en-US": "Connect to Gitee repositories, edit folder workspaces offline, browse images in the editor, and manage assistant permissions per workspace.",
+      "zh-CN": "支持连接 Gitee 仓库、离线编辑文件夹工作空间、在编辑器中浏览大图，以及按工作空间管理助手授权。"
     },
     "macos-direct": {
-      "en-US": "Show or hide your AI API key while editing its configuration.",
-      "zh-Hans": "编辑 AI 配置时可以显示或隐藏 API 密钥。"
+      "en-US": "Connect to Gitee repositories, edit folder workspaces offline, browse images in the editor, and manage assistant permissions per workspace.",
+      "zh-Hans": "支持连接 Gitee 仓库、离线编辑文件夹工作空间、在编辑器中浏览大图，以及按工作空间管理助手授权。"
     }
   },
   "forceHost": [],
   "apple": {
-    "intent": "existing-behavior",
-    "reason": "The changes fix keyboard positioning in existing settings screens and add a visibility control to the existing AI API key field."
+    "intent": "review-required",
+    "reason": "The app adds an optional Gitee repository connection with native OAuth, offline editing of folder workspaces, and new assistant permissions."
   }
 }

@@ -2,7 +2,6 @@ import { t } from '@tio/i18n';
 import {
   Button,
   Modal,
-  cn,
   ChoiceSelect,
   LanguageSwitcher,
   OverlayPresence,
@@ -11,21 +10,10 @@ import {
   SettingsRow,
   SettingsAction,
   SettingsLink,
-  useMobile,
-  useOverlayBack,
+  useOverlayOpen,
 } from '@tio/ui';
-import {
-  ArrowRightLeft,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  HardDrive,
-  Palette,
-  RefreshCw,
-  Sparkles,
-  type LucideIcon,
-} from 'lucide-react';
-import { useCallback, useState, type ReactNode } from 'react';
+import { ArrowRightLeft, ChevronLeft, HardDrive, Palette, RefreshCw, Sparkles } from 'lucide-react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { HostUpdateSettings } from '../components/host-update-settings';
 import { ConnectionInfo } from '../components/identity';
@@ -51,37 +39,6 @@ const categories = [
 type Category = (typeof categories)[number]['kind'];
 type SettingsPage = { kind: Category | 'root' | 'update' | 'permissions' } | AssistantSettingsPage;
 
-function SettingsNavigationRow({
-  label,
-  icon: Icon,
-  current,
-  chevron = true,
-  onClick,
-}: {
-  label: string;
-  icon: LucideIcon;
-  current?: boolean;
-  chevron?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      type="button"
-      aria-current={current ? 'page' : undefined}
-      className={cn(
-        'w-full min-w-0 justify-start gap-3 rounded-none px-1 py-3 text-left font-medium text-ink hover:bg-transparent hover:underline focus-visible:-outline-offset-2',
-        current && 'font-semibold',
-      )}
-      onClick={onClick}
-    >
-      <Icon aria-hidden size={18} className="shrink-0 text-secondary" />
-      <span className="min-w-0 flex-1 break-words">{label}</span>
-      {chevron && <ChevronRight aria-hidden size={16} className="shrink-0 text-muted" />}
-      {current && <Check aria-hidden size={16} className="shrink-0" />}
-    </Button>
-  );
-}
-
 export function SettingsDialog({
   model,
   close,
@@ -89,7 +46,10 @@ export function SettingsDialog({
   model?: WorkspaceController;
   close: () => void;
 }) {
-  const [pages, setPages] = useState<SettingsPage[]>([{ kind: 'root' }]);
+  const [pages, setPages] = useState<{ key: number; page: SettingsPage }[]>([
+    { key: 0, page: { kind: 'root' } },
+  ]);
+  const nextKey = useRef(1);
   const [discard, setDiscard] = useState<(() => void) | undefined>();
   const [advancedTarget, setAdvancedTarget] = useState<HTMLDivElement | null>(null);
   const [guards] = useState(() => new Map<number, NonNullable<SettingsExitGuard>>());
@@ -105,92 +65,33 @@ export function SettingsDialog({
     }
     return register;
   }
-  const mobile = useMobile();
-  const top = pages.length - 1;
-  const active = !mobile && pages[top].kind === 'assistant-advanced' ? top - 1 : top;
   const visibleCategories = model?.session ? categories : categories.slice(0, 1);
-  const activeCategory =
-    visibleCategories.find(({ kind }) => kind === pages[1]?.kind)?.kind ?? 'general';
-  const push = (page: SettingsPage) => setPages((pages) => [...pages, page]);
-  const back = () => setPages((pages) => (pages.length > 1 ? pages.slice(0, -1) : pages));
-  const assistantSaved = () => {
-    if (mobile) back();
-    else setPages(([root]) => [root, { kind: 'ai' }]);
+  const push = (page: SettingsPage) => {
+    const key = nextKey.current++;
+    setPages((pages) => [...pages, { key, page }]);
   };
-  const request = (apply: () => void) => {
-    const status = guards.get(active)?.();
-    if (status === 'dirty') setDiscard(() => apply);
+  const pop = () => setPages((pages) => pages.slice(0, -1));
+  const canLeave = (key: number, leave: () => void) => {
+    const status = guards.get(key)?.();
+    if (status === 'dirty') setDiscard(() => leave);
     return !status || status === 'clean';
   };
-  const openCategory = (kind: Category) => {
-    if (mobile) {
-      push({ kind });
-      return;
-    }
-    const page = pages[active];
-    if (page.kind === kind || (page.kind === 'root' && kind === 'general')) return;
-    const apply = () => setPages(([root]) => (kind === 'general' ? [root] : [root, { kind }]));
-    if (request(apply)) apply();
-  };
 
-  const renderPages = (index: number): ReactNode => {
-    const page = pages[index];
-    const activePage = index === active;
-    const root = index === 0;
-    const subpage = mobile && !root;
-    const leave = subpage ? back : close;
-    const canLeave = () => (subpage && page?.kind === 'assistant-advanced') || request(leave);
-    return (
-      <>
-        <OverlayPresence>
-          {page && (
-            <SettingsSurface
-              key={page.kind === 'root' ? 'root' : index}
-              title={pageTitle(page)}
-              mobile={mobile}
-              covered={!activePage}
-              close={leave}
-              canClose={canLeave}
-              subpage={subpage}
-              skipEnter={!mobile && !root}
-              navigation={
-                (!mobile || root) && (
-                  <nav
-                    aria-label={t('ui.settings')}
-                    className="min-w-0 divide-y divide-line md:overflow-y-auto md:border-r md:border-line md:pr-3"
-                  >
-                    {visibleCategories.map(({ kind, label, icon }) => (
-                      <SettingsNavigationRow
-                        key={kind}
-                        label={t(label)}
-                        icon={icon}
-                        current={!mobile && activeCategory === kind}
-                        chevron={mobile}
-                        onClick={() => openCategory(kind)}
-                      />
-                    ))}
-                  </nav>
-                )
-              }
-            >
-              {renderContent(page, index)}
-            </SettingsSurface>
-          )}
-        </OverlayPresence>
-        {page && renderPages(index + 1)}
-      </>
-    );
-  };
-  function renderContent(page: SettingsPage, index: number) {
+  function renderContent(page: SettingsPage, key: number) {
     let content: ReactNode;
     switch (page.kind) {
       case 'root':
-        content = !mobile && (
-          <GeneralSettings
-            openUpdates={() =>
-              setPages(([root]) => [root, { kind: 'general' }, { kind: 'update' }])
-            }
-          />
+        content = (
+          <nav aria-label={t('ui.settings')} className="space-y-1">
+            {visibleCategories.map(({ kind, label, icon: Icon }) => (
+              <SettingsLink
+                key={kind}
+                label={t(label)}
+                icon={<Icon size={18} aria-hidden />}
+                open={() => push({ kind })}
+              />
+            ))}
+          </nav>
         );
         break;
       case 'general':
@@ -230,23 +131,16 @@ export function SettingsDialog({
             key={page.id ?? 'new'}
             model={model}
             configId={page.id}
-            advanced={pages[index + 1]?.kind === 'assistant-advanced'}
-            advancedTarget={mobile ? advancedTarget : null}
-            openAdvanced={
-              mobile ? () => push({ kind: 'assistant-advanced', id: page.id }) : undefined
-            }
-            registerGuard={registerFor(index)}
-            saved={assistantSaved}
+            advancedTarget={advancedTarget}
+            openAdvanced={() => push({ kind: 'assistant-advanced', id: page.id })}
+            registerGuard={registerFor(key)}
+            saved={pop}
           />
         );
         break;
       case 'assistant-prompt':
         content = model && (
-          <AssistantPromptForm
-            model={model}
-            registerGuard={registerFor(index)}
-            saved={assistantSaved}
-          />
+          <AssistantPromptForm model={model} registerGuard={registerFor(key)} saved={pop} />
         );
         break;
       case 'storage':
@@ -259,23 +153,34 @@ export function SettingsDialog({
     return content;
   }
 
+  // Each depth retains its closing surface for the exit animation.
+  const renderLayer = (depth: number): ReactNode => {
+    const frame = pages[depth];
+    const leave = depth === 0 ? close : () => setPages((pages) => pages.slice(0, depth));
+    return (
+      <>
+        <OverlayPresence>
+          {frame && (
+            <SettingsLayer
+              key={frame.key}
+              title={pageTitle(frame.page)}
+              root={depth === 0}
+              covered={depth < pages.length - 1}
+              close={leave}
+              canClose={() => canLeave(frame.key, leave)}
+            >
+              {renderContent(frame.page, frame.key)}
+            </SettingsLayer>
+          )}
+        </OverlayPresence>
+        {frame && renderLayer(depth + 1)}
+      </>
+    );
+  };
+
   return (
     <>
-      <SettingsHistory back={close} canClose={() => request(close)} />
-      {renderPages(0)}
-      {mobile &&
-        pages
-          .slice(1)
-          .map((frame, index) => (
-            <SettingsHistory
-              key={index}
-              back={() => setPages((pages) => pages.slice(0, index + 1))}
-              canClose={() =>
-                frame.kind === 'assistant-advanced' ||
-                request(() => setPages((pages) => pages.slice(0, index + 1)))
-              }
-            />
-          ))}
+      {renderLayer(0)}
       <OverlayPresence>
         {discard && (
           <Modal
@@ -303,49 +208,40 @@ export function SettingsDialog({
   );
 }
 
-function SettingsSurface({
+function SettingsLayer({
   title,
-  mobile,
+  root,
   covered,
   close,
   canClose,
-  subpage,
-  skipEnter,
-  navigation,
   children,
 }: {
   title: string;
-  mobile: boolean;
+  root: boolean;
   covered: boolean;
   close: () => void;
   canClose: () => boolean;
-  subpage: boolean;
-  skipEnter: boolean;
-  navigation: ReactNode;
   children: ReactNode;
 }) {
-  const heading = useCallback(
-    (element: HTMLHeadingElement | null) => {
-      if (!covered) element?.focus({ preventScroll: true });
-    },
-    [covered],
-  );
+  const open = useOverlayOpen();
+  const heading = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    if (open && !covered) heading.current?.focus({ preventScroll: true });
+  }, [open, covered]);
   return (
     <Modal
       layout="page"
-      className="max-md:border-0"
+      className="tio-settings max-md:border-0"
+      stack={root ? 'root' : 'child'}
       covered={covered}
-      hidden={covered && !mobile}
-      skipEnter={skipEnter}
-      trackHistory={false}
       title={title}
       titleRef={heading}
       dismissOnOutside={false}
-      hideClose={subpage}
+      hideClose={!root}
       close={close}
       canClose={canClose}
       leading={
-        subpage && (
+        !root && (
           <IconButton
             label={t('ui.back')}
             onClick={() => {
@@ -357,26 +253,9 @@ function SettingsSurface({
         )
       }
     >
-      <div
-        className={cn(
-          'pt-4',
-          !mobile && 'grid h-full min-h-0 grid-cols-[190px_minmax(0,1fr)] gap-5 pt-5',
-        )}
-      >
-        {navigation}
-        {(!mobile || subpage) && (
-          <section className={cn('min-w-0 px-1 pb-1', !mobile && 'min-h-0 overflow-y-auto')}>
-            {children}
-          </section>
-        )}
-      </div>
+      <div className="min-w-0 space-y-5 py-4">{children}</div>
     </Modal>
   );
-}
-
-function SettingsHistory({ back, canClose }: { back: () => void; canClose: () => boolean }) {
-  useOverlayBack(back, true, canClose);
-  return null;
 }
 
 function pageTitle(page: SettingsPage) {
@@ -433,10 +312,10 @@ function GeneralSettings({ openUpdates }: { openUpdates: () => void }) {
         </SettingsRow>
       </SettingsGroup>
       {platform().update && (
-        <SettingsNavigationRow
+        <SettingsLink
           label={t('settings.update')}
-          icon={RefreshCw}
-          onClick={openUpdates}
+          icon={<RefreshCw size={18} aria-hidden />}
+          open={openUpdates}
         />
       )}
     </div>

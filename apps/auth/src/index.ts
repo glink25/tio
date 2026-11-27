@@ -12,10 +12,14 @@ export interface Env {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET: string;
   GITHUB_APP_SLUG: string;
+  GITEE_CLIENT_ID?: string;
+  GITEE_CLIENT_SECRET?: string;
   STATE_SECRET: string;
   REDIRECT_URI_ALLOWLIST: string;
   FRONTEND_ORIGIN: string;
 }
+
+type Provider = OAuthState['provider'];
 
 class TokenExchangeError extends Error {}
 
@@ -85,13 +89,18 @@ function jsonResponse(
   return new Response(JSON.stringify(body), { status, headers });
 }
 
-export function isAllowedRedirect(value: string, allowlist: string): boolean {
+export function isAllowedRedirect(
+  value: string,
+  allowlist: string,
+  provider: Provider = 'github',
+): boolean {
   let candidate: URL;
   try {
     candidate = new URL(value);
   } catch {
     return false;
   }
+  if (candidate.protocol === 'tio:' && candidate.href !== `tio://auth/${provider}`) return false;
   return allowlist
     .split(',')
     .map((entry) => entry.trim())
@@ -106,21 +115,43 @@ export function isAllowedRedirect(value: string, allowlist: string): boolean {
     });
 }
 
-async function exchangeToken(params: URLSearchParams, env: Env): Promise<GitHubTokenPayload> {
-  params.set('client_id', env.GITHUB_CLIENT_ID);
-  params.set('client_secret', env.GITHUB_CLIENT_SECRET);
-  const response = await fetch('https://github.com/login/oauth/access_token', {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded',
+async function exchangeToken(
+  params: URLSearchParams,
+  env: Env,
+  provider: Provider,
+): Promise<GitHubTokenPayload> {
+  const gitee = provider === 'gitee';
+  const id = gitee ? env.GITEE_CLIENT_ID : env.GITHUB_CLIENT_ID;
+  const secret = gitee ? env.GITEE_CLIENT_SECRET : env.GITHUB_CLIENT_SECRET;
+  if (!id || !secret) throw new Error('OAuth is not configured');
+  params.set('client_id', id);
+  params.set('client_secret', secret);
+  const response = await fetch(
+    gitee ? 'https://gitee.com/oauth/token' : 'https://github.com/login/oauth/access_token',
+    {
+      redirect: 'manual',
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': 'Tio Auth Worker (https://tio.linkai.work/)',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: params,
     },
-    body: params,
-  });
-  if (!response.ok) throw new Error(`GitHub token exchange failed with HTTP ${response.status}`);
-  const payload = (await response.json()) as GitHubTokenPayload;
-  if (!payload.access_token || payload.error) {
-    throw new TokenExchangeError(payload.error ?? 'invalid_token');
+  );
+  const payload = (await response.json().catch(() => null)) as GitHubTokenPayload | null;
+  if (
+    gitee &&
+    [400, 401].includes(response.status) &&
+    ['invalid_grant', 'invalid_grant_validate_token'].includes(payload?.error ?? '')
+  )
+    throw new TokenExchangeError('invalid_grant');
+  if (!response.ok) {
+    console.warn('OAuth upstream HTTP failure', { provider, status: response.status });
+    throw new Error('OAuth token exchange failed');
+  }
+  if (!payload?.access_token || payload.error) {
+    throw new TokenExchangeError(payload?.error ?? 'invalid_token');
   }
   return payload;
 }
@@ -160,6 +191,7 @@ async function redirectWithAuthorizationCode(
 ): Promise<Response> {
   const code = await encryptAuthorizationGrant(
     {
+      provider: state.provider,
       state: state.client_state,
       challenge: state.client_challenge,
       token: payload,
@@ -171,6 +203,7 @@ async function redirectWithAuthorizationCode(
   const location = new URL(redirectUri);
   location.searchParams.set('code', code);
   location.searchParams.set('state', state.client_state);
+  if (state.provider === 'gitee') location.searchParams.set('provider', 'gitee');
   return new Response(null, {
     status: 302,
     headers: {
@@ -181,12 +214,12 @@ async function redirectWithAuthorizationCode(
   });
 }
 
-async function login(request: Request, env: Env): Promise<Response> {
+async function login(request: Request, env: Env, provider: Provider): Promise<Response> {
   const requestUrl = new URL(request.url);
   const redirectUri = requestUrl.searchParams.get('redirect_uri');
   const clientState = requestUrl.searchParams.get('state');
   const clientChallenge = requestUrl.searchParams.get('code_challenge');
-  if (!redirectUri || !isAllowedRedirect(redirectUri, env.REDIRECT_URI_ALLOWLIST)) {
+  if (!redirectUri || !isAllowedRedirect(redirectUri, env.REDIRECT_URI_ALLOWLIST, provider)) {
     return new Response('Invalid redirect_uri', { status: 400 });
   }
   if (
@@ -197,12 +230,15 @@ async function login(request: Request, env: Env): Promise<Response> {
   ) {
     return new Response('Invalid state or code_challenge', { status: 400 });
   }
-  if (!env.GITHUB_APP_SLUG) {
-    return new Response('GITHUB_APP_SLUG is not configured', { status: 500 });
+  const gitee = provider === 'gitee';
+  const clientId = gitee ? env.GITEE_CLIENT_ID : env.GITHUB_CLIENT_ID;
+  if (!clientId || (gitee ? !env.GITEE_CLIENT_SECRET : !env.GITHUB_APP_SLUG)) {
+    return new Response('OAuth is not configured', { status: 503 });
   }
-  const githubVerifier = randomVerifier();
+  const githubVerifier = gitee ? undefined : randomVerifier();
   const state = await encryptState(
     {
+      provider,
       redirect_uri: redirectUri,
       client_state: clientState,
       client_challenge: clientChallenge,
@@ -211,13 +247,20 @@ async function login(request: Request, env: Env): Promise<Response> {
     },
     env.STATE_SECRET,
   );
-  const callbackUrl = `${requestUrl.origin}/api/github/callback`;
-  const githubUrl = new URL('https://github.com/login/oauth/authorize');
-  githubUrl.searchParams.set('client_id', env.GITHUB_CLIENT_ID);
+  const callbackUrl = `${requestUrl.origin}/api/${provider}/callback`;
+  const githubUrl = new URL(
+    gitee ? 'https://gitee.com/oauth/authorize' : 'https://github.com/login/oauth/authorize',
+  );
+  githubUrl.searchParams.set('client_id', clientId);
   githubUrl.searchParams.set('redirect_uri', callbackUrl);
   githubUrl.searchParams.set('state', state);
-  githubUrl.searchParams.set('code_challenge', await pkceChallenge(githubVerifier));
-  githubUrl.searchParams.set('code_challenge_method', 'S256');
+  if (githubVerifier) {
+    githubUrl.searchParams.set('code_challenge', await pkceChallenge(githubVerifier));
+    githubUrl.searchParams.set('code_challenge_method', 'S256');
+  } else {
+    githubUrl.searchParams.set('response_type', 'code');
+    githubUrl.searchParams.set('scope', 'user_info projects');
+  }
   return new Response(null, {
     status: 302,
     headers: {
@@ -233,19 +276,30 @@ async function handleOAuthCodeCallback(
   code: string,
   encryptedState: string,
   env: Env,
+  provider: Provider,
 ): Promise<Response> {
   const state = await decryptState(encryptedState, env.STATE_SECRET);
-  if (!isAllowedRedirect(state.redirect_uri, env.REDIRECT_URI_ALLOWLIST)) {
+  if (
+    state.provider !== provider ||
+    !isAllowedRedirect(state.redirect_uri, env.REDIRECT_URI_ALLOWLIST, provider)
+  ) {
     return new Response('Invalid redirect_uri', { status: 400 });
   }
 
-  const params = new URLSearchParams({ code, code_verifier: state.github_verifier });
-  params.set('redirect_uri', `${requestUrl.origin}/api/github/callback`);
-  const payload = await exchangeToken(params, env);
+  const params = new URLSearchParams({
+    code,
+    redirect_uri: `${requestUrl.origin}/api/${provider}/callback`,
+  });
+  if (provider === 'gitee') params.set('grant_type', 'authorization_code');
+  else params.set('code_verifier', state.github_verifier!);
+  const payload = await exchangeToken(params, env, provider);
+  if (provider === 'gitee')
+    return redirectWithAuthorizationCode(state, toPendingToken(payload), env);
 
   if (!(await hasAppInstallation(payload.access_token!, env))) {
     const installState = await encryptState(
       {
+        provider,
         redirect_uri: state.redirect_uri,
         client_state: state.client_state,
         client_challenge: state.client_challenge,
@@ -272,7 +326,10 @@ async function handleOAuthCodeCallback(
 
 async function handleSetupCallback(encryptedState: string, env: Env): Promise<Response> {
   const state = await decryptState(encryptedState, env.STATE_SECRET);
-  if (!isAllowedRedirect(state.redirect_uri, env.REDIRECT_URI_ALLOWLIST)) {
+  if (
+    state.provider !== 'github' ||
+    !isAllowedRedirect(state.redirect_uri, env.REDIRECT_URI_ALLOWLIST)
+  ) {
     return new Response('Invalid redirect_uri', { status: 400 });
   }
   if (!state.pending_token?.access_token) {
@@ -284,14 +341,14 @@ async function handleSetupCallback(encryptedState: string, env: Env): Promise<Re
   return redirectWithAuthorizationCode(state, state.pending_token, env);
 }
 
-async function callback(request: Request, env: Env): Promise<Response> {
+async function callback(request: Request, env: Env, provider: Provider): Promise<Response> {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const encryptedState = url.searchParams.get('state');
   const installationId = url.searchParams.get('installation_id');
   const setupAction = url.searchParams.get('setup_action');
 
-  if (!env.GITHUB_APP_SLUG) {
+  if (provider === 'github' && !env.GITHUB_APP_SLUG) {
     return new Response('GITHUB_APP_SLUG is not configured', { status: 500 });
   }
   if (!encryptedState) {
@@ -300,19 +357,50 @@ async function callback(request: Request, env: Env): Promise<Response> {
 
   try {
     // App Setup URL return: installation_id + setup_action + state (no OAuth code).
-    if (!code && installationId && setupAction) {
+    if (provider === 'github' && !code && installationId && setupAction) {
       return await handleSetupCallback(encryptedState, env);
+    }
+    if (!code && url.searchParams.has('error')) {
+      const state = await decryptState(encryptedState, env.STATE_SECRET);
+      if (
+        state.provider === provider &&
+        state.redirect_uri === `tio://auth/${provider}` &&
+        isAllowedRedirect(state.redirect_uri, env.REDIRECT_URI_ALLOWLIST, provider)
+      ) {
+        const location = new URL(state.redirect_uri);
+        location.searchParams.set('state', state.client_state);
+        location.searchParams.set(
+          'error',
+          url.searchParams.get('error') === 'access_denied' ? 'access_denied' : 'oauth_failed',
+        );
+        if (provider === 'gitee') location.searchParams.set('provider', provider);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            Location: location.href,
+            'Cache-Control': 'no-store',
+            'Referrer-Policy': 'no-referrer',
+          },
+        });
+      }
     }
     if (!code) {
       return new Response('Missing code or state', { status: 400 });
     }
-    return await handleOAuthCodeCallback(url, code, encryptedState, env);
+    return await handleOAuthCodeCallback(url, code, encryptedState, env, provider);
   } catch {
-    return new Response('GitHub OAuth callback failed', { status: 400 });
+    return new Response('OAuth callback failed', {
+      status: 400,
+      headers: { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' },
+    });
   }
 }
 
-async function exchangeAuthorizationCode(request: Request, env: Env): Promise<Response> {
+async function exchangeAuthorizationCode(
+  request: Request,
+  env: Env,
+  provider: Provider,
+): Promise<Response> {
   let body: { code?: string; state?: string; code_verifier?: string };
   try {
     body = (await request.json()) as { code?: string; state?: string; code_verifier?: string };
@@ -330,7 +418,11 @@ async function exchangeAuthorizationCode(request: Request, env: Env): Promise<Re
 
   try {
     const grant = await decryptAuthorizationGrant(code, env.STATE_SECRET);
-    if (grant.state !== state || (await pkceChallenge(verifier)) !== grant.challenge) {
+    if (
+      grant.provider !== provider ||
+      grant.state !== state ||
+      (await pkceChallenge(verifier)) !== grant.challenge
+    ) {
       return jsonResponse(request, env, { error: 'invalid_exchange' }, 400, {
         'Cache-Control': 'no-store',
       });
@@ -343,7 +435,7 @@ async function exchangeAuthorizationCode(request: Request, env: Env): Promise<Re
   }
 }
 
-async function refresh(request: Request, env: Env): Promise<Response> {
+async function refresh(request: Request, env: Env, provider: Provider): Promise<Response> {
   let body: { refreshToken?: string };
   try {
     body = (await request.json()) as { refreshToken?: string };
@@ -362,8 +454,11 @@ async function refresh(request: Request, env: Env): Promise<Response> {
         refresh_token: refreshToken,
       }),
       env,
+      provider,
     );
-    return jsonResponse(request, env, payload, 200, { 'Cache-Control': 'no-store' });
+    return jsonResponse(request, env, toPendingToken(payload), 200, {
+      'Cache-Control': 'no-store',
+    });
   } catch (error) {
     return jsonResponse(
       request,
@@ -381,22 +476,23 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
   const url = new URL(request.url);
   if (request.method === 'OPTIONS') return preflightResponse(request, env.FRONTEND_ORIGIN);
 
-  if (
-    request.method === 'POST' &&
-    !isAllowedOrigin(request.headers.get('Origin'), env.FRONTEND_ORIGIN)
-  )
+  const origin = request.headers.get('Origin');
+  const nativeRefresh =
+    origin === null &&
+    /^\/api\/(github|gitee)\/refresh$/.test(url.pathname) &&
+    request.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase() === 'application/json';
+  if (request.method === 'POST' && !nativeRefresh && !isAllowedOrigin(origin, env.FRONTEND_ORIGIN))
     return new Response('Origin is not allowed', { status: 403 });
-  if (url.pathname === '/api/github/login' && request.method === 'GET') {
-    return login(request, env);
-  }
-  if (url.pathname === '/api/github/callback' && request.method === 'GET') {
-    return callback(request, env);
-  }
-  if (url.pathname === '/api/github/exchange' && request.method === 'POST') {
-    return exchangeAuthorizationCode(request, env);
-  }
-  if (url.pathname === '/api/github/refresh' && request.method === 'POST') {
-    return refresh(request, env);
+  for (const provider of ['github', 'gitee'] as const) {
+    const prefix = `/api/${provider}/`;
+    if (url.pathname === prefix + 'login' && request.method === 'GET')
+      return login(request, env, provider);
+    if (url.pathname === prefix + 'callback' && request.method === 'GET')
+      return callback(request, env, provider);
+    if (url.pathname === prefix + 'exchange' && request.method === 'POST')
+      return exchangeAuthorizationCode(request, env, provider);
+    if (url.pathname === prefix + 'refresh' && request.method === 'POST')
+      return refresh(request, env, provider);
   }
   return new Response('Not found', { status: 404 });
 }

@@ -5,7 +5,7 @@ packages:
 minimumReleaseAge: 10080
 # Exact-version exceptions to the release-age window.
 minimumReleaseAgeExclude:
-  - '@glink25/chaty@0.3.0'
+  - '@glink25/chaty@0.4.0'
   - es-toolkit@1.53.0
   - pdfmake@0.3.13
   - unist-util-visit-parents@6.1.0

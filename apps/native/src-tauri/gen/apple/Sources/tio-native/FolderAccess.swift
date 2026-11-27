@@ -69,10 +69,13 @@ enum FolderAccess {
         }
         guard let id = request["grant"] as? String, id.count == 64,
               id.allSatisfy({ $0.isHexDigit }) else { throw FolderBridgeError.invalid }
-        if let action, ["lock","unlock","stateRead","stateEntries","stateWrite","stateDelete"].contains(action) {
-            return try FolderJournal.call(action, request, grant: id)
+        let bookmark: Data
+        do {
+            bookmark = try Data(contentsOf: privateDirectory.appendingPathComponent(id))
+        } catch let error as CocoaError where [.fileReadNoSuchFile, .fileNoSuchFile].contains(error.code) {
+            throw FolderAccessError.permission
         }
-        let grant = AuthorizedFolder(bookmark: try Data(contentsOf: privateDirectory.appendingPathComponent(id)))
+        let grant = AuthorizedFolder(bookmark: bookmark)
         if action == "access" { try grant.checkAccess(); return true }
         if action == "workspaces" { return try grant.workspaceIDs() }
         guard let path = request["path"] as? String, path.hasPrefix("workspaces/") else { throw FolderBridgeError.invalid }

@@ -23,12 +23,12 @@ import {
 } from '@tio/operations/mutations';
 import type { EditorSession } from '@tio/workspace';
 
-import { AppSliceError, type AppSlicePermission } from './types';
+import { AppSliceError, type AppSliceErrorReason, type AppSlicePermission } from './types';
 
 export { flatten };
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-const fail = (code: string): never => {
-  throw new AppSliceError(code);
+const fail = (code: string, reason?: AppSliceErrorReason, fieldKey?: string): never => {
+  throw new AppSliceError(code, code, reason, fieldKey);
 };
 const only = (input: Record<string, unknown>, keys: string[]) => {
   if (
@@ -54,7 +54,7 @@ export interface BrokerOptions {
 export class AppSliceBroker {
   private closed = false;
   private receipts = new Map<string, { input: string; result: Promise<unknown> }>();
-  private tokens = new Map<string, { value: string; id: string }>();
+  private tokens = new Map<string, { value: string | number; id: string }>();
   private tail: Promise<unknown> = Promise.resolve();
   private listeners = new Set<(event: unknown) => void>();
   private stop: () => void;
@@ -169,15 +169,20 @@ export class AppSliceBroker {
     for (const ref of refs) if (!allowed.has(mentionKey(ref))) fail('PERMISSION_DENIED');
   }
   private db(id: string) {
-    return this.databases().find((o) => o.id === id) ?? fail('PERMISSION_DENIED');
+    if (!this.databaseIds().has(id)) fail('PERMISSION_DENIED', 'database_out_of_scope');
+    return (
+      this.objects().find(
+        (o) => o.id === id && o.type === 'database' && this.options.runtime.can(o, 'read'),
+      ) ?? fail('PERMISSION_DENIED', 'host_permission')
+    );
   }
   private readable(o: TioObject) {
     const projected = readableObject(this.options.runtime.access, o);
-    if (!projected) return fail('PERMISSION_DENIED');
+    if (!projected) return fail('PERMISSION_DENIED', 'host_permission');
     return projected;
   }
-  private version(o: TioObject) {
-    const value = JSON.stringify(o);
+  private version(o: TioObject, revision?: number) {
+    const value = revision ?? JSON.stringify(o);
     for (const [token, saved] of this.tokens)
       if (saved.id === o.id && saved.value === value) return token;
     const token = crypto.randomUUID();
@@ -185,9 +190,9 @@ export class AppSliceBroker {
     if (this.tokens.size > 10_000) this.tokens.delete(this.tokens.keys().next().value!);
     return token;
   }
-  private output(o: TioObject) {
+  private output(o: TioObject, revision?: number) {
     const p = this.readable(o);
-    const version = this.version(o);
+    const version = this.version(o, revision);
     if (o.type === 'record') {
       const db = this.readable(this.db(o.databaseId!));
       const allowed = new Set(
@@ -252,17 +257,33 @@ export class AppSliceBroker {
   }
   private writable() {
     this.page();
-    if (this.options.readOnly() || this.options.permission().data !== 'readWrite')
-      fail('PERMISSION_DENIED');
+    if (this.options.readOnly()) fail('PERMISSION_DENIED', 'host_permission');
+    if (this.options.permission().data !== 'readWrite')
+      fail('PERMISSION_DENIED', 'slice_read_only');
   }
   private checkVersion(o: TioObject, version: unknown) {
     const saved = this.tokens.get(String(version));
-    if (!saved || saved.id !== o.id || saved.value !== JSON.stringify(o)) fail('CONFLICT');
+    if (!saved || saved.id !== o.id || saved.value !== JSON.stringify(o))
+      fail('CONFLICT', 'version_mismatch');
+  }
+  private confirmedRecord(databaseId: string, id: string) {
+    const { runtime } = this.options;
+    const entry = runtime.confirmedEntry(id);
+    if (
+      !entry ||
+      entry.object.deleted ||
+      entry.object.type !== 'record' ||
+      entry.object.databaseId !== databaseId ||
+      !runtime.can(entry.object, 'read')
+    )
+      return fail('RESOURCE_REMOVED');
+    return entry;
   }
   private async commit(
     expected: TioObject[],
     changes: TioObject[],
     assets: ReadonlyMap<string, AssetData> = new Map(),
+    recordVersion?: { id: string; revision: number },
   ) {
     this.writable();
     const page = this.page();
@@ -273,6 +294,11 @@ export class AppSliceBroker {
     const existing = new Set(this.objects().map((o) => o.id));
     const recheck = () => {
       this.writable();
+      if (
+        recordVersion &&
+        this.options.runtime.confirmedEntry(recordVersion.id)?.revision !== recordVersion.revision
+      )
+        fail('CONFLICT', 'version_mismatch');
       for (const next of changes) {
         const old = expected.find((o) => o.id === next.id);
         if (next.type === 'page' && next.id !== this.options.pageId) this.targetPage(next.id);
@@ -329,6 +355,11 @@ export class AppSliceBroker {
             ? 'PERMISSION_DENIED'
             : 'INVALID_INPUT',
         String(error),
+        code === 'conflict'
+          ? 'version_mismatch'
+          : code === 'permission'
+            ? 'host_permission'
+            : undefined,
       );
     } finally {
       this.origin = undefined;
@@ -769,24 +800,34 @@ export class AppSliceBroker {
       await this.commit([page], [db, view, next]);
       return this.output(db);
     }
-    if (!this.databaseIds().has(p.databaseId)) fail('PERMISSION_DENIED'); // Scope before fetch.
+    if (!this.databaseIds().has(p.databaseId)) fail('PERMISSION_DENIED', 'database_out_of_scope');
     await this.options.runtime.loadDatabase(p.databaseId);
-    if (typeof p.id === 'string' && method.startsWith('records.'))
-      await this.options.runtime.ensure([p.id]);
+    if (typeof p.id === 'string' && method.startsWith('records.')) {
+      const runtime = this.options.runtime;
+      const token = this.tokens.get(String(p.version));
+      const cached = runtime.confirmedEntry(p.id);
+      // A repository query can observe a newer revision than the loaded body.
+      const refresh =
+        method === 'records.get' ||
+        (token?.id === p.id &&
+          typeof token.value === 'number' &&
+          cached !== undefined &&
+          cached.revision < token.value);
+      await runtime.ensure([p.id], refresh);
+    }
     const db = this.db(p.databaseId); // Recheck grants and references after the asynchronous read.
     const readableDb = this.readable(db);
     if (method === 'databases.get') return this.output(db);
-    const records = this.objects().filter(
-      (o) => o.type === 'record' && o.databaseId === db.id && this.options.runtime.can(o, 'read'),
-    );
     const views = this.objects().filter(
       (o) =>
         o.type === 'databaseView' && o.databaseId === db.id && this.options.runtime.can(o, 'read'),
     );
     if (method === 'fields.list') return { fields: readableDb.fields, version: this.version(db) };
     if (method === 'views.list') return views.map((v) => this.output(v));
-    if (method === 'records.get')
-      return this.output(records.find((r) => r.id === p.id) ?? fail('RESOURCE_REMOVED'));
+    if (method === 'records.get') {
+      const entry = this.confirmedRecord(db.id, p.id);
+      return this.output(entry.object, entry.revision);
+    }
     if (method === 'records.query') {
       const view = p.viewId
         ? (views.find((v) => v.id === p.viewId) ?? fail('RESOURCE_REMOVED'))
@@ -807,23 +848,35 @@ export class AppSliceBroker {
       });
       this.db(db.id);
       return {
-        records: page.entries.map((e) => this.output(e.projection)),
+        records: page.entries.map((e) => this.output(e.projection, e.revision)),
         nextCursor: page.next ?? null,
       };
     }
     this.writable();
     if (method.startsWith('records.')) {
-      const old =
-        method === 'records.create'
-          ? undefined
-          : (records.find((r) => r.id === p.id) ?? fail('RESOURCE_REMOVED'));
-      if (old) this.checkVersion(old, p.version);
       if (!['records.create', 'records.update', 'records.delete'].includes(method))
         fail('INVALID_INPUT');
+      const entry = method === 'records.create' ? undefined : this.confirmedRecord(db.id, p.id);
+      const old = entry?.object;
+      if (entry) {
+        const token = this.tokens.get(String(p.version));
+        if (
+          token?.id !== entry.object.id ||
+          token.value !== entry.revision ||
+          this.options.runtime.hasPendingChanges([entry.object.id])
+        )
+          fail('CONFLICT', 'version_mismatch');
+      }
       const values = p.properties ?? {};
       if (typeof values !== 'object' || Array.isArray(values)) fail('INVALID_INPUT');
       for (const [key, value] of Object.entries(values)) {
-        const field = readableDb.fields?.find((f) => f.id === key) ?? fail('PERMISSION_DENIED');
+        const field =
+          readableDb.fields?.find((f) => f.id === key) ??
+          fail(
+            'PERMISSION_DENIED',
+            'field_unavailable',
+            /^[A-Za-z0-9_-]{1,120}$/.test(key) ? key : undefined,
+          );
         if (['formula', 'rollup', 'createdTime', 'lastEditedTime'].includes(field.type))
           fail('INVALID_INPUT');
         validateValue(field, value);
@@ -838,10 +891,15 @@ export class AppSliceBroker {
         }
       }
       const next = changeRecord(db.workspaceId, db.id, values, old, method === 'records.delete');
-      await this.commit([db, ...(old ? [old] : [])], [next]);
-      return method === 'records.delete'
-        ? null
-        : this.output(this.objects().find((o) => o.id === next.id) ?? next);
+      await this.commit(
+        [db, ...(old ? [old] : [])],
+        [next],
+        undefined,
+        entry && { id: entry.object.id, revision: entry.revision },
+      );
+      if (method === 'records.delete') return null;
+      const committed = this.confirmedRecord(db.id, next.id);
+      return this.output(committed.object, committed.revision);
     }
     if (method.startsWith('fields.')) {
       this.checkVersion(db, p.version);

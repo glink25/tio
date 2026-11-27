@@ -300,7 +300,7 @@ export class BridgeRepository implements WorkspaceRepository {
         (item: any) =>
           !item ||
           !isMentionReference(item.reference) ||
-          item.reference.kind === 'github-user' ||
+          'login' in item.reference ||
           item.reference.workspaceId !== this.context.workspaceId ||
           typeof item.title !== 'string' ||
           (item.description !== undefined && typeof item.description !== 'string'),

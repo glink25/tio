@@ -41,5 +41,10 @@ pub fn process_lock(
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => return Ok(Value::Null),
         Err(_) => return Err("unavailable"),
     }
-    Ok(json!(locks.0.hold(webview.label(), generation, file)?))
+    Ok(json!(locks.0.hold(
+        webview.label(),
+        generation,
+        name,
+        file
+    )?))
 }

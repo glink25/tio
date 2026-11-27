@@ -17,7 +17,7 @@ enum ShortcutKernel {
                                                   appropriateFor: nil, create: false)
             .appendingPathComponent(identifier).appendingPathComponent("catalog.sqlite3")
         let result = try await Task.detached { try execute(arguments, bundle: bundle, database: database) }.value
-        if arguments["connection"]?.hasPrefix("github-") == true && arguments["action"] != "read" {
+        if ["github-", "gitee-"].contains(where: { arguments["connection"]?.hasPrefix($0) == true }) && arguments["action"] != "read" {
             BackgroundSync.schedule()
         }
         return result

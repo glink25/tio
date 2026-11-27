@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fs::File, sync::Mutex};
+use std::{
+    collections::HashMap,
+    fs::File,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Default)]
 pub struct WindowLocks(Mutex<LockState>);
@@ -6,7 +10,13 @@ pub struct WindowLocks(Mutex<LockState>);
 #[derive(Default)]
 struct LockState {
     generations: HashMap<String, u64>,
-    held: HashMap<String, (String, File)>,
+    held: HashMap<String, HeldLock>,
+}
+
+struct HeldLock {
+    owner: String,
+    name: String,
+    file: Arc<File>,
 }
 
 impl WindowLocks {
@@ -31,18 +41,31 @@ impl WindowLocks {
         let generation = state.generations.entry(label.into()).or_default();
         let owner = format!("{label}:{generation}");
         *generation += 1;
-        state.held.retain(|_, (current, _)| current != &owner);
+        state.held.retain(|_, lock| lock.owner != owner);
         Some(owner)
     }
 
-    pub fn hold(&self, label: &str, owner: String, file: File) -> Result<String, &'static str> {
+    pub fn hold(
+        &self,
+        label: &str,
+        owner: String,
+        name: String,
+        file: File,
+    ) -> Result<String, &'static str> {
         let mut state = self.0.lock().map_err(|_| "unavailable")?;
         let generation = state.generations.get(label).copied().unwrap_or(0);
         if owner != format!("{label}:{generation}") {
             return Err("closed");
         }
         let token = uuid::Uuid::new_v4().to_string();
-        state.held.insert(token.clone(), (owner, file));
+        state.held.insert(
+            token.clone(),
+            HeldLock {
+                owner,
+                name,
+                file: Arc::new(file),
+            },
+        );
         Ok(token)
     }
 
@@ -51,11 +74,22 @@ impl WindowLocks {
         if state
             .held
             .get(token)
-            .is_some_and(|(current, _)| current == owner)
+            .is_some_and(|lock| lock.owner == owner)
         {
             state.held.remove(token);
         }
         Ok(())
+    }
+
+    /// An issued native operation retains the lock until its I/O finishes, even if its WebView reloads.
+    pub fn lease(&self, owner: &str, name: &str) -> Result<Arc<File>, &'static str> {
+        let state = self.0.lock().map_err(|_| "unavailable")?;
+        state
+            .held
+            .values()
+            .find(|lock| lock.owner == owner && lock.name == name)
+            .map(|lock| Arc::clone(&lock.file))
+            .ok_or("closed")
     }
 
     pub fn reset(&self) {

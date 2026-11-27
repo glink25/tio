@@ -9,6 +9,20 @@ import app.tauri.plugin.Plugin
 @TauriPlugin
 class HostUiPlugin(private val activity: Activity) : Plugin(activity) {
     @Command
+    fun authenticateGit(invoke: Invoke) {
+        activity.runOnUiThread { (activity as MainActivity).gitAuthentication.start(invoke) }
+    }
+
+    @Command
+    fun cancelGitAuthentication(invoke: Invoke) {
+        val owner = invoke.getArgs().optString("owner")
+        activity.runOnUiThread {
+            (activity as MainActivity).gitAuthentication.cancel(owner)
+            invoke.resolve()
+        }
+    }
+
+    @Command
     fun startup(invoke: Invoke) {
         val args = invoke.getArgs()
         val ready = when (args.optString("status")) {

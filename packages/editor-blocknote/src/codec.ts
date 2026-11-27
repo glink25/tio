@@ -221,6 +221,7 @@ function normalizeInlineContent(value: unknown): unknown {
     node.type === 'mention' &&
     record(node.props) &&
     node.props.kind !== 'github-user' &&
+    node.props.kind !== 'gitee-user' &&
     node.props.login === ''
   ) {
     const { login: _login, ...props } = node.props;

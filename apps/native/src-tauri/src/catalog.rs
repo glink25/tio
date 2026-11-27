@@ -16,7 +16,6 @@ impl Catalog {
             "PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS resource_updates(namespace TEXT PRIMARY KEY,highest INTEGER NOT NULL DEFAULT 0,pending TEXT,trial TEXT,confirmed TEXT);
             CREATE TABLE IF NOT EXISTS folder_grants(id TEXT PRIMARY KEY,path TEXT NOT NULL);
-            CREATE TABLE IF NOT EXISTS folder_state(grant TEXT,space TEXT,key TEXT,value TEXT NOT NULL,PRIMARY KEY(grant,space,key));
             CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, value TEXT NOT NULL);",
         )?;

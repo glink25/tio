@@ -10,7 +10,7 @@ import {
   type ConnectionAccessState,
   type WorkspaceRepository,
 } from '@tio/core';
-import { githubConnectionId } from '@tio/provider-github';
+import { gitConnection, gitConnectionId } from '@tio/provider-github/credentials';
 import { StorageError } from '@tio/storage';
 import { HostSyncRunner, type SyncSnapshot } from '@tio/sync';
 import { WorkspaceRuntime } from '@tio/workspace';
@@ -25,7 +25,9 @@ import { sameFolder, isGrant, type FolderHandle } from './folder-access';
 import { credentials, clearCredentials } from './github-auth';
 import { createHostCatalog } from './host-catalog';
 import { HostSaveRecovery } from './save-recovery';
+import { clearTreePreferences } from './tree-preferences';
 import { WorkspaceLifecycle } from './workspace-lifecycle';
+
 export class WorkspaceServices {
   constructor(private factory: ConnectionFactory = createConnectionBinding) {}
   private binding?: ConnectionBinding;
@@ -160,19 +162,24 @@ export class WorkspaceServices {
       if (action?.kind !== 'direct') throw new HostError('unsupported');
       await this.lifecycle.lock(session.id, () => this.lifecycle.mark(session.id, 'deleting'));
       await this.stopWorkspace(session.id);
-      await this.lifecycle.lock(session.id, async () => {
-        try {
-          await action.execute();
-        } catch (error) {
-          if (error instanceof StorageError && error.code === 'permission' && this.binding)
-            throw new ConnectionAccessError(this.binding.adapter.classifyError(error), {
-              cause: error,
-            });
-          throw error;
-        }
-        await this.catalog.removeSession(session.id);
-        await this.lifecycle.mark(session.id, 'deleted');
-      });
+      const remove = () =>
+        this.lifecycle.lock(session.id, async () => {
+          try {
+            await action.execute();
+          } catch (error) {
+            if (error instanceof StorageError && error.code === 'permission' && this.binding)
+              throw new ConnectionAccessError(this.binding.adapter.classifyError(error), {
+                cause: error,
+              });
+            throw error;
+          }
+          await this.catalog.removeSession(session.id);
+          await this.lifecycle.mark(session.id, 'deleted');
+        });
+      if (this.connection?.kind === 'folder')
+        await platform().sync.lock('tio-sync-' + session.id, session.id, remove);
+      else await remove();
+      clearTreePreferences(session.id);
       localStorage.removeItem('tio.sidebar.' + session.workspaceId);
       this.accessStates.delete(session.workspaceId);
       this.onChange();
@@ -207,18 +214,23 @@ export class WorkspaceServices {
       if (this.polling || !this.active || document.visibilityState !== 'visible') return;
       const active = this.active;
       this.polling = true;
-      void this.checkAccess(active.session.workspaceId)
+      void this.canRecoverLocalSave(active.session)
         .then((allowed) => {
           if (allowed && active === this.active) return active.runtime.poll();
         })
         .catch((error) => {
-          if (active === this.active && this.binding)
-            this.setAccess(this.binding.adapter.classifyError(error));
+          if (active === this.active) this.reportStatusError(error);
         })
         .finally(() => {
           this.polling = false;
         });
     }, this.binding?.repositoryPollMs ?? 5000);
+  }
+  private canRecoverLocalSave(session: WorkspaceSession) {
+    const repository = this.repositories.get(session.id)?.repository;
+    return repository?.storageCapabilities?.offline === false
+      ? this.checkAccess(session.workspaceId)
+      : Promise.resolve(true);
   }
   private assertLive() {
     if (this.abandoning) throw new Error('Connection is closed');
@@ -232,37 +244,58 @@ export class WorkspaceServices {
       this.handle = saved.handle;
       this.bind();
       if (this.binding?.sync)
-        for (const session of await this.sessions()) await this.repository(session);
+        for (const session of await this.sessions()) {
+          if (!(await this.catalog.read('workspace-lifecycle/' + session.id)))
+            await this.repository(session);
+        }
     }
   }
   async connect(kind: Connection['kind'], handle?: FolderHandle) {
     this.assertLive();
-    await this.disconnect(kind !== 'github');
+    await this.disconnect(kind !== 'github' && kind !== 'gitee');
     this.assertLive();
-    if (kind === 'github') {
+    if (kind === 'github' || kind === 'gitee') {
       const auth = credentials();
-      if (!auth) throw new Error('GitHub credentials missing');
-      this.connection = { id: githubConnectionId(auth.userId), kind, name: auth.login };
+      if (auth?.provider !== kind) throw new Error('Git credentials missing');
+      this.connection = { id: gitConnectionId(kind, auth.userId), kind, name: auth.login };
       this.bind();
       await this.catalog.setting('connection', { connection: this.connection });
       return;
     }
-    const previous = await this.catalog.setting('folderIdentity');
-    const same = handle && previous?.handle && (await sameFolder(handle, previous.handle));
+    let connectionId = 'device';
+    if (kind === 'folder') {
+      if (isGrant(handle)) {
+        connectionId = 'folder-' + handle.id;
+      } else {
+        connectionId = await platform().sync.lock(
+          'tio-folder-identities',
+          'folder-identities',
+          async () => {
+            const folders: { id: string; handle: FolderHandle }[] =
+              (await this.catalog.setting('folderIdentities')) ?? [];
+            let match: (typeof folders)[number] | undefined;
+            if (handle) {
+              for (const folder of folders) {
+                if (await sameFolder(handle, folder.handle)) {
+                  match = folder;
+                  break;
+                }
+              }
+            }
+            const connectionId = match?.id ?? id('connection');
+            if (handle) {
+              await this.catalog.setting('folderIdentities', [
+                ...folders.filter((folder) => folder !== match),
+                { id: connectionId, handle },
+              ]);
+            }
+            return connectionId;
+          },
+        );
+      }
+    }
     this.assertLive();
-    this.connection = {
-      id:
-        kind === 'device'
-          ? 'device'
-          : isGrant(handle)
-            ? 'folder-' + handle.id
-            : same
-              ? previous.id
-              : id('connection'),
-      kind,
-      name: handle?.name ?? '本机',
-    };
-    if (handle) await this.catalog.setting('folderIdentity', { id: this.connection.id, handle });
+    this.connection = { id: connectionId, kind, name: handle?.name ?? '本机' };
     this.handle = handle;
     this.bind();
     await this.catalog.setting('connection', { connection: this.connection, handle });
@@ -313,6 +346,7 @@ export class WorkspaceServices {
     for (const workspace of discovered) {
       if (generation !== this.generation) return;
       const existing = saved.find((s) => s.workspaceId === workspace.id);
+      if (existing && (await this.catalog.read('workspace-lifecycle/' + existing.id))) continue;
       if (existing) {
         if (binding.sync) await this.repository(existing, workspace);
         continue;
@@ -416,13 +450,15 @@ export class WorkspaceServices {
             onActive: (listener) => platform().sync.subscribe(listener),
             lock: (name, work) => {
               const host = platform();
-              const job = this.queue.then(() =>
+              const run = () =>
                 host.sync.lock(name, session.id, async () => {
+                  if (await this.catalog.read('workspace-lifecycle/' + session.id)) return;
                   // The registry can change while this runner is waiting for the process lock.
                   if (!host.windows || (await host.windows.confirmSyncOwner(session.id)))
                     await work();
-                }),
-              );
+                });
+              if (this.connection?.kind === 'folder') return run();
+              const job = this.queue.then(run);
               this.queue = job.catch(() => {});
               return job;
             },
@@ -526,7 +562,7 @@ export class WorkspaceServices {
           this.configureAutomation();
           this.statusError = undefined;
           this.recovery = new HostSaveRecovery(runtime, {
-            checkAccess: () => this.checkAccess(session.workspaceId),
+            checkAccess: () => this.canRecoverLocalSave(session),
             onError: (error) => this.saveFailed(error),
           });
           this.startPolling();
@@ -588,7 +624,11 @@ export class WorkspaceServices {
         if (generation !== this.generation) return;
         this.setAccess(state);
         this.statusError = undefined;
-        await this.refreshRemote();
+        if (this.connection?.kind === 'folder') {
+          void this.refreshRemote().catch((error) => this.reportStatusError(error));
+        } else {
+          await this.refreshRemote();
+        }
         if (generation !== this.generation) return;
         if (this.active?.runtime.state.getState().error) await this.active.runtime.retry();
         else await this.active?.runtime.flush();
@@ -604,13 +644,17 @@ export class WorkspaceServices {
     this.authorization = work;
     return work;
   }
-  private syncing?: Promise<void>;
+  private syncing?: { active: WorkspaceServices['active']; work: Promise<void> };
   sync() {
-    if (this.syncing) return this.syncing;
     const active = this.active;
-    this.syncing = (async () => {
+    if (this.syncing?.active === active && this.syncing) return this.syncing.work;
+    const work = (async () => {
       await active?.runtime.flush();
-      await this.refreshRemote();
+      if (active && this.connection?.kind === 'folder') {
+        void this.refreshRemote().catch((error) => this.reportStatusError(error));
+      } else {
+        await this.refreshRemote();
+      }
       if (active !== this.active) return;
       await this.runner?.sync();
       if (!this.runner && active) {
@@ -618,9 +662,10 @@ export class WorkspaceServices {
         await active.runtime.poll();
       }
     })().finally(() => {
-      this.syncing = undefined;
+      if (this.syncing?.work === work) this.syncing = undefined;
     });
-    return this.syncing;
+    this.syncing = { active, work };
+    return work;
   }
   async discard(id: string) {
     await this.active?.runtime.flush();
@@ -639,7 +684,7 @@ export class WorkspaceServices {
       this.active = undefined;
     } catch (error) {
       this.recovery = new HostSaveRecovery(active.runtime, {
-        checkAccess: () => this.checkAccess(active.session.workspaceId),
+        checkAccess: () => this.canRecoverLocalSave(active.session),
         onError: (failure) => this.saveFailed(failure),
       });
       throw error;
@@ -649,6 +694,30 @@ export class WorkspaceServices {
   close() {
     return this.transition(() => this.closeActive());
   }
+  private retiredRepositories = new Set<Promise<void>>();
+  private async releaseRepositories(wait: boolean) {
+    const entries = [...this.repositories.values()];
+    this.repositories.clear();
+    const closing = Promise.all(
+      entries.map(async (entry) => {
+        entry.unsubscribe?.();
+        try {
+          await entry.runner?.stop();
+        } finally {
+          entry.repository.close();
+        }
+      }),
+    );
+    if (wait) await closing;
+    else {
+      const retired = closing
+        .then(() => {})
+        .catch((error) => console.warn('Failed to close a workspace repository', error))
+        .finally(() => this.retiredRepositories.delete(retired));
+      this.retiredRepositories.add(retired);
+    }
+  }
+
   private invalidateConnection() {
     this.generation++;
     void this.recovery?.stop();
@@ -662,16 +731,10 @@ export class WorkspaceServices {
     this.invalidateConnection();
     return this.transition(async () => {
       await this.closeActive();
-      await Promise.all(
-        [...this.repositories.values()].map(async (e) => {
-          e.unsubscribe?.();
-          await e.runner?.stop();
-          e.repository.close();
-        }),
-      );
-      this.repositories.clear();
-      if (clearAuth && this.connection?.kind === 'github') await clearCredentials();
+      await this.releaseRepositories(this.connection?.kind !== 'folder');
+      if (clearAuth && gitConnection(this.connection?.id)) await clearCredentials();
       this.connection = null;
+      this.binding?.dispose?.();
       this.binding = undefined;
       this.accessStates.clear();
       this.syncStarted = false;
@@ -699,14 +762,8 @@ export class WorkspaceServices {
       active?.runtime.dispose(true);
       this.active?.runtime.dispose(true);
       this.active = undefined;
-      await Promise.all(
-        [...this.repositories.values()].map(async (entry) => {
-          entry.unsubscribe?.();
-          await entry.runner?.stop();
-          entry.repository.close();
-        }),
-      );
-      this.repositories.clear();
+      await this.releaseRepositories(true);
+      await Promise.all(this.retiredRepositories);
       await this.catalog.close();
       this.binding = undefined;
       this.connection = null;
@@ -719,14 +776,8 @@ export class WorkspaceServices {
     this.invalidateConnection();
     return this.transition(async () => {
       await this.closeActive();
-      await Promise.all(
-        [...this.repositories.values()].map(async (e) => {
-          e.unsubscribe?.();
-          await e.runner?.stop();
-          e.repository.close();
-        }),
-      );
-      this.repositories.clear();
+      this.binding?.dispose?.();
+      await this.releaseRepositories(this.connection?.kind !== 'folder');
       await this.catalog.close();
     });
   }

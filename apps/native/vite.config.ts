@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => {
     publicDir: '../../packages/app/public',
     define: {
       'import.meta.env.VITE_TIO_PLATFORM': JSON.stringify(mobilePlatform ?? 'desktop'),
+      'import.meta.env.VITE_TIO_SYSTEM_AUTH': JSON.stringify(
+        !!mobilePlatform || channel === 'macos-direct',
+      ),
       'import.meta.env.VITE_TIO_NATIVE_SPLASH': JSON.stringify(!!mobilePlatform),
     },
     build: { target: compatibility.runtimeTarget, cssTarget: compatibility.runtimeTarget },

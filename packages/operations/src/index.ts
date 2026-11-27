@@ -67,6 +67,7 @@ interface Receipt {
   signature: string;
   result?: OperationResult;
   promise: Promise<OperationResult>;
+  review?: Promise<void>;
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const canonical = (v: unknown): string =>
@@ -190,12 +191,25 @@ export class WorkspaceOperations {
         signature,
         promise: Promise.resolve({ status: 'pending', requestId }),
       };
+      let reviewed: (() => void) | undefined;
+      if (approve) {
+        receipt.review = new Promise<void>((resolve) => {
+          reviewed = resolve;
+        });
+      }
+      const review: ApproveOperation | undefined =
+        approve &&
+        (async (change) => {
+          const approved = await approve(change);
+          if (approved) reviewed?.();
+          return approved;
+        });
       receipt.promise = this.tail
         .then(async (): Promise<OperationResult> => {
           try {
             this.live(check);
-            const value = await this.execute(name as OperationName, parsed, check, approve, file);
-            this.live(check);
+            const value = await this.execute(name as OperationName, parsed, check, review, file);
+            if (!review) this.live(check);
             return { status: 'completed', value };
           } catch (error) {
             return { status: 'failed', error: errorResult(error) };
@@ -203,6 +217,7 @@ export class WorkspaceOperations {
         })
         .then((result) => {
           receipt.result = result;
+          reviewed?.();
           return result;
         });
       this.tail = receipt.promise;
@@ -219,6 +234,8 @@ export class WorkspaceOperations {
   ): Promise<OperationResult> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      // Human review is part of authorizing a write, before the persistence timeout begins.
+      if (receipt.review) await receipt.review;
       const result = await Promise.race([
         receipt.promise,
         new Promise<OperationResult>((resolve) => {
@@ -257,7 +274,7 @@ export class WorkspaceOperations {
           !blockMentions(expected.find((o) => o.id === next.id)?.blocks ?? []).some((old) =>
             same(old, ref),
           ) &&
-          ref.kind !== 'github-user'
+          !('login' in ref)
         )
           need.add(ref.id);
       }
@@ -398,8 +415,7 @@ export class WorkspaceOperations {
           throw new OperationError('invalid', 'Invalid database embed');
       }
     const proposal = operationChange(expected, changes);
-    if (proposal.reasons.length && approve && !(await approve(proposal)))
-      throw new OperationError('permission');
+    if (approve && !(await approve(proposal))) throw new OperationError('permission');
     this.live(check);
     // Both dependencies and edited objects are checked again at the authoritative commit boundary.
     const originals = [...dependencies.values()];

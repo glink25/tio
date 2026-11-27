@@ -19,7 +19,7 @@
         {
           "scheme": ["${tioOAuthScheme}"],
           "host": "auth",
-          "path": ["/github"],
+          "path": ["/github", "/gitee"],
           "appLink": false
         }
       ]

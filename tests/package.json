@@ -10,6 +10,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
+    "@tio/adapter-gitee": "workspace:*",
     "@tio/app": "workspace:*",
     "@tio/core": "workspace:*",
     "@tio/database": "workspace:*",
@@ -19,6 +20,7 @@
     "@tio/local-store": "workspace:*",
     "@tio/merge": "workspace:*",
     "@tio/operations": "workspace:*",
+    "@tio/provider-gitee": "workspace:*",
     "@tio/provider-github": "workspace:*",
     "@tio/provider-memory": "workspace:*",
     "@tio/serialization": "workspace:*",

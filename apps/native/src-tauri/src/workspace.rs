@@ -100,14 +100,14 @@ pub(crate) fn execute(
     space: String,
     request: Request,
 ) -> Result<Value, &'static str> {
-    execute_inner(db, space, request, false)
+    execute_inner(db, space, request, None)
 }
 
 fn execute_inner(
     db: &mut Connection,
     space: String,
     request: Request,
-    replica: bool,
+    endpoint: Option<&str>,
 ) -> Result<Value, &'static str> {
     if space.is_empty()
         || !space
@@ -128,7 +128,16 @@ fn execute_inner(
             TransactionBehavior::Immediate
         })
         .map_err(sql)?;
-    let closed:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM settings WHERE key=?1 AND value IN ('\"deleting\"','\"deleted\"'))",[format!("workspace-lifecycle/device_{space}")],|r|r.get(0)).map_err(sql)?;
+    let replica = endpoint.is_some();
+    let instance = endpoint
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("device_{space}"));
+    let lifecycle = format!("workspace-lifecycle/{instance}");
+    let closed: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM settings WHERE key=?1 AND value IN ('\"deleting\"','\"deleted\"'))",
+        [&lifecycle],
+        |row| row.get(0),
+    ).map_err(sql)?;
     if closed && !matches!(request, Request::Delete) {
         return Err("closed");
     }
@@ -239,6 +248,12 @@ fn execute_inner(
             Value::Null
         }
         Request::Delete=>{
+            if replica {
+                tx.execute(
+                    "INSERT OR REPLACE INTO settings VALUES (?1, '\"deleted\"')",
+                    [&lifecycle],
+                ).map_err(sql)?;
+            }
             for table in ["spaces","objects","receipts","acknowledgments","assets","recovery"] {
                 tx.execute(&format!("DELETE FROM {table} WHERE space=?1"),[&space]).map_err(sql)?;
             }
@@ -255,16 +270,28 @@ pub(crate) fn execute_replica(
     space: String,
     request: Request,
 ) -> Result<Value, &'static str> {
-    use sha2::{Digest, Sha256};
-    let directory = catalog.parent().ok_or("unavailable")?.join("replicas");
-    std::fs::create_dir_all(&directory).map_err(|_| "unavailable")?;
-    let mut db = Connection::open(
-        directory.join(format!("{:x}.sqlite3", Sha256::digest(endpoint.as_bytes()))),
-    )
-    .map_err(|_| "unavailable")?;
-    db.busy_timeout(std::time::Duration::from_secs(5))
+    let measure = endpoint.starts_with("folder-") && matches!(&request, Request::Publish { .. });
+    let start = std::time::Instant::now();
+    let result = (|| {
+        use sha2::{Digest, Sha256};
+        let directory = catalog.parent().ok_or("unavailable")?.join("replicas");
+        std::fs::create_dir_all(&directory).map_err(|_| "unavailable")?;
+        let mut db = Connection::open(
+            directory.join(format!("{:x}.sqlite3", Sha256::digest(endpoint.as_bytes()))),
+        )
         .map_err(|_| "unavailable")?;
-    db.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);").map_err(|_|"unavailable")?;
-    initialize(&db).map_err(|_| "unavailable")?;
-    execute_inner(&mut db, space, request, true)
+        db.busy_timeout(std::time::Duration::from_secs(5))
+            .map_err(|_| "unavailable")?;
+        db.execute_batch("PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY,value TEXT NOT NULL);").map_err(|_|"unavailable")?;
+        initialize(&db).map_err(|_| "unavailable")?;
+        execute_inner(&mut db, space, request, Some(endpoint))
+    })();
+    if measure && (start.elapsed().as_millis() >= 1000 || result.is_err()) {
+        eprintln!(
+            "Tio folder local commit: elapsed_ms={} code={}",
+            start.elapsed().as_millis(),
+            result.as_ref().err().copied().unwrap_or("ok"),
+        );
+    }
+    result
 }

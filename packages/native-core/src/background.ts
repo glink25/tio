@@ -1,16 +1,21 @@
+import { giteeAccessError } from '@tio/adapter-gitee';
 import { githubAccessError } from '@tio/adapter-github';
 import { HostError, type WorkspaceSession } from '@tio/core';
-import {
-  githubConnectionUserId,
-  githubEndpointsKey,
-  type GitHubEndpoint,
-} from '@tio/provider-github';
-import { githubToken } from '@tio/provider-github/credentials';
+import { FileWorkspaceContent } from '@tio/file-storage';
+import { GiteeError, giteeEndpointsKey } from '@tio/provider-gitee';
+import { GitHubError } from '@tio/provider-github';
+import { githubEndpointsKey, type GitHubEndpoint } from '@tio/provider-github';
+import { gitConnection, gitToken } from '@tio/provider-github/credentials';
+import { StorageError } from '@tio/storage';
+import { executeSyncBatch, SyncCore } from '@tio/sync';
 
+import { folderFailure, nativeFolderGrant, NativeFolderProvider } from './folder';
 import { withProcessLock } from './process-lock';
-import { syncGitHub } from './sync';
+import { ReplicaRepository } from './replica';
+import { syncGit } from './sync';
 
 declare function tioNative(request: string): string;
+declare function tioFolder(request: string): string;
 declare function tioCredential(action: string, value: string): string;
 declare function tioFetch(url: string, request: string): string;
 declare function tioLock(name: string, token: string): string | null;
@@ -66,10 +71,76 @@ export async function runBackground() {
   const sessions = await call<WorkspaceSession[]>({ action: 'sessions' });
   const results: { session: string; status: BackgroundStatus }[] = [];
   for (const session of sessions) {
-    if (githubConnectionUserId(session.connectionId) === undefined) continue;
     if (await read('workspace-lifecycle/' + session.id)) continue;
+    const grant = nativeFolderGrant(session.connectionId);
+    if (grant) {
+      if (typeof tioFolder !== 'function') continue;
+      const instance = session.id;
+      const local = new ReplicaRepository(instance, session.workspaceId, (space, action, args) =>
+        call({ action: 'replica', replica: instance, space, request: { action, ...args } }),
+      );
+      const provider = new NativeFolderProvider(
+        { kind: 'native-folder', id: grant, name: '' },
+        async (request) => {
+          signal.throwIfAborted();
+          const reply = JSON.parse(tioFolder(JSON.stringify(request)));
+          if (reply.error) throw folderFailure(reply.error);
+          return reply.value;
+        },
+      );
+      const content = new FileWorkspaceContent(provider, session.workspaceId);
+      const core = new SyncCore(local, content, instance, session.workspaceId);
+      const completeKey = 'replica-complete/' + instance;
+      const lifecycleKey = 'workspace-lifecycle/' + session.id;
+      const complete = async () => (await read<boolean>(completeKey)) === true;
+      const automaticEnabled = async () => {
+        const workspace = (await local.get(session.workspaceId))?.object;
+        return !!workspace && workspace.manualSync !== true && !workspace.deleted;
+      };
+      try {
+        const status = await withProcessLock(
+          'tio-sync-' + instance,
+          async (): Promise<BackgroundStatus> => {
+            if (await read(lifecycleKey)) return 'manual';
+            const initializing = !(await complete());
+            let automatic = await automaticEnabled();
+            if (!initializing && !automatic) return 'manual';
+            await executeSyncBatch(core, {
+              initializing,
+              automatic: true,
+              automaticEnabled: () => automatic,
+              initialization: {
+                isComplete: complete,
+                complete: () => write(completeKey, true),
+                targetId: () => session.selectedId,
+              },
+              initialized: async () => {
+                automatic = await automaticEnabled();
+              },
+              signal,
+            });
+            signal.throwIfAborted();
+            return core.issues.length ? 'issues' : 'synced';
+          },
+          async (name, token) => tioLock(name, token ?? ''),
+          signal,
+        );
+        results.push({ session: session.id, status });
+      } catch (error) {
+        signal.throwIfAborted();
+        const status =
+          error instanceof StorageError && error.code === 'permission' ? 'permission' : 'failed';
+        results.push({ session: session.id, status });
+      } finally {
+        local.close();
+      }
+      continue;
+    }
+    const account = gitConnection(session.connectionId);
+    if (!account) continue;
+    const gitee = account.provider === 'gitee';
     const endpoints = await read<[string, GitHubEndpoint][]>(
-      githubEndpointsKey(session.connectionId),
+      (gitee ? giteeEndpointsKey : githubEndpointsKey)(session.connectionId),
     );
     const endpoint = endpoints?.find(([id]) => id === session.workspaceId)?.[1];
     if (!endpoint) continue;
@@ -80,7 +151,7 @@ export async function runBackground() {
     }
     const instance = session.id + '/' + endpoint.repositoryId + '/' + endpoint.branch;
     try {
-      const result = await syncGitHub(
+      const result = await syncGit(
         {
           connection: session.connectionId,
           instance: session.id,
@@ -93,9 +164,9 @@ export async function runBackground() {
           write,
           token: (user) =>
             withProcessLock(
-              'tio-github-refresh',
+              'tio-git-refresh',
               () =>
-                githubToken(user, {
+                gitToken(account.provider, user, {
                   read: async () => {
                     const reply = JSON.parse(tioCredential('read', ''));
                     if (reply.error) throw new HostError(reply.error);
@@ -120,7 +191,9 @@ export async function runBackground() {
       results.push({ session: session.id, status: result.status });
     } catch (error) {
       if (tioCancelled()) throw error;
-      const state = githubAccessError(session.connectionId, error);
+      const failure =
+        gitee && error instanceof GitHubError ? new GiteeError(error.status, error.retryAt) : error;
+      const state = (gitee ? giteeAccessError : githubAccessError)(session.connectionId, failure);
       await write(retryKey, state.retryAt ?? 0);
       const permission = ['reauthorization-required', 'forbidden', 'unrecoverable'].includes(
         state.code,

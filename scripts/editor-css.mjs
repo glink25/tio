@@ -4,7 +4,7 @@ export function editorCss() {
     postcssPlugin: 'tio-editor-boundary',
     OnceExit(root) {
       const file = root.source?.input.file ?? '';
-      if (!/web-editor\/src\/style\.css|@blocknote|@glideapps/.test(file)) return;
+      if (!/web-editor\/src\/style\.css|@blocknote|@glideapps|react-photo-view/.test(file)) return;
       root.walkRules((rule) => {
         let parent = rule.parent;
         while (parent && parent !== root) {

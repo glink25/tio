@@ -1,11 +1,13 @@
 {
   "format": 1,
-  "bridgeApiVersion": 4,
-  "storageEpoch": 1,
+  "bridgeApiVersion": 7,
+  "storageEpoch": 2,
   "capabilities": [
+    "assistant-fetch.v1",
     "catalog.v1",
-    "credentials.v1",
-    "folder.v1",
+    "credentials.v2",
+    "folder.v2",
+    "git-auth.v1",
     "updates.v1",
     "window-host.v1",
     "workspace.v1"
@@ -18,6 +20,6 @@
     "linux-direct": "safari15"
   },
   "reviewEpochs": {
-    "ios-store": 2
+    "ios-store": 4
   }
 }

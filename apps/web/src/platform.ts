@@ -2,18 +2,13 @@ import { chooseFolder, supported, FolderConnectionAdapter } from '@tio/adapter-l
 import type { AppPlatform } from '@tio/app/platform';
 import { folderBinding } from '@tio/app/services/folder-binding';
 import { DomainError } from '@tio/core';
-import { FileRepository, FileWorkspaceContent } from '@tio/file-storage';
-import {
-  LocalCatalog,
-  LocalStore,
-  IndexedRepositoryState,
-  deleteLocalWorkspace,
-  RemoteFileCache,
-} from '@tio/local-store';
+import { LocalCatalog, LocalStore, deleteLocalWorkspace, RemoteFileCache } from '@tio/local-store';
 import type { Credentials } from '@tio/provider-github/credentials';
 import { LocalFolderProvider } from '@tio/provider-local-folder';
 
-const credentialsKey = 'tio.github.credentials';
+import { assistantFetch } from './assistant-fetch';
+
+const credentialsKey = 'tio.git.credentials';
 const read = (): Credentials | undefined => {
   const value = localStorage.getItem(credentialsKey);
   return value ? JSON.parse(value) : undefined;
@@ -24,6 +19,9 @@ class BrowserReplica extends LocalStore {
   }
   get storageComplete() {
     return localStorage.getItem('tio.github.complete.' + this.instanceId) === 'true';
+  }
+  isComplete() {
+    return this.storageComplete;
   }
   async setComplete() {
     localStorage.setItem('tio.github.complete.' + this.instanceId, 'true');
@@ -58,6 +56,7 @@ async function clearStorage() {
 }
 export function createWebPlatform(origin?: string): AppPlatform {
   return {
+    assistantFetch,
     deviceLabel: 'welcome.offline',
     catalog: () => new LocalCatalog(),
     deviceRepository: (_workspace, instance) => new LocalStore(instance),
@@ -73,40 +72,17 @@ export function createWebPlatform(origin?: string): AppPlatform {
         return folderBinding(connection, {
           adapter,
           provider,
-          async remove(workspace) {
+          async remove(workspace, instance) {
             await adapter.deleteWorkspace(workspace);
-            const journal = new IndexedRepositoryState(connection.id + '_' + workspace);
-            try {
-              await journal.delete();
-            } finally {
-              journal.close();
-            }
+            await deleteLocalWorkspace(instance);
+            localStorage.removeItem('tio.github.complete.' + instance);
           },
-          repository(workspace, instance) {
-            if (!provider) throw new Error('Folder unavailable');
-            const journal = new IndexedRepositoryState(instance);
-            const repository = new FileRepository(
-              new FileWorkspaceContent(provider, workspace),
-              workspace,
-              journal,
-              (work) => lock('tio-' + instance, work),
-            );
-            const stop = journal.subscribe(() => {
-              void repository.notifyChanges();
-            });
-            const close = repository.close.bind(repository);
-            repository.close = () => {
-              stop();
-              close();
-              journal.close();
-            };
-            return repository;
-          },
+          Replica: BrowserReplica,
         });
       },
     },
-    github: {
-      Replica: BrowserReplica,
+    Replica: BrowserReplica,
+    git: {
       cache: (namespace) => new RemoteFileCache(namespace),
       persistEndpoints: async () => {},
     },
@@ -120,7 +96,7 @@ export function createWebPlatform(origin?: string): AppPlatform {
         else localStorage.removeItem(credentialsKey);
       },
       remember: () => {},
-      lock: (work) => lock('tio-github-refresh', work),
+      lock: (work) => lock('tio-git-refresh', work),
       redirectURI: () => location.origin + location.pathname,
       acceptsCallback: () => false,
       open: async (url) => {

@@ -626,3 +626,16 @@ html[data-tio-native-desktop] .tio-workspace-content {
   gap: 6px;
   align-content: center;
 }
+
+.tio-modal-drag-region {
+  display: none;
+  position: fixed;
+  inset: 0 var(--tio-window-chrome-right) auto var(--tio-window-chrome-left);
+  z-index: 1000;
+  height: var(--tio-window-chrome-top);
+  pointer-events: auto;
+  app-region: drag;
+}
+body:has(.tio-modal-layer[data-state='open']) > .tio-modal-drag-region {
+  display: block;
+}

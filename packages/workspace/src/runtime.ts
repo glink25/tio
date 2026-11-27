@@ -653,7 +653,7 @@ export class WorkspaceRuntime {
           if (field.type === 'mention')
             for (const ref of mentionReferences(value))
               if (
-                ref.kind !== 'github-user' &&
+                !('login' in ref) &&
                 ref.workspaceId === database.workspaceId &&
                 !objects.has(ref.id)
               )
@@ -1486,6 +1486,11 @@ export class WorkspaceRuntime {
   snapshot() {
     return structuredClone(this.store.getState().objects);
   }
+  /** The loaded, confirmed entry used as a checked-write baseline. */
+  confirmedEntry(id: string): WorkspaceEntry | undefined {
+    const entry = this.baseline.get(id);
+    return entry && structuredClone(entry);
+  }
   /** Discard queued input and wait only for work that has already started. */
   async discardAndClose() {
     this.dispose(true);
@@ -1542,6 +1547,8 @@ export type EditorSession = Pick<
   | 'access'
   | 'can'
   | 'snapshot'
+  | 'confirmedEntry'
+  | 'hasPendingChanges'
   | 'patch'
   | 'create'
   | 'append'

@@ -13,7 +13,7 @@ pub async fn clear_host_storage(app: AppHandle) -> Result<(), String> {
     })
     .await
     .map_err(|_| "unavailable")??;
-    crate::credentials::github_credentials(app.clone(), "clear".into(), None).await?;
+    crate::credentials::git_credentials(app.clone(), "clear".into(), None).await?;
     #[cfg(target_os = "android")]
     {
         let reply: serde_json::Value = app
@@ -27,11 +27,8 @@ pub async fn clear_host_storage(app: AppHandle) -> Result<(), String> {
     }
     #[cfg(target_os = "ios")]
     {
-        crate::shortcuts::reset_foreground(None);
         crate::shortcuts::call_folder(serde_json::json!({"action":"forgetAll"})).await?;
     }
-    #[cfg(not(target_os = "ios"))]
-    app.state::<crate::folder::FolderLocks>().0.reset();
     app.state::<crate::process_lock::ProcessLocks>().0.reset();
     let handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
@@ -46,7 +43,7 @@ pub async fn clear_host_storage(app: AppHandle) -> Result<(), String> {
             transaction.execute(&format!("DELETE FROM \"{}\"", table.replace('"', "\"\"")), []).map_err(|_|"unavailable")?;
         }
         transaction.commit().map_err(|_|"unavailable")?;
-        for name in ["replicas", "folder-locks", "process-locks"] {
+        for name in ["replicas", "process-locks"] {
             let path = directory.join(name);
             if path.exists() { fs::remove_dir_all(path).map_err(|_|"unavailable")?; }
         }

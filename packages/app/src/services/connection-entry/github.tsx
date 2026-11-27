@@ -1,27 +1,32 @@
+import type { GitProvider } from '@tio/provider-github/credentials';
 import { KeyRound } from 'lucide-react';
 
+import { GiteeIcon } from '../../components/gitee-icon';
 import { GitHubIcon } from '../../components/github-icon';
 import { authOrigin } from '../github-auth';
 import type { ConnectionEntry, ConnectionEntryActions } from './types';
 
-export function githubEntries(actions: ConnectionEntryActions): ConnectionEntry[] {
+export function gitEntries(
+  provider: GitProvider,
+  actions: ConnectionEntryActions,
+): ConnectionEntry[] {
   return [
     {
-      id: 'github',
-      label: 'welcome.github',
-      icon: GitHubIcon,
+      id: provider,
+      label: provider === 'gitee' ? 'welcome.gitee' : 'welcome.github',
+      icon: provider === 'gitee' ? GiteeIcon : GitHubIcon,
       emphasis: 'primary',
       available: Boolean(authOrigin()),
-      run: actions.github,
+      run: () => actions.git(provider),
     },
     {
-      id: 'github-token',
+      id: provider + '-token',
       iconOnly: true,
-      label: 'welcome.token',
+      label: provider === 'gitee' ? 'welcome.giteeToken' : 'welcome.token',
       icon: KeyRound,
       emphasis: 'primary',
       available: true,
-      run: actions.token,
+      run: () => actions.token(provider),
     },
   ];
 }

@@ -10,7 +10,7 @@ export interface ReferenceOption {
   id: string;
   label: ReactNode;
   text: string;
-  kind?: 'page' | 'database' | 'record' | 'github-user';
+  kind?: 'page' | 'database' | 'record' | 'github-user' | 'gitee-user';
 }
 export function ReferenceIcon({ kind }: { kind?: ReferenceOption['kind'] }) {
   const Icon =
@@ -18,7 +18,7 @@ export function ReferenceIcon({ kind }: { kind?: ReferenceOption['kind'] }) {
       ? Database
       : kind === 'record'
         ? ArrowUpRight
-        : kind === 'github-user'
+        : kind === 'github-user' || kind === 'gitee-user'
           ? UserRound
           : FileText;
   return <Icon size={14} className="shrink-0 text-muted" aria-hidden />;

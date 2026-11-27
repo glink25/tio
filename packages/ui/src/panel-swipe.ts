@@ -302,7 +302,7 @@ export function useNativePanelMotion(
       layer.style.removeProperty('--tio-swipe-opacity');
     }
     if (!open && layer.dataset.swipe === 'finished') return;
-    const edge = side === 'left' ? 'translateX(-100%)' : 'translateX(100vw)';
+    const edge = side === 'left' ? 'translateX(-100%)' : 'translateX(100%)';
     const rest = 'translateX(0)';
     const ready = layer.hasAttribute('data-motion-ready');
     const fromTransform = ready ? getComputedStyle(panel).transform : edge;

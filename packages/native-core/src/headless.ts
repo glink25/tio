@@ -1,6 +1,8 @@
 import './intl';
+import { giteeEndpointsKey } from '@tio/provider-gitee';
+import { gitConnection } from '@tio/provider-github/credentials';
 export { runBackground } from './background';
-export { syncGitHub } from './sync';
+export { syncGit } from './sync';
 import {
   HostError,
   textBlock,
@@ -8,22 +10,17 @@ import {
   type WorkspaceRepository,
   type WorkspaceSession,
 } from '@tio/core';
-import { FileRepository, FileWorkspaceContent } from '@tio/file-storage';
 import { WorkspaceOperations, type ObjectRead } from '@tio/operations';
-import {
-  githubConnectionUserId,
-  githubEndpointsKey,
-  type GitHubEndpoint,
-} from '@tio/provider-github';
+import { githubEndpointsKey, type GitHubEndpoint } from '@tio/provider-github';
 import { WorkspaceRuntime } from '@tio/workspace';
 
-import { NativeFolderProvider, FolderState, type FolderCall } from './folder';
+import { nativeFolderGrant } from './folder';
 import { NativeRepository } from './native-repository';
+import { withProcessLock } from './process-lock';
 import { ReplicaRepository } from './replica';
 
 declare function tioWorkspace(space: string, request: string): string;
 
-declare function tioFolder(request: string): string;
 declare function tioNative(request: string): string;
 interface Shortcut {
   connection?: string;
@@ -35,7 +32,11 @@ interface Shortcut {
 }
 
 export async function run(input: Shortcut) {
-  if (input.connection && githubConnectionUserId(input.connection) !== undefined) {
+  if (input.connection && input.connection !== 'device') {
+    const connection = input.connection;
+    const folder = !!nativeFolderGrant(connection);
+    const account = gitConnection(connection);
+    if (!folder && !account) throw new HostError('invalid');
     const call = async <T>(request: Record<string, unknown>): Promise<T> => {
       const reply = JSON.parse(tioNative(JSON.stringify(request)));
       if (reply.error) throw new HostError(reply.error);
@@ -43,51 +44,40 @@ export async function run(input: Shortcut) {
     };
     const sessions = await call<WorkspaceSession[]>({ action: 'sessions' });
     const session = sessions.find(
-      (value) => value.connectionId === input.connection && value.workspaceId === input.workspace,
+      (value) => value.connectionId === connection && value.workspaceId === input.workspace,
     );
     if (!session) throw new HostError('unavailable');
-    if (await call({ action: 'read', key: 'workspace-lifecycle/' + session.id }))
-      throw new HostError('closed');
+
+    const open = async (instance: string) => {
+      if (await call({ action: 'read', key: 'workspace-lifecycle/' + session.id }))
+        throw new HostError('closed');
+      const repository = new ReplicaRepository(instance, input.workspace, (space, action, args) =>
+        call({ action: 'replica', replica: instance, space, request: { action, ...args } }),
+      );
+      try {
+        return await runDocumentOperation(input, repository, folder ? 'pending' : 'unavailable');
+      } finally {
+        repository.close();
+      }
+    };
+
+    if (folder) {
+      return withProcessLock(
+        'tio-folder-local-' + session.id,
+        () => open(session.id),
+        (name, token) => call({ action: 'lock', name, token }),
+      );
+    }
     const endpoints = await call<[string, GitHubEndpoint][] | undefined>({
       action: 'read',
-      key: githubEndpointsKey(input.connection),
+      key: (account?.provider === 'gitee' ? giteeEndpointsKey : githubEndpointsKey)(connection),
     });
     const endpoint = endpoints?.find(([id]) => id === input.workspace)?.[1];
     if (!endpoint || endpoint.workspaceId !== input.workspace) throw new HostError('unavailable');
     const instance = session.id + '/' + endpoint.repositoryId + '/' + endpoint.branch;
     if ((await call({ action: 'read', key: 'replica-complete/' + instance })) !== true)
       throw new HostError('pending');
-    const repository = new ReplicaRepository(instance, input.workspace, (space, action, args) =>
-      call({ action: 'replica', replica: instance, space, request: { action, ...args } }),
-    );
-    try {
-      return await runDocumentOperation(input, repository);
-    } finally {
-      repository.close();
-    }
-  }
-  if (input.connection && input.connection !== 'device') {
-    if (!/^folder-[a-f0-9]{64}$/.test(input.connection)) throw new HostError('invalid');
-    const grant = input.connection.slice(7);
-    const call: FolderCall = async (request) => {
-      const reply = JSON.parse(tioFolder(JSON.stringify(request)));
-      if (reply.error) throw new HostError(reply.error);
-      return reply.value;
-    };
-    const state = new FolderState(grant, input.workspace, call, 'shortcut');
-    const files = new NativeFolderProvider({ kind: 'native-folder', id: grant, name: '' }, call);
-    const repository = new FileRepository(
-      new FileWorkspaceContent(files, input.workspace),
-      input.workspace,
-      state,
-      (work) => state.lock(work),
-    );
-    try {
-      await repository.refreshExternal();
-      return await runDocumentOperation(input, repository);
-    } finally {
-      repository.close();
-    }
+    return open(instance);
   }
   const repo = new NativeRepository(input.workspace, async (space, action, args) => {
     const reply = JSON.parse(tioWorkspace(space, JSON.stringify({ action, ...args })));
@@ -101,9 +91,14 @@ export async function run(input: Shortcut) {
   }
 }
 
-async function runDocumentOperation(input: Shortcut, repository: WorkspaceRepository) {
+async function runDocumentOperation(
+  input: Shortcut,
+  repository: WorkspaceRepository,
+  unavailable: 'unavailable' | 'pending' = 'unavailable',
+) {
   const root = (await repository.readObjects!([input.workspace])).entries[0]?.object;
-  if (root?.type !== 'workspace' || root.deleted) throw new HostError('unavailable');
+  if (root?.type !== 'workspace' || root.deleted)
+    throw new HostError(root?.deleted ? 'unavailable' : unavailable);
   const runtime = await WorkspaceRuntime.open(repository, undefined, undefined, {
     targetId: input.document,
   });

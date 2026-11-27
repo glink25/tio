@@ -31,6 +31,7 @@ import { EditorLinkToolbar, EditorSideMenu, shadCNComponents } from './component
 import { ContentLinksContext } from './content-links';
 import { EditorFilePanel, EditorFormattingToolbar } from './file-panel';
 import { insertTransferredFiles } from './file-transfer';
+import { documentImageGallery, OpenEditorImage, useEditorImages } from './image-preview';
 import { EditorInteraction, isolateInteractionNodeView } from './interaction';
 import { MentionMenu, SlashMenu } from './mention-menu';
 import { MobileEditorToolbar, TouchScroll, useTouchEditing } from './mobile-toolbar';
@@ -48,11 +49,15 @@ import {
   PortalContext,
   EditHistoryContext,
   InteractionBoundary,
+  ImageViewer,
+  OverlayPresence,
+  type PreviewImage,
 } from '@tio/ui';
 import type { NodeView } from '@tiptap/pm/view';
 import { FilePlus, Database, Code } from 'lucide-react';
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useLayoutEffect,
@@ -122,7 +127,10 @@ const MentionInline = createReactInlineContentSpec(
     type: 'mention',
     propSchema: {
       workspaceId: { default: '' },
-      kind: { default: 'page', values: ['page', 'database', 'record', 'github-user'] as const },
+      kind: {
+        default: 'page',
+        values: ['page', 'database', 'record', 'github-user', 'gitee-user'] as const,
+      },
       id: { default: '' },
       login: { default: '' },
       anchor: { default: '' },
@@ -135,8 +143,8 @@ const MentionInline = createReactInlineContentSpec(
       return (
         <MentionLabel
           reference={
-            reference.kind === 'github-user'
-              ? { ...reference, kind: 'github-user', login }
+            reference.kind === 'github-user' || reference.kind === 'gitee-user'
+              ? { ...reference, kind: reference.kind, login }
               : {
                   ...reference,
                   kind: reference.kind,
@@ -262,6 +270,11 @@ export function EditorContent({
   const portal = useContext(PortalContext);
   const [chromePortal, setChromePortal] = useState<HTMLDivElement | null>(null);
   const history = useContext(EditHistoryContext);
+  const [preview, setPreview] = useState<{
+    images: PreviewImage[];
+    index: number;
+    trigger: HTMLElement;
+  }>();
   const original = useRef(blocks);
   const applying = useRef(false);
   const sent = useRef(new Set<string>());
@@ -362,6 +375,14 @@ export function EditorContent({
     dropCursor: { color: 'var(--color-muted)', width: 2 },
     resolveFileUrl: resolve,
   });
+  const openImage = useCallback(
+    (blockId: string, trigger: HTMLElement) => {
+      const gallery = documentImageGallery(editor, blockId);
+      if (gallery) setPreview({ ...gallery, trigger });
+    },
+    [editor],
+  );
+  useEditorImages(editor, readOnly, openImage);
   useEffect(() => {
     let cancelled = false;
     // BlockNote mounts React node views synchronously; run outside React's effect commit.
@@ -486,19 +507,24 @@ export function EditorContent({
           {!readOnly && (
             <FilePanelController filePanel={EditorFilePanel} floatingUIOptions={floatingMotion} />
           )}
-          {!readOnly &&
-            (touch ? (
-              <MobileEditorToolbar onPortal={setChromePortal} />
-            ) : (
-              <>
-                <DesktopFormattingToolbarController
-                  formattingToolbar={EditorFormattingToolbar}
-                  floatingUIOptions={floatingMotion}
-                />
-                <EditorLinkToolbar />
-                <SideMenuController sideMenu={EditorSideMenu} floatingUIOptions={floatingMotion} />
-              </>
-            ))}
+          <OpenEditorImage.Provider value={openImage}>
+            {!readOnly &&
+              (touch ? (
+                <MobileEditorToolbar onPortal={setChromePortal} />
+              ) : (
+                <>
+                  <DesktopFormattingToolbarController
+                    formattingToolbar={EditorFormattingToolbar}
+                    floatingUIOptions={floatingMotion}
+                  />
+                  <EditorLinkToolbar />
+                  <SideMenuController
+                    sideMenu={EditorSideMenu}
+                    floatingUIOptions={floatingMotion}
+                  />
+                </>
+              ))}
+          </OpenEditorImage.Provider>
           <SuggestionMenuController
             floatingUIOptions={{
               ...floatingMotion,
@@ -577,6 +603,20 @@ export function EditorContent({
             }
           />
         </BlockNoteView>
+        <OverlayPresence>
+          {preview && (
+            <ImageViewer
+              images={preview.images}
+              initialIndex={preview.index}
+              resolve={resolve}
+              close={() => setPreview(undefined)}
+              restoreFocus={() => {
+                const trigger = preview.trigger.isConnected ? preview.trigger : editor.domElement;
+                trigger?.focus({ preventScroll: true });
+              }}
+            />
+          )}
+        </OverlayPresence>
       </AppSliceContext.Provider>
     </EmbedContext.Provider>
   );

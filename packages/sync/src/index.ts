@@ -161,41 +161,46 @@ export class HostSyncRunner {
     const request = { started: false, initializing: false };
     this.currentRun = request;
     const work = async () => {
+      const initialization = this.host.initialization;
+      request.initializing = !!initialization && !(await initialization.isComplete());
+      if (
+        automatic &&
+        !request.initializing &&
+        (!this.automatic ||
+          (this.host.beforeAutomaticSync && !(await this.host.beforeAutomaticSync())))
+      )
+        return;
+      if (this.disposed || (this.host.beforeSync && !(await this.host.beforeSync()))) return;
+      if (this.disposed || (automatic && !request.initializing && !this.automatic)) return;
+      this.state('syncing');
+      request.started = true;
+      this.dirty = false;
+      this.core.issues = [];
+      await executeSyncBatch(this.core, {
+        initialization,
+        initializing: request.initializing,
+        automatic,
+        automaticEnabled: () => this.automatic,
+        initialized: async () => {
+          if (this.host.beforeAutomaticSync) await this.host.beforeAutomaticSync();
+          if (!this.disposed && (!automatic || this.automatic)) request.initializing = false;
+        },
+      });
+      if (this.disposed) return;
+      this.issues = this.core.issues;
+      if (this.issues.length)
+        this.state(this.issues.some((i) => i.code === 'permission') ? 'permission' : 'issues');
+      else {
+        this.attempts = 0;
+        this.state(this.dirty || this.debounce || this.rerun ? 'pending' : 'synced');
+      }
+    };
+    this.running = (async () => {
       try {
-        const initialization = this.host.initialization;
-        request.initializing = !!initialization && !(await initialization.isComplete());
-        if (
-          automatic &&
-          !request.initializing &&
-          (!this.automatic ||
-            (this.host.beforeAutomaticSync && !(await this.host.beforeAutomaticSync())))
-        )
-          return;
-        if (this.disposed || (this.host.beforeSync && !(await this.host.beforeSync()))) return;
-        if (this.disposed || (automatic && !request.initializing && !this.automatic)) return;
-        this.state('syncing');
-        request.started = true;
-        this.dirty = false;
-        this.core.issues = [];
-        await executeSyncBatch(this.core, {
-          initialization,
-          initializing: request.initializing,
-          automatic,
-          automaticEnabled: () => this.automatic,
-          initialized: async () => {
-            if (this.host.beforeAutomaticSync) await this.host.beforeAutomaticSync();
-            if (!this.disposed && (!automatic || this.automatic)) request.initializing = false;
-          },
-        });
-        if (this.disposed) return;
-        this.issues = this.core.issues;
-        if (this.issues.length)
-          this.state(this.issues.some((i) => i.code === 'permission') ? 'permission' : 'issues');
-        else {
-          this.attempts = 0;
-          this.state(this.dirty || this.debounce || this.rerun ? 'pending' : 'synced');
-        }
+        if (this.host.lock) await this.host.lock('tio-sync-' + this.endpoint, work);
+        else await work();
       } catch (caught) {
+        if (this.disposed) return;
         const e = this.host.normalizeError?.(caught) ?? caught;
         this.retryAt = (e as { retryAt?: number } | null)?.retryAt ?? 0;
         this.host.onError?.(e);
@@ -220,10 +225,6 @@ export class HostSyncRunner {
           );
         }
       }
-    };
-    this.running = (async () => {
-      if (this.host.lock) await this.host.lock('tio-sync-' + this.endpoint, work);
-      else await work();
     })().finally(() => {
       this.running = null;
       this.currentRun = undefined;

@@ -214,3 +214,140 @@ it('queries absolute record windows with consistent totals and releases view pro
   expect((await host.readObjects(['r200'])).entries[0].object.opaque).toEqual({ keep: true });
   runtime.dispose();
 });
+
+it('uses confirmed record versions across lightweight listing and checked SDK edits', async () => {
+  const { AppSliceBroker } = await import('../../../packages/web-editor/src/app-slice/broker');
+  const repository = new MemoryRepository();
+  const document = object('page', 'w', {
+    id: 'drawing',
+    title: 'Drawing',
+    blocks: [
+      {
+        id: 'slice',
+        type: 'appSlice',
+        props: {
+          title: 'Drawing',
+          html: '<canvas></canvas>',
+          runtimeVersion: 1,
+          height: 320,
+          autoHeight: false,
+        },
+        content: [],
+        children: [],
+      },
+      {
+        id: 'embed',
+        type: 'databaseView',
+        props: { databaseId: 'strokes', viewId: 'all' },
+        content: [],
+        children: [],
+      },
+    ],
+  });
+  const strokes = object('database', 'w', {
+    id: 'strokes',
+    name: 'Strokes',
+    fields: [{ id: 'name', name: 'Name', type: 'title' }],
+  });
+  const view = object('databaseView', 'w', {
+    id: 'all',
+    databaseId: 'strokes',
+    name: 'All',
+    layout: 'table',
+    filters: [],
+    sorts: [],
+    visibleFieldIds: ['name'],
+  });
+  const record = object('record', 'w', {
+    id: 'stroke',
+    databaseId: 'strokes',
+    properties: { name: 'First' },
+    blocks: [textBlock('Preserved')],
+    futureField: { value: true },
+  });
+  await repository.commit({
+    id: 'seed',
+    expectedVersion: 0,
+    changes: [document, strokes, view, record],
+    assetIds: [],
+  });
+  const loads = vi.spyOn(repository, 'readObjects');
+  const changes = vi.spyOn(repository, 'subscribeChanges').mockReturnValue(() => {});
+  const runtime = await WorkspaceRuntime.open(repository, undefined, undefined, {
+    targetId: document.id,
+  });
+  const broker = new AppSliceBroker({
+    runtime,
+    pageId: document.id,
+    blockId: 'slice',
+    workspaceId: 'w',
+    permission: () => ({ data: 'readWrite', allowExternalResources: false }),
+    readOnly: () => false,
+    context: () => ({}),
+    resize: () => {},
+  });
+  type Row = { id: string; version: string };
+  const call = (method: string, payload: object = {}) =>
+    broker.invoke(method, { ...payload, databaseId: strokes.id }, crypto.randomUUID());
+  const list = async () => ((await call('records.query')) as { records: Row[] }).records;
+  const update = ({ id, version }: Row, name: string) =>
+    call('records.update', { id, version, properties: { name } });
+  try {
+    const [row] = await list();
+    expect(loads.mock.calls.flatMap(([ids]) => ids)).not.toContain(record.id);
+    expect(await call('records.get', { id: row.id })).toMatchObject({ version: row.version });
+
+    const updated = (await update(row, 'From query')) as Row;
+    expect(await list()).toEqual([expect.objectContaining(updated)]);
+    await expect(update(row, 'Stale')).rejects.toMatchObject({
+      code: 'CONFLICT',
+      reason: 'version_mismatch',
+    });
+    const { object: stored } = (await repository.readObjects([row.id])).entries[0];
+    expect(stored).toMatchObject({ blocks: record.blocks, futureField: record.futureField });
+
+    const owner = Symbol('pending input');
+    runtime.recordDraft(owner, 'From query', 'Unconfirmed', () => {});
+    await expect(update(updated, 'Would overwrite')).rejects.toMatchObject({
+      code: 'CONFLICT',
+      reason: 'version_mismatch',
+    });
+    runtime.discardDraft(owner);
+    expect((await repository.readObjects([row.id])).entries[0].object.properties?.name).toBe(
+      'From query',
+    );
+
+    const created = (await call('records.create', { properties: { name: 'Second' } })) as Row;
+    expect(await list()).toContainEqual(expect.objectContaining(created));
+    const latest = (await call('records.get', { id: row.id })) as Row;
+    const updatedFromGet = (await update(latest, 'From get')) as Row;
+    expect(await list()).toContainEqual(expect.objectContaining(updatedFromGet));
+    const storedAgain = (await repository.readObjects([row.id])).entries[0].object;
+    await repository.commit({
+      id: 'external',
+      expectedVersion: (await repository.readObjects([row.id])).version,
+      changes: [{ ...storedAgain, properties: { name: 'External' } }],
+      assetIds: [],
+    });
+    const currentProjection = (await list()).find((item) => item.id === row.id)!;
+    expect(currentProjection.version).not.toBe(updatedFromGet.version);
+    expect(runtime.confirmedEntry(row.id)?.object.properties?.name).toBe('From get');
+    await expect(update(currentProjection, 'From newer query')).resolves.toMatchObject({
+      properties: { name: 'From newer query' },
+    });
+    const rows = await list();
+    for (const source of [
+      rows.find((item) => item.id === row.id)!,
+      (await call('records.get', { id: created.id })) as Row,
+    ])
+      await expect(
+        call('records.delete', { id: source.id, version: source.version }),
+      ).resolves.toBeNull();
+    expect(await list()).toEqual([]);
+  } finally {
+    broker.dispose();
+    runtime.dispose(true);
+    loads.mockRestore();
+    changes.mockRestore();
+  }
+});

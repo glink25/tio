@@ -54,7 +54,7 @@ export function extractReferences(o: TioObject, database?: TioObject): Reference
     fieldName?: string,
   ) => {
     for (const ref of refs)
-      if (ref.kind !== 'github-user' && ref.workspaceId === o.workspaceId)
+      if (!('login' in ref) && ref.workspaceId === o.workspaceId)
         results.push({
           source,
           target: ref,

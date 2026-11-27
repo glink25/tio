@@ -249,7 +249,11 @@ function bootstrap(token: string) {
       pending.delete(message.id);
       if (message.error)
         request.reject(
-          Object.assign(new Error(message.error.message), { code: message.error.code }),
+          Object.assign(new Error(message.error.message), {
+            code: message.error.code,
+            reason: message.error.reason,
+            fieldKey: message.error.fieldKey,
+          }),
         );
       else
         request.resolve(

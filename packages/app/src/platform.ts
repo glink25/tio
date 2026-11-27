@@ -8,8 +8,9 @@ import type {
   WorkspaceRepository,
   WorkspaceSession,
 } from '@tio/core';
+import type { GiteeEndpoint } from '@tio/provider-gitee';
 import type { GitHubCache } from '@tio/provider-github';
-import type { Credentials } from '@tio/provider-github/credentials';
+import type { Credentials, GitProvider } from '@tio/provider-github/credentials';
 
 import type { ConnectionBinding } from './services/connection-adapters';
 import type { DesktopChrome } from './services/desktop-chrome';
@@ -32,6 +33,7 @@ export interface ReplicaStorage extends WorkspaceRepository, SyncRepository {
   readonly instanceId: string;
   storageComplete: boolean;
   setComplete(): Promise<void>;
+  isComplete(): boolean | Promise<boolean>;
   remoteAssets: boolean;
   storageCapabilities: RepositoryCapabilities;
   relations: NonNullable<WorkspaceRepository['relations']> & {
@@ -76,6 +78,7 @@ export interface WorkspaceWindows {
   changeConnection<T>(work: () => Promise<T>, session?: string): Promise<T>;
 }
 export interface AppPlatform {
+  assistantFetch: import('./services/assistant-fetch').AssistantFetch;
   mobile?: 'ios' | 'android';
   deviceLabel: 'welcome.device' | 'welcome.offline';
   catalog(): HostCatalog;
@@ -87,12 +90,12 @@ export interface AppPlatform {
     same(a: FolderHandle, b: FolderHandle): Promise<boolean> | boolean;
     binding(connection: import('@tio/core').Connection, handle?: FolderHandle): ConnectionBinding;
   };
-  github: {
-    Replica: new (instance: string, workspace: string) => ReplicaStorage;
+  Replica: new (instance: string, workspace: string) => ReplicaStorage;
+  git: {
     cache(namespace: string[]): GitHubCache;
     persistEndpoints(
       key: string,
-      entries: [string, import('@tio/provider-github').GitHubEndpoint][],
+      entries: [string, import('@tio/provider-github').GitHubEndpoint | GiteeEndpoint][],
     ): Promise<void>;
   };
   auth: {
@@ -103,9 +106,10 @@ export interface AppPlatform {
     persist(value?: Credentials): Promise<void>;
     remember(value?: Credentials): void;
     lock<T>(work: () => Promise<T>): Promise<T>;
-    redirectURI(): string;
-    acceptsCallback(input: string): boolean;
+    redirectURI(provider: GitProvider): string;
+    acceptsCallback(input: string, provider: GitProvider): boolean;
     open(url: string): Promise<void>;
+    authenticate?(url: string): Promise<string | null>;
     callbacks?: {
       current(): Promise<string[]>;
       subscribe(listener: (urls: string[]) => void): Promise<() => void>;

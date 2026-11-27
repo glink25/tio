@@ -10,7 +10,7 @@ import {
 } from '@tio/core';
 import type { WorkspaceSession, Connection } from '@tio/core';
 import { t, errorMessage } from '@tio/i18n';
-import { githubConnectionUserId } from '@tio/provider-github';
+import { gitConnection, gitConnectionId, type GitProvider } from '@tio/provider-github/credentials';
 import { exportZip, exportMarkdownZip, importZip } from '@tio/serialization';
 import type { SyncSnapshot } from '@tio/sync';
 import { toast } from '@tio/ui';
@@ -31,10 +31,10 @@ import { platform } from '../../platform';
 import { pickFolder } from '../../services/folder-access';
 import {
   connectToken,
-  finishGitHubLogin,
+  finishGitLogin,
   nativeCallback,
   credentials,
-  loginGitHub,
+  loginGit,
 } from '../../services/github-auth';
 import { logoutCoordinator } from '../../services/logout';
 import { contentUrl, createContentRouter, readRoute } from '../../services/navigation';
@@ -67,8 +67,8 @@ export function useWorkspace() {
     requestId: number;
   }>({ requestId: 0 });
   const [syncStatus, setSyncStatus] = useState<SyncSnapshot>({ phase: 'idle' });
-  const [syncing, setSyncing] = useState(false);
-  const syncRequest = useRef<Promise<void> | null>(null);
+  const [syncingSession, setSyncingSession] = useState<string>();
+  const syncRequest = useRef<{ id: string; work: Promise<void> } | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -95,7 +95,7 @@ export function useWorkspace() {
     });
     return () => coordinator.current?.close();
   }, [services, windows]);
-  const [githubOpen, setGithubOpen] = useState(false);
+  const [tokenProvider, setTokenProvider] = useState<GitProvider>();
   const [menu, setMenu] = useState(false);
   const [automationOpen, setAutomationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -244,11 +244,15 @@ export function useWorkspace() {
           if (disposed || exchanging || !callback) return;
           exchanging = true;
           try {
-            if (await finishGitHubLogin(callback)) {
+            const provider = await finishGitLogin(callback);
+            if (provider) {
               const account = credentials();
-              if (account && githubConnectionUserId(services.connection?.id) === account.userId)
+              if (
+                account &&
+                services.connection?.id === gitConnectionId(account.provider, account.userId)
+              )
                 await services.credentialsChanged();
-              else await connect('github');
+              else await connect(provider);
               setConnection(services.connection);
               services.startSync(setSyncStatus);
               await loadSpaces();
@@ -265,18 +269,21 @@ export function useWorkspace() {
         }
         launchURL = (await callbacks.current()).find(nativeCallback);
       }
-      const loggedIn = await finishGitHubLogin(launchURL);
+      const loggedIn = await finishGitLogin(launchURL);
       await services.initialize();
       const account = credentials();
       const restoringAuthorization =
-        loggedIn && account && githubConnectionUserId(services.connection?.id) === account.userId;
-      if (loggedIn && !restoringAuthorization) await connect('github');
+        loggedIn &&
+        account &&
+        services.connection?.id === gitConnectionId(account.provider, account.userId);
+      if (loggedIn && !restoringAuthorization) await connect(loggedIn);
       if (disposed) return;
       setConnection(services.connection);
       services.startSync(setSyncStatus);
       const active = await services.setting('active');
       setRecent(active);
       const available = await services.sessions();
+      if (!disposed) setSessions(available);
       const route = router.read();
       const mayRestoreRecent = !windows || windows.restoreRecent;
       const selected = windows?.session
@@ -288,12 +295,27 @@ export function useWorkspace() {
       if (windows?.session && !selected) await windows.release();
       if (selected) {
         await activate(selected);
-        await services.refreshRemote();
+        void services.refreshRemote().catch((error) => {
+          if (!disposed) reportError(error);
+        });
       } else {
-        await services.refreshRemote(true);
-        const discovered = await services.sessions();
-        const linked = discovered.find((s) => s.workspaceId === route?.workspaceId);
-        if (linked) await activate(linked);
+        const connection = services.connection;
+        const discover = async () => {
+          await services.refreshRemote(true);
+          if (disposed || connection !== services.connection) return;
+          const discovered = await services.sessions();
+          const linked = discovered.find((s) => s.workspaceId === route?.workspaceId);
+          if (linked && !sessionRef.current && router.read()?.workspaceId === route?.workspaceId)
+            await activate(linked);
+          if (!disposed) setSessions(discovered);
+        };
+        if (connection?.kind === 'folder') {
+          void discover().catch((error) => {
+            if (!disposed && connection === services.connection) setLoadError(errorMessage(error));
+          });
+        } else {
+          await discover();
+        }
       }
       if (!disposed) await refreshSessions();
     })()
@@ -610,6 +632,7 @@ export function useWorkspace() {
     setLoading(true);
     setLoadError('');
     try {
+      await refreshSessions();
       await services.refreshRemote(true);
       await refreshSessions();
     } catch (e) {
@@ -695,24 +718,23 @@ export function useWorkspace() {
       setBusy(false);
     }
   }
-  async function github(token?: string) {
+  async function signInGit(provider: GitProvider, token?: string) {
     try {
       setBusy(true);
-      const expected =
-        services.connection?.kind === 'github'
-          ? Number(services.connection.id.replace('github-', ''))
-          : undefined;
-      if (!token) {
+      const current = gitConnection(services.connection?.id);
+      const expected = current?.provider === provider ? current.userId : undefined;
+      if (token === undefined) {
         await runtimeRef.current?.flush();
-        await loginGitHub(expected);
-        return;
+        if ((await loginGit(provider, expected)) !== 'success') return;
+      } else {
+        await connectToken(provider, token, expected);
       }
-      await connectToken(token, expected);
-      if (!services.connection) await connect('github');
-      else if (services.connection.kind === 'github') await services.credentialsChanged();
+      if (!services.connection || (token === undefined && services.connection.kind !== provider))
+        await connect(provider);
+      else if (services.connection.kind === provider) await services.credentialsChanged();
       setConnection(services.connection);
       services.startSync(setSyncStatus);
-      setGithubOpen(false);
+      setTokenProvider(undefined);
       await loadSpaces();
     } catch (e) {
       if (sessionRef.current) services.reportStatusError(e);
@@ -728,6 +750,7 @@ export function useWorkspace() {
       await connect('folder', handle);
       setConnection(services.connection);
       services.startSync(setSyncStatus);
+      setBusy(false);
       await loadSpaces();
     } catch (e) {
       if ((e as Error).name !== 'AbortError') reportError(e);
@@ -736,8 +759,9 @@ export function useWorkspace() {
     }
   }
   async function authorize() {
-    if (services.connection?.kind === 'github' && credentials()?.mode !== 'app') {
-      setGithubOpen(true);
+    const git = gitConnection(services.connection?.id);
+    if (git && (!platform().auth.origin || credentials()?.mode !== 'app')) {
+      setTokenProvider(git.provider);
       return;
     }
     await services.authorize();
@@ -847,10 +871,13 @@ export function useWorkspace() {
                 })
                 .catch((error) => mentionCallbacks.current.reportError(error));
             },
-            () => services.mentionPeople(mentionWorkspaceId),
+            connection?.kind === 'github' || connection?.kind === 'gitee'
+              ? () => services.mentionPeople(mentionWorkspaceId)
+              : undefined,
+            connection?.kind === 'gitee' ? 'gitee-user' : 'github-user',
           )
         : undefined,
-    [runtime, mentionWorkspaceId, services],
+    [runtime, mentionWorkspaceId, services, connection?.kind],
   );
   const isVisible = visibility(objects);
   const current = selected
@@ -937,18 +964,22 @@ export function useWorkspace() {
     }
   };
   function syncWorkspace() {
-    if (syncRequest.current) return syncRequest.current;
+    const id = sessionRef.current?.id ?? '';
+    if (syncRequest.current?.id === id) return syncRequest.current.work;
     if (syncStatus.phase === 'syncing') return Promise.resolve();
-    setSyncing(true);
-    const request = services
+    setSyncingSession(id);
+    const work = services
       .sync()
-      .catch((error) => services.reportStatusError(error))
+      .catch((error) => {
+        if ((sessionRef.current?.id ?? '') === id) services.reportStatusError(error);
+      })
       .finally(() => {
+        if (syncRequest.current?.work !== work) return;
         syncRequest.current = null;
-        setSyncing(false);
+        setSyncingSession(undefined);
       });
-    syncRequest.current = request;
-    return request;
+    syncRequest.current = { id, work };
+    return work;
   }
   return {
     graph,
@@ -961,7 +992,7 @@ export function useWorkspace() {
     manualSync:
       services.hasReplicaSync && (workspace ? workspace.manualSync === true : services.manualSync),
     canSetManualSync: !!workspace && editable(workspace) && !!runtime?.can(workspace),
-    syncing: syncing || syncStatus.phase === 'syncing',
+    syncing: syncingSession === (session?.id ?? '') || syncStatus.phase === 'syncing',
     syncWorkspace,
     workspaceAction,
     actionBusy,
@@ -996,9 +1027,9 @@ export function useWorkspace() {
     setLogoutOpen,
     loggingOut,
     logoutError,
-    github,
-    githubOpen,
-    setGithubOpen,
+    signInGit,
+    tokenProvider,
+    setTokenProvider,
     automationOpen,
     setAutomationOpen,
     settingsOpen,

@@ -14,9 +14,16 @@ import type { DateValue, TioObject } from '@tio/core';
 import { dateInput, localTimeZone, zonedDateTime } from '@tio/database';
 import { errorMessage } from '@tio/i18n';
 import { useT, type TranslationKey } from '@tio/i18n';
-import { FilePicker, useAssetPolicy } from '@tio/ui';
+import {
+  FilePicker,
+  ImageViewer,
+  OverlayPresence,
+  useAssetPolicy,
+  type PreviewImage,
+} from '@tio/ui';
 import { OptionsPanel } from '@tio/ui';
 import { MentionLabel, MentionPicker, Button, useDraftHistory, Popover } from '@tio/ui';
+import { Image } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 
 import { useDisplayValue } from './display-value';
@@ -50,19 +57,79 @@ export function OptionTag({ label, color = 'gray' }: { label: string; color?: st
   );
 }
 export { fieldColors };
-function AssetItem({
-  refValue,
+function FileList({
+  value,
   objects,
   resolve,
   remove,
+}: Pick<FieldInputProps, 'value' | 'objects' | 'resolve'> & {
+  remove?: (ref: string) => void;
+}) {
+  const [preview, setPreview] = useState<{
+    images: PreviewImage[];
+    index: number;
+    trigger: HTMLButtonElement;
+  }>();
+  const files = (Array.isArray(value) ? (value as string[]) : []).map((ref) => ({
+    ref,
+    asset: objects.find((o) => o.id === ref.slice(6) && o.type === 'asset' && !o.deleted),
+  }));
+  return (
+    <>
+      <div className="w-full min-w-0 space-y-2">
+        {files.map(({ ref, asset }) => (
+          <AssetItem
+            key={ref}
+            refValue={ref}
+            asset={asset}
+            resolve={resolve}
+            remove={remove ? () => remove(ref) : undefined}
+            openImage={
+              asset?.mime?.startsWith('image/')
+                ? (trigger) => {
+                    const images = files.flatMap(({ ref, asset }) =>
+                      asset?.mime?.startsWith('image/') ? [{ ref, name: asset.filename }] : [],
+                    );
+                    setPreview({
+                      images,
+                      index: images.findIndex((image) => image.ref === ref),
+                      trigger,
+                    });
+                  }
+                : undefined
+            }
+          />
+        ))}
+      </div>
+      <OverlayPresence>
+        {preview && (
+          <ImageViewer
+            images={preview.images}
+            initialIndex={preview.index}
+            resolve={resolve}
+            close={() => setPreview(undefined)}
+            restoreFocus={() => preview.trigger.focus({ preventScroll: true })}
+          />
+        )}
+      </OverlayPresence>
+    </>
+  );
+}
+
+function AssetItem({
+  refValue,
+  asset,
+  resolve,
+  remove,
+  openImage,
 }: {
   refValue: string;
-  objects: TioObject[];
+  asset?: TioObject;
   resolve?: (ref: string) => Promise<string>;
   remove?: () => void;
+  openImage?: (trigger: HTMLButtonElement) => void;
 }) {
   const t = useT();
-  const asset = objects.find((o) => o.id === refValue.slice(6) && o.type === 'asset' && !o.deleted);
   const [url, setUrl] = useState('');
   useEffect(() => {
     let active = true;
@@ -78,8 +145,21 @@ function AssetItem({
   }, [refValue, resolve, asset]);
   return (
     <div className="flex min-w-0 items-center gap-2 rounded border border-line p-2">
-      {url && asset?.mime?.startsWith('image/') && (
-        <img src={url} alt="" className="size-10 shrink-0 rounded object-cover" />
+      {openImage && (
+        <button
+          type="button"
+          aria-label={
+            asset?.filename ? `${t('imageViewer.open')} · ${asset.filename}` : t('imageViewer.open')
+          }
+          className="grid size-10 shrink-0 cursor-zoom-in place-items-center overflow-hidden rounded bg-surface-hover text-muted focus-visible:outline-2"
+          onClick={(event) => openImage(event.currentTarget)}
+        >
+          {url ? (
+            <img src={url} alt="" className="size-full object-cover" />
+          ) : (
+            <Image size={18} aria-hidden />
+          )}
+        </button>
       )}
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm">{asset?.filename ?? t('database.missingFile')}</div>
@@ -119,14 +199,7 @@ export function FieldValue(
         ))}
       </div>
     );
-  if (field.type === 'files')
-    return (
-      <div className="w-full min-w-0 space-y-1">
-        {(Array.isArray(value) ? (value as string[]) : []).map((ref) => (
-          <AssetItem key={ref} refValue={ref} objects={objects} resolve={resolve} />
-        ))}
-      </div>
-    );
+  if (field.type === 'files') return <FileList value={value} objects={objects} resolve={resolve} />;
   if (['select', 'multiSelect', 'status'].includes(field.type))
     return (
       <div className="flex flex-wrap gap-1">
@@ -492,15 +565,12 @@ export function FieldInput(props: FieldInputProps) {
   else if (field.type === 'files')
     control = (
       <div className="w-full min-w-0 space-y-2">
-        {(Array.isArray(draft) ? (draft as string[]) : []).map((ref) => (
-          <AssetItem
-            key={ref}
-            refValue={ref}
-            objects={objects}
-            resolve={resolve}
-            remove={() => change((draft as string[]).filter((r) => r !== ref))}
-          />
-        ))}
+        <FileList
+          value={draft}
+          objects={objects}
+          resolve={resolve}
+          remove={(ref) => change((draft as string[]).filter((value) => value !== ref))}
+        />
         {upload ? (
           <FilePicker
             error={error}
@@ -644,7 +714,7 @@ export function FieldInput(props: FieldInputProps) {
       aria-label={`${field.name} editor`}
       className="tio-field-input w-full min-w-0 space-y-2"
       onKeyDown={(e) => {
-        if (props.commitMode === 'form') return;
+        if (props.commitMode === 'form' || !e.currentTarget.contains(e.target as Node)) return;
         if (e.key === 'Escape' && cancel) {
           e.preventDefault();
           e.stopPropagation();

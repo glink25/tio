@@ -147,6 +147,44 @@ describe('persistence and synchronization', () => {
     expect(initial.issues).toEqual([]);
     expect(await (await acquiring.blob('asset_1'))?.text()).toBe('abc');
   });
+  it('publishes a new attachment from an on-demand replica before its page without fetching old bytes', async () => {
+    const local = store();
+    local.remoteAssets = true;
+    const files = new MemoryProvider();
+    const content = new FileWorkspaceContent(files, 'base_1');
+    const sync = new SyncCore(local, content, 'endpoint', 'base_1');
+    const root = object('workspace', 'base_1', { id: 'base_1', name: 'Folder' });
+    const old = object('asset', 'base_1', {
+      id: 'old_asset',
+      assetPath: 'assets/old.png',
+      mime: 'image/png',
+      byteSize: 3,
+    });
+    const added = { ...old, id: 'new_asset', assetPath: 'assets/new.png' };
+    const linked = page();
+    linked.blocks![0].props.url = 'asset:new_asset';
+    await content.write(root);
+    await content.write(old);
+    await content.writeAsset(old, new Uint8Array([1, 2, 3]));
+    await sync.pull();
+    expect(await local.readAsset(old.id)).toBeUndefined();
+    await local.batch([added, linked], new Map([[added.id, new Blob(['abc'])]]));
+
+    const writes: string[] = [];
+    const readAsset = vi.spyOn(content, 'readAsset');
+    files.beforeWrite = async (path) => {
+      writes.push(path);
+      if (path === pathFor(linked)) throw new Error('Directory write interrupted');
+    };
+    await sync.run();
+    expect(readAsset).not.toHaveBeenCalled();
+    expect(writes).toEqual(['workspaces/base_1/assets/new.png', pathFor(added), pathFor(linked)]);
+    expect((await local.get(added.id))?.sync.endpoint.base).toEqual(added);
+    expect((await local.get(linked.id))?.sync.endpoint).toBeUndefined();
+    files.beforeWrite = undefined;
+    await engine(local, files).sync();
+    expect((await local.get(linked.id))?.sync.endpoint.base).toEqual(linked);
+  });
   it.each(['blocks', 'icon', 'cover'] as const)(
     'blocks publication if a %s attachment cannot upload',
     async (kind) => {

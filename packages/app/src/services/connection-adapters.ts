@@ -14,7 +14,7 @@ import { t } from '@tio/i18n';
 import type { WorkspaceRuntime } from '@tio/workspace';
 
 import { platform, type FolderHandle } from '../platform';
-import { githubBinding } from './github-binding';
+import { gitBinding } from './github-binding';
 export interface ConnectionBinding {
   isContentReady?(workspaceId: string): boolean;
   workspaceActions?(workspaceId: string): import('@tio/core').WorkspaceActions;
@@ -30,13 +30,15 @@ export interface ConnectionBinding {
   sync?(
     workspaceId: string,
     repository: WorkspaceRepository,
-  ): {
-    store: import('@tio/core').SyncRepository;
-    content: WorkspaceContentPort;
-    endpoint: string;
-    pollMs?: number;
-    initialization: import('@tio/sync').ReplicaInitialization;
-  };
+  ):
+    | {
+        store: import('@tio/core').SyncRepository;
+        content: WorkspaceContentPort;
+        endpoint: string;
+        pollMs?: number;
+        initialization: import('@tio/sync').ReplicaInitialization;
+      }
+    | undefined;
   content(workspaceId: string): WorkspaceContentPort | undefined;
 }
 export type ConnectionFactory = (
@@ -56,7 +58,8 @@ function searchable<T extends WorkspaceRepository & { close(): void }>(repositor
 export const createConnectionBinding: ConnectionFactory = (connection, handle) => {
   switch (connection.kind) {
     case 'github':
-      return githubBinding(connection);
+    case 'gitee':
+      return gitBinding(connection);
     case 'device':
       return {
         identity: {
@@ -90,12 +93,8 @@ export const createConnectionBinding: ConnectionFactory = (connection, handle) =
           throw new Error('Device connection has no remote endpoint');
         },
       };
-    case 'folder': {
-      const binding = platform().folder.binding(connection, handle);
-      const repository = binding.repository.bind(binding);
-      binding.repository = (workspace, instance) => searchable(repository(workspace, instance));
-      return binding;
-    }
+    case 'folder':
+      return platform().folder.binding(connection, handle);
   }
 };
 

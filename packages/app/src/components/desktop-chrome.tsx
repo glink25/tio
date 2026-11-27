@@ -1,14 +1,27 @@
-import { useEffect, useEffectEvent, useState, type CSSProperties } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
 
 import { platform } from '../platform';
 import type { DesktopChromeState } from '../services/desktop-chrome';
 
-export function useDesktopChrome(title: string, sidebar?: { label: string; toggle(): void }) {
+const DesktopChromeContext = createContext<{
+  state?: DesktopChromeState;
+  sidebarListeners?: Set<() => void>;
+}>({});
+
+export function DesktopChromeProvider({ children }: { children: ReactNode }) {
   const chrome = platform().desktopChrome;
   const [state, setState] = useState<DesktopChromeState>();
-  const toggleSidebar = useEffectEvent(() => sidebar?.toggle());
-  const sidebarLabel = sidebar?.label;
-
+  const [sidebarListeners] = useState(() => new Set<() => void>());
   useEffect(() => {
     if (!chrome) return;
     let active = true;
@@ -27,7 +40,7 @@ export function useDesktopChrome(title: string, sidebar?: { label: string; toggl
     update();
     void chrome
       .subscribe((action) => {
-        if (action === 'sidebar') toggleSidebar();
+        if (action === 'sidebar') sidebarListeners.forEach((toggle) => toggle());
         if (action === 'layout') {
           cancelAnimationFrame(animation);
           animation = requestAnimationFrame(update);
@@ -43,7 +56,45 @@ export function useDesktopChrome(title: string, sidebar?: { label: string; toggl
       cancelAnimationFrame(animation);
       unsubscribe?.();
     };
-  }, [chrome]);
+  }, [chrome, sidebarListeners]);
+
+  const overlay = state?.layout === 'overlay' && state.height > 0;
+  useLayoutEffect(() => {
+    if (!overlay) return;
+    const { style } = document.documentElement;
+    const metrics = {
+      '--tio-window-chrome-top': state.height,
+      '--tio-window-chrome-left': state.left,
+      '--tio-window-chrome-right': state.right,
+    };
+    for (const [name, value] of Object.entries(metrics)) style.setProperty(name, `${value}px`);
+    return () => {
+      for (const name of Object.keys(metrics)) style.removeProperty(name);
+    };
+  }, [overlay, state]);
+
+  return (
+    <DesktopChromeContext.Provider value={{ state, sidebarListeners }}>
+      {overlay &&
+        createPortal(<DesktopDragRegion className="tio-modal-drag-region" modal />, document.body)}
+      {children}
+    </DesktopChromeContext.Provider>
+  );
+}
+
+export function useDesktopChrome(title: string, sidebar?: { label: string; toggle(): void }) {
+  const chrome = platform().desktopChrome;
+  const { state, sidebarListeners } = useContext(DesktopChromeContext);
+  const toggleSidebar = useEffectEvent(() => sidebar?.toggle());
+  const sidebarLabel = sidebar?.label;
+  useEffect(() => {
+    if (!sidebarLabel || !sidebarListeners) return;
+    const toggle = () => toggleSidebar();
+    sidebarListeners.add(toggle);
+    return () => {
+      sidebarListeners.delete(toggle);
+    };
+  }, [sidebarLabel, sidebarListeners]);
 
   useEffect(() => {
     void chrome?.title(title, sidebarLabel).catch(() => {});
@@ -67,6 +118,13 @@ export function useDesktopChrome(title: string, sidebar?: { label: string; toggl
   };
 }
 
-export function DesktopDragRegion({ className }: { className?: string }) {
-  return <div aria-hidden="true" data-tauri-drag-region className={className} />;
+export function DesktopDragRegion({ className, modal }: { className?: string; modal?: boolean }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-tauri-drag-region
+      className={className}
+      onPointerDown={modal ? (event) => event.stopPropagation() : undefined}
+    />
+  );
 }

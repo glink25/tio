@@ -151,16 +151,18 @@ fn changed(app: &AppHandle) {
 }
 
 pub fn reset_locks(app: &AppHandle, label: &str) {
-    app.state::<crate::process_lock::ProcessLocks>()
+    let owner = app
+        .state::<crate::process_lock::ProcessLocks>()
         .0
         .renew(label);
-    let owner = app.state::<crate::folder::FolderLocks>().0.renew(label);
-    #[cfg(target_os = "ios")]
+    #[cfg(any(target_os = "ios", target_os = "macos", target_os = "android"))]
     if let Some(owner) = owner {
-        crate::shortcuts::reset_foreground(Some(&owner));
+        crate::git_auth::cancel(app, owner);
     }
-    #[cfg(not(target_os = "ios"))]
+    #[cfg(not(any(target_os = "ios", target_os = "macos", target_os = "android")))]
     let _ = owner;
+    app.state::<crate::assistant_fetch::AssistantRequests>()
+        .cancel_window(label);
 }
 
 pub fn reloading(app: &AppHandle, label: &str) {

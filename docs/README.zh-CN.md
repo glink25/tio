@@ -1,6 +1,6 @@
 # Tio
 
-本地优先的文档与数据库编辑器，可使用设备存储、本地文件夹或 GitHub 仓库。设备、文件夹和 PAT 模式无需应用服务端；GitHub App 登录使用可选的鉴权 Worker。
+本地优先的文档与数据库编辑器，可使用设备存储、本地文件夹、GitHub 或 Gitee 仓库。设备、文件夹和私人令牌模式可独立运行。GitHub 和 Gitee 一键登录共用可选的鉴权 Worker。
 
 [English](README.md) · [Tio 之禅](zen.md)
 
@@ -30,7 +30,7 @@ corepack pnpm dev
 - [数据契约](protocols/data-format.md) · [扩展约定](protocols/extensions.md)
 - [开发与贡献](development/contributing.md) · [测试](development/testing.md)
 - [编辑器接入](../packages/web-editor/docs/integration.md) · [App Slice](../packages/web-editor/docs/app-slice.md)
-- [文件存储](../packages/file-storage/docs/storage.md) · [GitHub 存储](../packages/provider-github/docs/storage.md)
+- [文件存储](../packages/file-storage/docs/storage.md) · [GitHub 存储](../packages/provider-github/docs/storage.md) · [Gitee 存储](../packages/provider-gitee/docs/storage.md)
 - [数据库字段](../packages/database/docs/fields.md) · [代码块](../packages/editor-blocknote/docs/code-blocks.md)
 - [安全说明](governance/SECURITY.md) · [第三方声明](governance/THIRD_PARTY_NOTICES.md) · [变更记录](governance/CHANGELOG.md)
 

@@ -13,6 +13,10 @@ import {
   LoadingSkeleton,
   Modal,
   OverlayPresence,
+  SettingsAction,
+  SettingsField,
+  SettingsFormActions,
+  SettingsGroup,
   SettingsLink,
   SettingsRow,
 } from '@tio/ui';
@@ -21,7 +25,9 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { WorkspaceController } from '../workspace/use-workspace';
+import { resetAssistantAuthorizations } from './authorizations';
 import { assistantProvider, encodeKey, decodeKey } from './config';
+import { assistantScope } from './references';
 
 export type AssistantSettingsPage =
   | { kind: 'assistant-config' | 'assistant-advanced'; id?: string }
@@ -67,6 +73,9 @@ export function AssistantConfigList({
   const [deleting, setDeleting] = useState<AssistantApiConfig>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [resetResult, setResetResult] = useState<{ scope: string; success: boolean }>();
+  const scope =
+    model.connection && workspaceId ? assistantScope(model.connection.id, workspaceId) : undefined;
   const save = useSaveAssistant(model);
   const writable = !!model.workspace && !!model.runtime?.state.getState().writable;
   async function change(operation: (settings: AssistantSettings) => AssistantSettings) {
@@ -90,8 +99,8 @@ export function AssistantConfigList({
     );
   return (
     <>
-      <p className="py-2 text-sm text-muted">{t('assistant.sharedConfig')}</p>
-      <div className="divide-y divide-line">
+      <SettingsGroup title={t('assistant.configuration')}>
+        <p className="py-3 text-sm text-muted">{t('assistant.sharedConfig')}</p>
         {settings.configs.map((config) => (
           <SettingsRow
             key={config.id}
@@ -102,40 +111,64 @@ export function AssistantConfigList({
                 : config.model
             }
           >
-            <Button
-              variant="outline"
-              onClick={() => push({ kind: 'assistant-config', id: config.id })}
-            >
+            <SettingsAction onClick={() => push({ kind: 'assistant-config', id: config.id })}>
               {t('common.edit')}
-            </Button>
-            <Button
+            </SettingsAction>
+            <SettingsAction
               disabled={!writable || busy || settings.defaultConfigId === config.id}
               onClick={() =>
                 void change((settings) => ({ ...settings, defaultConfigId: config.id }))
               }
             >
               {t('assistant.default')}
-            </Button>
-            <Button disabled={!writable || busy} onClick={() => setDeleting(config)}>
+            </SettingsAction>
+            <SettingsAction danger disabled={!writable || busy} onClick={() => setDeleting(config)}>
               {t('ui.delete')}
-            </Button>
+            </SettingsAction>
           </SettingsRow>
         ))}
-      </div>
-      {!settings.configs.length && (
-        <p className="text-sm text-muted">{t('assistant.noConfigurations')}</p>
-      )}
-      <Button
-        variant="outline"
-        disabled={!writable || busy}
-        onClick={() => push({ kind: 'assistant-config' })}
-      >
-        {t('assistant.add')}
-      </Button>
+        {!settings.configs.length && (
+          <p className="py-3 text-sm text-muted">{t('assistant.noConfigurations')}</p>
+        )}
+        <div className="py-3">
+          <SettingsAction
+            disabled={!writable || busy}
+            onClick={() => push({ kind: 'assistant-config' })}
+          >
+            {t('assistant.add')}
+          </SettingsAction>
+        </div>
+      </SettingsGroup>
       <SettingsLink
         label={t('assistant.extraPrompt')}
         open={() => push({ kind: 'assistant-prompt' })}
       />
+      <div className="py-3">
+        <SettingsAction
+          danger
+          disabled={!scope || model.openingWorkspace}
+          onClick={() => {
+            if (!scope) return;
+            try {
+              resetAssistantAuthorizations(scope);
+              setResetResult({ scope, success: true });
+            } catch {
+              setResetResult({ scope, success: false });
+            }
+          }}
+        >
+          {t('assistant.resetAuthorizations')}
+        </SettingsAction>
+        {resetResult && resetResult.scope === scope && (
+          <p className="mt-2 text-sm text-muted" role={resetResult.success ? 'status' : 'alert'}>
+            {t(
+              resetResult.success
+                ? 'assistant.authorizationsReset'
+                : 'assistant.authorizationsResetFailed',
+            )}
+          </p>
+        )}
+      </div>
       {error && !deleting && <p role="alert">{t('assistant.saveFailed')}</p>}
       <OverlayPresence>
         {deleting && (
@@ -207,16 +240,14 @@ function useExitGuard(registerGuard: FormProps['registerGuard'], dirty: boolean,
 export function AssistantConfigForm({
   model,
   configId,
-  advanced,
   advancedTarget,
   openAdvanced,
   registerGuard,
   saved,
 }: FormProps & {
   configId?: string;
-  advanced: boolean;
   advancedTarget: HTMLElement | null;
-  openAdvanced?: () => void;
+  openAdvanced: () => void;
 }) {
   const [baseline] = useState(model.workspace);
   const apiKeyId = useId();
@@ -321,19 +352,18 @@ export function AssistantConfigForm({
   const advancedFields = (
     <>
       {(['contextWindow', 'maxTokens'] as const).map((key) => (
-        <label key={key} className="block text-sm">
-          {t(`assistant.${key}`)}
+        <SettingsField key={key} label={t(`assistant.${key}`)}>
           <input
             type="number"
             min="1"
             step="1"
-            className="mt-1 w-full"
+            className="w-full"
             value={config[key] ?? ''}
             onChange={(event) =>
               patch({ [key]: event.target.value ? Number(event.target.value) : undefined })
             }
           />
-        </label>
+        </SettingsField>
       ))}
       <label className="flex items-center gap-2 text-sm">
         <input
@@ -343,10 +373,9 @@ export function AssistantConfigForm({
         />
         {t('assistant.imageInput')}
       </label>
-      <label className="block text-sm">
-        {t('assistant.customParams')}
+      <SettingsField label={t('assistant.customParams')}>
         <textarea
-          className="mt-1 min-h-32 w-full rounded border border-line bg-panel p-2 font-mono"
+          className="min-h-32 w-full rounded border border-line bg-panel p-2 font-mono"
           value={parameters}
           onChange={(event) => {
             setParameters(event.target.value);
@@ -354,11 +383,12 @@ export function AssistantConfigForm({
             setMessage('');
           }}
         />
-      </label>
+      </SettingsField>
     </>
   );
   return (
     <form
+      className="space-y-5"
       onSubmit={(event) => {
         event.preventDefault();
         void persist();
@@ -366,10 +396,9 @@ export function AssistantConfigForm({
     >
       <fieldset disabled={readonly || saving || testing} className="min-w-0 space-y-3">
         <>
-          <label className="block text-sm">
-            {t('assistant.protocol')}
+          <SettingsField label={t('assistant.protocol')}>
             <select
-              className="mt-1 w-full"
+              className="w-full"
               value={config.apiType}
               onChange={(event) =>
                 patch({ apiType: event.target.value as AssistantApiConfig['apiType'] })
@@ -378,21 +407,19 @@ export function AssistantConfigForm({
               <option value="open-ai-compatible">OpenAI compatible</option>
               <option value="google-ai-studio">Google AI Studio</option>
             </select>
-          </label>
+          </SettingsField>
           {(['name', 'apiUrl', 'model'] as const).map((key) => (
-            <label key={key} className="block text-sm">
-              {t(`assistant.${key}`)}
+            <SettingsField key={key} label={t(`assistant.${key}`)}>
               <input
                 required
-                className="mt-1 w-full"
+                className="w-full"
                 value={config[key]}
                 onChange={(event) => patch({ [key]: event.target.value })}
               />
-            </label>
+            </SettingsField>
           ))}
-          <div className="text-sm">
-            <label htmlFor={apiKeyId}>{t('assistant.apiKey')}</label>
-            <div className="relative mt-1">
+          <SettingsField label={t('assistant.apiKey')} htmlFor={apiKeyId}>
+            <div className="relative">
               <input
                 id={apiKeyId}
                 type={showApiKey ? 'text' : 'password'}
@@ -417,14 +444,8 @@ export function AssistantConfigForm({
                 {showApiKey ? <EyeOff size={16} aria-hidden /> : <Eye size={16} aria-hidden />}
               </IconButton>
             </div>
-          </div>
+          </SettingsField>
         </>
-        {!openAdvanced && (
-          <details open={advanced || undefined}>
-            <summary className="cursor-pointer py-2 text-sm">{t('assistant.advanced')}</summary>
-            <div className="space-y-3">{advancedFields}</div>
-          </details>
-        )}
       </fieldset>
       {advancedTarget &&
         createPortal(
@@ -434,16 +455,16 @@ export function AssistantConfigForm({
           advancedTarget,
         )}
       <>
-        {openAdvanced && <SettingsLink label={t('assistant.advanced')} open={openAdvanced} />}
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
+        <SettingsLink label={t('assistant.advanced')} open={openAdvanced} />
+        {message && <output className="block text-sm">{message}</output>}
+        <SettingsFormActions>
+          <SettingsAction
             type="button"
-            variant="outline"
             disabled={readonly || saving || testing}
             onClick={() => void testConnection()}
           >
             {t('assistant.verify')}
-          </Button>
+          </SettingsAction>
           <Button
             type="submit"
             variant="primary"
@@ -451,8 +472,7 @@ export function AssistantConfigForm({
           >
             {t('assistant.save')}
           </Button>
-        </div>
-        {message && <output className="mt-2 block text-sm">{message}</output>}
+        </SettingsFormActions>
       </>
     </form>
   );
@@ -490,17 +510,24 @@ export function AssistantPromptForm({ model, registerGuard, saved }: FormProps) 
         void persist();
       }}
     >
-      <textarea
-        aria-label={t('assistant.extraPrompt')}
-        disabled={!writable || saving}
-        className="min-h-40 w-full rounded border border-line bg-panel p-2"
-        value={prompt}
-        onChange={(event) => setPrompt(event.target.value)}
-      />
-      {error && <p role="alert">{t('assistant.saveFailed')}</p>}
-      <Button variant="primary" type="submit" disabled={!writable || saving || !dirty}>
-        {t('assistant.save')}
-      </Button>
+      <SettingsField label={t('assistant.extraPrompt')}>
+        <textarea
+          disabled={!writable || saving}
+          className="min-h-40 w-full rounded border border-line bg-panel p-2"
+          value={prompt}
+          onChange={(event) => setPrompt(event.target.value)}
+        />
+      </SettingsField>
+      {error && (
+        <p role="alert" className="text-sm">
+          {t('assistant.saveFailed')}
+        </p>
+      )}
+      <SettingsFormActions>
+        <Button variant="primary" type="submit" disabled={!writable || saving || !dirty}>
+          {t('assistant.save')}
+        </Button>
+      </SettingsFormActions>
     </form>
   );
 }

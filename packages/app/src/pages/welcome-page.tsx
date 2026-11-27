@@ -18,8 +18,8 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
   const starting = useRef(false);
   const [startingEntry, setStartingEntry] = useState(false);
   const entries = connectionEntries({
-    github: () => m.github(),
-    token: () => m.setGithubOpen(true),
+    git: (provider) => m.signInGit(provider),
+    token: m.setTokenProvider,
     device: m.offline,
     folder: m.folder,
   });
@@ -34,6 +34,7 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
       setStartingEntry(false);
     }
   }
+  const hasSavedSpaces = m.sessions.length > 0;
   if (m.connection || m.loading || m.loadError)
     return (
       <main
@@ -68,63 +69,71 @@ export function WelcomePage({ model: m }: { model: WorkspaceController }) {
           </Button>
         )}
         <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto py-8">
-          {m.loading ? (
-            <LoadingSkeleton layout="list" />
-          ) : m.loadError ? (
-            <div role="alert" className="my-auto space-y-4 text-center text-sm">
+          {m.loadError && (
+            <div
+              role="alert"
+              className={
+                hasSavedSpaces ? 'mb-4 space-y-2 text-sm' : 'my-auto space-y-4 text-center text-sm'
+              }
+            >
               <p>{m.loadError}</p>
               <Button onClick={() => (m.connection ? void m.loadSpaces() : location.reload())}>
                 {t('common.retry')}
               </Button>
             </div>
+          )}
+          {m.loading && !hasSavedSpaces ? (
+            <LoadingSkeleton layout="list" />
           ) : (
-            <>
-              <h1 className="mb-4 text-lg font-medium">{t('workspace.choose')}</h1>
-              {!m.sessions.length ? (
-                <div className="flex min-h-0 flex-1 items-center justify-center">
-                  <EmptyStateIllustration kind="workspaces" />
-                </div>
-              ) : (
-                m.sessions.map((s) => (
-                  <div key={s.id} className="flex items-center gap-2">
-                    <Button
-                      disabled={m.busy || m.actionBusy}
-                      variant="outline"
-                      className="min-w-0 flex-1 justify-between py-4 text-left"
-                      onClick={() => void m.activate(s)}
-                    >
-                      <span className="truncate">{s.name}</span>
-                      {m.recent === s.id && (
-                        <span className="shrink-0 rounded bg-surface-hover px-2 py-1 text-xs text-muted">
-                          {t('ui.recent')}
-                        </span>
-                      )}
-                    </Button>
-                    {m.canOpenWindow && (
-                      <IconButton
-                        label={`${t('workspace.openInNewWindow')} · ${s.name}`}
-                        disabled={m.busy || m.actionBusy}
-                        onClick={() => void m.openInNewWindow(s)}
-                      >
-                        <AppWindow size={16} />
-                      </IconButton>
-                    )}
-                    {m.workspaceActions(s).delete && (
-                      <IconButton
-                        label={`${t('workspace.delete')} · ${s.name}`}
-                        disabled={m.busy || m.actionBusy}
-                        onClick={() => m.requestWorkspaceAction(s, 'delete')}
-                      >
-                        <Trash2 size={16} />
-                      </IconButton>
-                    )}
+            (!m.loadError || hasSavedSpaces) && (
+              <>
+                <h1 className="mb-4 text-lg font-medium">{t('workspace.choose')}</h1>
+                {!m.sessions.length ? (
+                  <div className="flex min-h-0 flex-1 items-center justify-center">
+                    <EmptyStateIllustration kind="workspaces" />
                   </div>
-                ))
-              )}
-            </>
+                ) : (
+                  m.sessions.map((s) => (
+                    <div key={s.id} className="flex items-center gap-2">
+                      <Button
+                        disabled={m.busy || m.actionBusy}
+                        variant="outline"
+                        className="min-w-0 flex-1 justify-between py-4 text-left"
+                        onClick={() => void m.activate(s)}
+                      >
+                        <span className="truncate">{s.name}</span>
+                        {m.recent === s.id && (
+                          <span className="shrink-0 rounded bg-surface-hover px-2 py-1 text-xs text-muted">
+                            {t('ui.recent')}
+                          </span>
+                        )}
+                      </Button>
+                      {m.canOpenWindow && (
+                        <IconButton
+                          label={`${t('workspace.openInNewWindow')} · ${s.name}`}
+                          disabled={m.busy || m.actionBusy}
+                          onClick={() => void m.openInNewWindow(s)}
+                        >
+                          <AppWindow size={16} />
+                        </IconButton>
+                      )}
+                      {m.workspaceActions(s).delete && (
+                        <IconButton
+                          label={`${t('workspace.delete')} · ${s.name}`}
+                          disabled={m.busy || m.actionBusy}
+                          onClick={() => m.requestWorkspaceAction(s, 'delete')}
+                        >
+                          <Trash2 size={16} />
+                        </IconButton>
+                      )}
+                    </div>
+                  ))
+                )}
+              </>
+            )
           )}
         </div>
-        {m.connection && !m.loading && !m.loadError && (
+        {m.connection && (hasSavedSpaces || (!m.loading && !m.loadError)) && (
           <Button
             variant="primary"
             disabled={m.busy}

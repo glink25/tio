@@ -59,6 +59,9 @@ targets:
         UIBackgroundModes: [processing]
         ITSAppUsesNonExemptEncryption: false
         LSRequiresIPhoneOS: true
+        NSLocalNetworkUsageDescription: Tio AI Assistant can connect to services on your local network when requested.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
         UILaunchStoryboardName: LaunchScreen
@@ -96,6 +99,7 @@ targets:
     dependencies:
       - framework: libapp.a
         embed: false
+      - sdk: AuthenticationServices.framework
       - sdk: CoreGraphics.framework
       - sdk: Metal.framework
       - sdk: MetalKit.framework
@@ -150,6 +154,7 @@ targets:
     dependencies:
       - framework: libapp_macos.a
         embed: false
+      - sdk: AuthenticationServices.framework
       - sdk: OSAKit.framework
       - sdk: SystemConfiguration.framework
       - sdk: ApplicationServices.framework

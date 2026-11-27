@@ -272,6 +272,7 @@ export function useEditorController(props: EditorSurfaceProps) {
     onOpenGraph: props.onOpenGraph,
     onAskAssistant: props.onAskAssistant,
     appSlice,
+    targetMode: target.mode,
     hostReadOnly: readOnly,
     runtime,
     openFull: (id: string) => onNavigate({ id, mode: 'page' }),

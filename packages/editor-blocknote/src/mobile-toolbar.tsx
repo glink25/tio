@@ -49,6 +49,7 @@ import { createPortal } from 'react-dom';
 import { AskAssistantButton } from './assistant-selection';
 import { CopyBlockLink } from './content-links';
 import { EditorFileReplaceButton } from './file-panel';
+import { EditorImagePreviewButton } from './image-preview';
 
 const touchQuery = '(hover: none) and (pointer: coarse)';
 export function useTouchEditing() {
@@ -220,6 +221,7 @@ function TouchToolbar() {
             }}
           />
           <EditorFileReplaceButton />
+          <EditorImagePreviewButton />
           <MoreActions />
         </FormattingToolbar>
       </div>

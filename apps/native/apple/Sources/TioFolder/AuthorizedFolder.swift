@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 public enum FolderAccessError: Error {
     case permission, staleBookmark, invalidPath, downloadPending, conflict
@@ -6,7 +7,25 @@ public enum FolderAccessError: Error {
 
 /// Persist the bookmark in the host's private connection catalog under the connection ID.
 public struct AuthorizedFolder: Sendable {
+    private static let log = Logger(subsystem: "com.glink25.tio", category: "FolderAccess")
     public let bookmark: Data
+
+    private func measured<T>(_ stage: String, _ work: () throws -> T) throws -> T {
+        let start = ProcessInfo.processInfo.systemUptime
+        do {
+            let value = try work()
+            let duration = ProcessInfo.processInfo.systemUptime - start
+            if duration >= 1 {
+                Self.log.notice("\(stage, privacy: .public) waited \(duration, privacy: .public)s")
+            }
+            return value
+        } catch {
+            let errorInfo = error as NSError
+            let duration = ProcessInfo.processInfo.systemUptime - start
+            Self.log.notice("\(stage, privacy: .public) failed after \(duration, privacy: .public)s (\(errorInfo.domain, privacy: .public) \(errorInfo.code, privacy: .public))")
+            throw error
+        }
+    }
 
     public init(bookmark: Data) {
         self.bookmark = bookmark
@@ -32,11 +51,14 @@ public struct AuthorizedFolder: Sendable {
         #else
         let options: URL.BookmarkResolutionOptions = [.withoutUI]
         #endif
-        let root = try URL(resolvingBookmarkData: bookmark, options: options,
-                           relativeTo: nil, bookmarkDataIsStale: &stale)
-        guard !stale else { throw FolderAccessError.staleBookmark }
-        guard root.startAccessingSecurityScopedResource() else {
-            throw FolderAccessError.permission
+        let root = try measured("bookmark") {
+            let root = try URL(resolvingBookmarkData: bookmark, options: options,
+                               relativeTo: nil, bookmarkDataIsStale: &stale)
+            guard !stale else { throw FolderAccessError.staleBookmark }
+            guard root.startAccessingSecurityScopedResource() else {
+                throw FolderAccessError.permission
+            }
+            return root
         }
         defer { root.stopAccessingSecurityScopedResource() }
         return try operation(root)
@@ -45,19 +67,25 @@ public struct AuthorizedFolder: Sendable {
     /// Coordinate through the selected directory so missing files and new shard directories
     /// can be accessed under the same grant. Each call covers one filesystem operation.
     private func access<T>(writing: Bool, _ operation: (URL) throws -> T) throws -> T {
-        try scoped { root in
-            let coordinator = NSFileCoordinator()
-            var error: NSError?
-            var result: Result<T, Error>?
-            let body: (URL) -> Void = { url in result = Result { try operation(url) } }
-            if writing {
-                coordinator.coordinate(writingItemAt: root, options: [], error: &error, byAccessor: body)
-            } else {
-                coordinator.coordinate(readingItemAt: root, options: [], error: &error, byAccessor: body)
+        try withoutActuallyEscaping(operation) { perform in
+            try scoped { root in
+                let coordinator = NSFileCoordinator()
+                var error: NSError?
+                var result: Result<T, Error>?
+                let body: (URL) -> Void = { url in
+                    result = Result { try self.measured(writing ? "write" : "read") { try perform(url) } }
+                }
+                try measured(writing ? "coordinate-write" : "coordinate-read") {
+                    if writing {
+                        coordinator.coordinate(writingItemAt: root, options: [], error: &error, byAccessor: body)
+                    } else {
+                        coordinator.coordinate(readingItemAt: root, options: [], error: &error, byAccessor: body)
+                    }
+                    if let error { throw error }
+                }
+                guard let result else { throw CocoaError(.fileReadUnknown) }
+                return try result.get()
             }
-            if let error { throw error }
-            guard let result else { throw CocoaError(.fileReadUnknown) }
-            return try result.get()
         }
     }
 

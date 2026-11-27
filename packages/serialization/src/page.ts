@@ -1,6 +1,6 @@
 import {
   codeText,
-  githubMentionUrl,
+  personMentionUrl,
   mentionTitle,
   isMentionReference,
   plainText,
@@ -83,7 +83,7 @@ export function markdownBlocks(blocks: Block[], context: PageExportContext): str
         ? context.objects.get(node.props.id)
         : undefined;
       const url = isMentionReference(node.props)
-        ? (githubMentionUrl(node.props) ??
+        ? (personMentionUrl(node.props) ??
           (target &&
           !target.deleted &&
           target.workspaceId === node.props.workspaceId &&

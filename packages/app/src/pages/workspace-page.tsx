@@ -40,6 +40,11 @@ export function WorkspacePage({ model: m }: { model: WorkspaceController }) {
   const closeAssistant = () => setAssistantOpen(false);
   const quoteSelection = (selection: SelectionQuote) => {
     if (!m.connection || selection.workspaceId !== m.session?.workspaceId) return;
+    if (!selection.text.trim()) {
+      if (m.previewId) m.setPreviewId(null);
+      openAssistant();
+      return;
+    }
     const object = m.objects.find((o) => o.id === selection.objectId);
     const database = object?.databaseId
       ? m.objects.find((o) => o.id === object.databaseId)

@@ -10,7 +10,7 @@ import DataEditor, {
 import { isDerivedField } from '@tio/core';
 import { isFieldError } from '@tio/database';
 import { useT } from '@tio/i18n';
-import { useTheme, Popover, Button, useInteractionExit } from '@tio/ui';
+import { useTheme, Popover, Button, Modal, OverlayPresence, useInteractionExit } from '@tio/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useDisplayValue } from './display-value';
@@ -209,6 +209,27 @@ export function GridView(props: RowsProps) {
     )
       onCell(record, field, cell.data ?? null);
   };
+  const closeField = () => setEditing(null);
+  const restoreGridFocus = () => gridRef.current?.focus();
+  const fieldInput = editingRecord && editingField && (
+    <FieldInput
+      key={`${editingRecord.id}:${editingField.id}`}
+      field={editingField}
+      value={editingRecord.properties?.[editingField.id]}
+      objects={objects}
+      upload={props.upload}
+      resolve={props.resolve}
+      onOpen={onOpen}
+      record={editingRecord}
+      readOnly={readOnly || canEdit?.(editingRecord, editingField) === false}
+      inlineReferencePicker
+      onCancel={() => setEditing(null)}
+      onChange={(value) => {
+        onCell(editingRecord, editingField, value);
+        setEditing(null);
+      }}
+    />
+  );
   return (
     <>
       {header && fields[header.col] && (
@@ -416,22 +437,32 @@ export function GridView(props: RowsProps) {
           />
         </div>
       </div>
-      {editingRecord && editingField && (
+      <OverlayPresence>
+        {editingField?.type === 'files' && fieldInput && (
+          <Modal
+            title={editingField.name}
+            mobilePlacement="center"
+            close={closeField}
+            restoreFocus={restoreGridFocus}
+          >
+            {fieldInput}
+          </Modal>
+        )}
+      </OverlayPresence>
+      {editingField && editingField.type !== 'files' && fieldInput && (
         <Popover
           mobilePlacement="center"
           modal
-          restoreFocus={() => gridRef.current?.focus()}
+          restoreFocus={restoreGridFocus}
           open
           onOpenChange={(open) => {
-            if (!open) setEditing(null);
+            if (!open) closeField();
           }}
           label={editingField.name}
           className={
-            editingField.type === 'files'
-              ? 'w-[min(400px,calc(100vw-24px))]'
-              : editingField.type === 'date'
-                ? 'w-[min(300px,calc(100vw-24px))]'
-                : 'w-[min(280px,calc(100vw-24px))]'
+            editingField.type === 'date'
+              ? 'w-[min(300px,calc(100vw-24px))]'
+              : 'w-[min(280px,calc(100vw-24px))]'
           }
           trigger={
             <button
@@ -448,23 +479,7 @@ export function GridView(props: RowsProps) {
             />
           }
         >
-          <FieldInput
-            key={`${editingRecord.id}:${editingField.id}`}
-            field={editingField}
-            value={editingRecord.properties?.[editingField.id]}
-            objects={objects}
-            upload={props.upload}
-            resolve={props.resolve}
-            onOpen={onOpen}
-            record={editingRecord}
-            readOnly={readOnly || canEdit?.(editingRecord, editingField) === false}
-            inlineReferencePicker
-            onCancel={() => setEditing(null)}
-            onChange={(value) => {
-              onCell(editingRecord, editingField, value);
-              setEditing(null);
-            }}
-          />
+          {fieldInput}
         </Popover>
       )}
     </>

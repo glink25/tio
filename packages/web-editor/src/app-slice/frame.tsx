@@ -1,4 +1,4 @@
-import { type Block, type TioObject } from '@tio/core';
+import { HostError, type Block, type TioObject } from '@tio/core';
 import { useTranslation } from '@tio/i18n';
 import { useTheme } from '@tio/ui';
 import { useEffect, useMemo, useRef } from 'react';
@@ -6,8 +6,9 @@ import { useEffect, useMemo, useRef } from 'react';
 import type { EditorController } from '../controller';
 import { download } from '../page-export/shared';
 import { AppSliceBroker } from './broker';
+import { observeAppSlice } from './diagnostics';
 import { runnerDocument } from './runner';
-import { defaultPermission, MAX_MESSAGE, type AppSlicePermission } from './types';
+import { AppSliceError, defaultPermission, MAX_MESSAGE, type AppSlicePermission } from './types';
 export function Frame({
   model: m,
   page,
@@ -37,6 +38,7 @@ export function Frame({
   const live = useRef({ m, permission, onHeight, log, fullscreen });
   live.current = { m, permission, onHeight, log, fullscreen };
   const theme = useTheme();
+  const observe = !preview && m.targetMode !== 'preview';
   const { i18n } = useTranslation();
   const token = useMemo(() => {
     void html;
@@ -67,6 +69,14 @@ export function Frame({
     let requests = 0,
       logs = 0,
       started = Date.now();
+    const report = observe
+      ? observeAppSlice(m.runtime, {
+          workspaceId: page.workspaceId,
+          pageId: page.id,
+          blockId: block.id,
+          html,
+        })
+      : undefined;
     const broker = new AppSliceBroker({
       runtime: m.runtime,
       pageId: page.id,
@@ -218,12 +228,30 @@ export function Frame({
               reply({ id: msg.id, result });
             }
           })
-          .catch((error) =>
+          .catch((error: unknown) => {
+            if (disposed) return;
+            const code =
+              error instanceof AppSliceError || error instanceof HostError
+                ? error.code
+                : 'INVALID_INPUT';
+            const reason =
+              error instanceof AppSliceError
+                ? error.reason
+                : error instanceof HostError && error.code === 'permission'
+                  ? 'host_permission'
+                  : undefined;
+            const fieldKey = error instanceof AppSliceError ? error.fieldKey : undefined;
+            report?.(msg.method, { code, reason, fieldKey });
             reply({
               id: msg.id,
-              error: { code: error.code ?? 'INVALID_INPUT', message: error.message },
-            }),
-          )
+              error: {
+                code,
+                message: error instanceof Error ? error.message : code,
+                reason,
+                fieldKey,
+              },
+            });
+          })
           .finally(() => {
             if (transferRequest && binaryRequest === msg.id) binaryRequest = undefined;
           });
@@ -253,6 +281,7 @@ export function Frame({
     page.workspaceId,
     block.id,
     html,
+    observe,
     preview,
     theme,
     i18n.language,

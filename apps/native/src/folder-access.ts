@@ -5,7 +5,7 @@ import {
   type ConnectionAccessState,
   type ConnectionAdapter,
 } from '@tio/core';
-import { NativeFolderProvider, type FolderGrant } from '@tio/native-core/folder';
+import { folderFailure, NativeFolderProvider, type FolderGrant } from '@tio/native-core/folder';
 import { StorageError } from '@tio/storage';
 export const createNativeFolderCall =
   (generation: string) =>
@@ -17,10 +17,7 @@ export const createNativeFolderCall =
       );
     } catch (code) {
       if (code === 'cancelled') throw new DOMException('Cancelled', 'AbortError');
-      if (code === 'permission') throw new StorageError('permission', 'Folder permission required');
-      if (code === 'closed' || code === 'pending' || code === 'conflict' || code === 'invalid')
-        throw new HostError(code);
-      throw new HostError('unavailable');
+      throw folderFailure(code);
     }
   };
 const isGrant = (value?: unknown): value is FolderGrant =>
@@ -30,7 +27,7 @@ export class NativeFolderAdapter implements ConnectionAdapter {
   private listeners = new Set<(state: ConnectionAccessState) => void>();
   constructor(
     private id: string,
-    private provider: NativeFolderProvider,
+    private provider: NativeFolderProvider | undefined,
     private pickFolder: () => Promise<FolderGrant>,
   ) {}
   subscribe(fn: (state: ConnectionAccessState) => void) {
@@ -45,6 +42,7 @@ export class NativeFolderAdapter implements ConnectionAdapter {
     return connectionError(error, this.id);
   }
   async getAccessState(): Promise<ConnectionAccessState> {
+    if (!this.provider) return { code: 'unrecoverable', scope: { connectionId: this.id } };
     try {
       await this.provider.canRead();
       return { code: 'available', scope: { connectionId: this.id } };
@@ -55,7 +53,7 @@ export class NativeFolderAdapter implements ConnectionAdapter {
   async reauthorize(): Promise<'success' | 'cancelled' | 'failed'> {
     try {
       const selected = await this.pickFolder();
-      if (!isGrant(selected) || selected.id !== this.provider.grant.id) return 'failed';
+      if (!isGrant(selected) || selected.id !== this.provider?.grant.id) return 'failed';
       const state = await this.getAccessState();
       for (const fn of this.listeners) fn(state);
       return state.code === 'available' ? 'success' : 'failed';
@@ -64,6 +62,7 @@ export class NativeFolderAdapter implements ConnectionAdapter {
     }
   }
   deleteWorkspace(id: string) {
+    if (!this.provider) throw new HostError('unavailable');
     return this.provider.deleteWorkspace(id);
   }
 }

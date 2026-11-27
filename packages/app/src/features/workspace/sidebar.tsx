@@ -124,13 +124,19 @@ export function ObjectMenu({
   model: m,
   object: o,
   pageActions,
+  open,
+  onOpenChange,
 }: {
   model: WorkspaceController;
   object: TioObject;
   pageActions?: ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   return (
     <Menu
+      open={open}
+      onOpenChange={onOpenChange}
       trigger={
         <IconButton label={`${titleOf(o)} · ${t('common.more')}`} className="p-1">
           <MoreHorizontal size={16} />
@@ -252,16 +258,21 @@ export function Sidebar({
           </IconButton>
         </div>
         <nav aria-label={t('ui.pages')}>
-          <PageTree
-            model={m}
-            renderActions={(o) => (
-              <ObjectMenu
-                model={m}
-                object={o}
-                pageActions={o.id === m.current?.id ? pageActions : null}
-              />
-            )}
-          />
+          {m.session && (
+            <PageTree
+              key={m.session.id}
+              model={m}
+              sessionId={m.session.id}
+              renderActions={(o, menu) => (
+                <ObjectMenu
+                  {...menu}
+                  model={m}
+                  object={o}
+                  pageActions={o.id === m.current?.id ? pageActions : null}
+                />
+              )}
+            />
+          )}
         </nav>
       </div>
       <div className="mt-3 flex items-center gap-1 border-t border-line pt-2">

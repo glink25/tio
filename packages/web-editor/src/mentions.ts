@@ -3,9 +3,12 @@ import {
   visibility,
   recordTitle,
   HostError,
-  githubMentionUrl,
+  personMentionUrl,
+  isPersonMentionKind,
+  type PersonMentionKind,
   type MentionCandidate,
   type MentionReference,
+  type MentionPage,
   type MentionResolution,
   type MentionService,
 } from '@tio/core';
@@ -17,6 +20,7 @@ export function createMentionService(
   workspaceId: string,
   navigate: (id: string, anchor?: import('@tio/core').ContentAnchor) => void,
   people?: () => Promise<MentionCandidate[]>,
+  personKind: PersonMentionKind = 'github-user',
 ): MentionService {
   const listeners = new Set<() => void>();
   let unsubscribe: (() => void) | undefined;
@@ -105,7 +109,7 @@ export function createMentionService(
     }
   };
   return {
-    kinds: ['page', 'database', 'record', ...(people ? ['github-user' as const] : [])],
+    kinds: ['page', 'database', 'record', ...(people ? [personKind] : [])],
     async query(text, after, kind) {
       let cursor: {
         text: string;
@@ -135,16 +139,17 @@ export function createMentionService(
         }
       }
       const [content, collaborators] = await Promise.allSettled([
-        cursor.contentDone || kind === 'github-user'
+        cursor.contentDone || isPersonMentionKind(kind)
           ? Promise.resolve({ items: [] as MentionCandidate[], next: undefined })
           : runtime.mentionCandidates(text, cursor.content, kind),
-        people && (!kind || kind === 'github-user')
+        people && (!kind || kind === personKind)
           ? people()
           : Promise.resolve([] as MentionCandidate[]),
       ]);
-      const sourceErrors: ('content' | 'github')[] = [];
+      const sourceErrors: NonNullable<MentionPage['sourceErrors']> = [];
       if (content.status === 'rejected') sourceErrors.push('content');
-      if (collaborators.status === 'rejected') sourceErrors.push('github');
+      if (collaborators.status === 'rejected')
+        sourceErrors.push(personKind === 'gitee-user' ? 'gitee' : 'github');
       const items =
         content.status === 'fulfilled'
           ? content.value.items.filter((item) => {
@@ -183,7 +188,7 @@ export function createMentionService(
     resolve(references) {
       return Promise.all(
         references.map((reference) => {
-          if (reference.kind === 'github-user')
+          if ('login' in reference)
             return Promise.resolve<MentionResolution>({
               reference,
               ...(reference.workspaceId === workspaceId
@@ -261,9 +266,9 @@ export function createMentionService(
     },
     navigate(ref) {
       if (ref.workspaceId !== workspaceId) return;
-      const url = githubMentionUrl(ref);
+      const url = personMentionUrl(ref);
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
-      else if (ref.kind !== 'github-user') navigate(ref.id, ref.anchor);
+      else if (!('login' in ref)) navigate(ref.id, ref.anchor);
     },
   };
 }

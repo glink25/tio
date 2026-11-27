@@ -38,9 +38,9 @@ await table.records.update(created.id, { amount: 40 }, created.version);
 
 查询默认 100、最多 1000 条，接受 cursor/viewId/filters/sorts；不指定视图时查询数据库全部记录，分页不是冻结快照。过滤为 `{fieldId, op: eq|contains|notEmpty, value?}`，排序为 `{fieldId, direction: asc|desc}`。日期使用 `{start,end?,timeZone?}`。公式、汇总及系统时间只读；SDK 不返回派生记录值缓存。
 
-更新/删除传入读取版本，冲突返回 CONFLICT，重新读取再决定修改。每次写入形成一个撤销项，提供方完成提交后才确认。请求 15 秒超时不等于取消；同运行会话内以相同 requestId 和载荷重试返回原结果，不能用新 ID 重试结果不明的创建。账本示例在超时后保持待确认状态和提交锁，使用原 requestId 与原载荷再次等待结果，不把超时当作保存失败后新增一笔。刷新后开始新会话，先检查持久化内容。每会话最多 10,000 个不同请求，消息与日志有大小/速率限制。
+记录更新和删除使用当前 iframe 会话中 `records.query()`、`records.get()` 或已确认写入回执提供的不透明版本。记录未变化时，这些版本可互换，即使列表查询只读取轻量投影。发生真实版本变化或目标存在未确认的修改时返回 CONFLICT，重新读取并核对内容后再决定修改。每次写入形成一个撤销项，提供方完成提交后才确认。请求 15 秒超时不等于取消；同运行会话内以相同 requestId 和载荷重试返回原结果，不能用新 ID 重试结果不明的创建。账本示例在超时后保持待确认状态和提交锁，使用原 requestId 与原载荷再次等待结果，不把超时当作保存失败后新增一笔。刷新后开始新会话，先检查持久化内容。每会话最多 10,000 个不同请求，消息与日志有大小/速率限制。
 
-错误包括 PERMISSION_DENIED、RESOURCE_REMOVED、CONFLICT、INVALID_INPUT、RATE_LIMITED、CLOSED、TIMEOUT。事件来源为 App Slice 块 ID 或远端的 null。
+错误包括 PERMISSION_DENIED、RESOURCE_REMOVED、CONFLICT、INVALID_INPUT、RATE_LIMITED、CLOSED、TIMEOUT。部分失败附带结构化 `reason`：`slice_read_only` 表示实例只读，`database_out_of_scope` 表示页面没有直接引用目标表，`field_unavailable` 表示提交的字段不可用，`version_mismatch` 表示版本冲突，`host_permission` 表示宿主权限拒绝。字段失败可以附带请求中提交的 `fieldKey`，对不存在和无权读取的字段使用同一原因。事件来源为 App Slice 块 ID 或远端的 null。
 
 ## 嵌入与执行边界
 

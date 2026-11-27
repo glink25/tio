@@ -24,9 +24,20 @@ import { navigationOrder } from '@tio/workspace';
 import { ChevronRight, GripVertical, Plus } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
+import {
+  collapsedTreeNodes,
+  subscribeTreePreferences,
+  updateCollapsedTreeNode,
+} from '../../services/tree-preferences';
 import type { WorkspaceController } from './use-workspace';
 
 type Placement = { id: string; position: 'before' | 'inside' | 'after' };
+
+interface TreeMenuState {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+type RenderActions = (object: TioObject, menu: TreeMenuState) => ReactNode;
 
 type TreeEntry = { object: TioObject; depth: number };
 
@@ -47,12 +58,20 @@ function retainExitingRows(previous: TreeEntry[], visible: TreeEntry[]): TreeEnt
 
 export function PageTree({
   model: m,
+  sessionId,
   renderActions,
 }: {
   model: WorkspaceController;
-  renderActions: (o: TioObject) => ReactNode;
+  sessionId: string;
+  renderActions: RenderActions;
 }) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [collapsed, setCollapsed] = useState(() => collapsedTreeNodes(sessionId));
+  useEffect(
+    () => subscribeTreePreferences(sessionId, () => setCollapsed(collapsedTreeNodes(sessionId))),
+    [sessionId],
+  );
+  const setNodeCollapsed = (id: string, next: boolean) =>
+    setCollapsed(updateCollapsedTreeNode(sessionId, collapsed, id, next));
   const [activeId, setActiveId] = useState<string>();
   const [placement, setPlacement] = useState<Placement>();
   const drop = useRef<Placement | undefined>(undefined);
@@ -132,7 +151,7 @@ export function PageTree({
               .filter((o) => o.parentId === object.id && o.id !== source)
               .sort(navigationOrder)[0];
             m.placePage(source, object.id, first?.id ?? null);
-            setCollapsed((previous) => new Set([...previous].filter((id) => id !== object.id)));
+            setNodeCollapsed(object.id, false);
           } else {
             const siblings = m.nav
               .filter((o) => (o.parentId ?? null) === (object.parentId ?? null) && o.id !== source)
@@ -193,14 +212,7 @@ export function PageTree({
               hidden={!visibleIds.has(object.id)}
               model={m}
               collapsed={collapsed.has(object.id)}
-              toggle={() =>
-                setCollapsed((previous) => {
-                  const next = new Set(previous);
-                  if (next.has(object.id)) next.delete(object.id);
-                  else next.add(object.id);
-                  return next;
-                })
-              }
+              toggle={() => setNodeCollapsed(object.id, !collapsed.has(object.id))}
               placement={placement?.id === object.id ? placement.position : undefined}
               renderActions={renderActions}
             />
@@ -250,8 +262,10 @@ function TreeRow({
   hidden: boolean;
   toggle: () => void;
   placement?: Placement['position'];
-  renderActions: (o: TioObject) => ReactNode;
+  renderActions: RenderActions;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  if (hidden && menuOpen) setMenuOpen(false);
   const {
     attributes,
     listeners,
@@ -282,6 +296,11 @@ function TreeRow({
       <div className="min-h-0 overflow-hidden">
         <div
           style={{ paddingLeft: 8 + depth * 14 }}
+          onContextMenu={(event) => {
+            if (hidden || isDragging) return;
+            event.preventDefault();
+            setMenuOpen(true);
+          }}
           className={cn(
             'group relative flex min-h-9 items-center rounded-md hover:bg-surface-hover',
             m.current?.id === o.id && 'bg-surface-hover',
@@ -314,6 +333,11 @@ function TreeRow({
           <button
             className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left text-sm text-secondary"
             onClick={() => m.navigate(o)}
+            onKeyDown={(event) => {
+              if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+              event.preventDefault();
+              setMenuOpen(true);
+            }}
           >
             <ObjectIcon type={o.type} icon={o.icon} size={16} resolve={m.resolveMedia} />
             <span className="truncate">{titleOf(o)}</span>
@@ -324,7 +348,7 @@ function TreeRow({
                 <Plus size={14} />
               </IconButton>
             )}
-            {renderActions(o)}
+            {renderActions(o, { open: menuOpen && !hidden, onOpenChange: setMenuOpen })}
           </div>
         </div>
       </div>

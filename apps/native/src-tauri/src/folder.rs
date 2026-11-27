@@ -1,11 +1,28 @@
-use crate::catalog::Catalog;
-use rusqlite::{params, OptionalExtension};
-use serde_json::{json, Value};
-use std::fs::{self, File};
+use serde_json::Value;
+use std::{fs::File, sync::Arc};
 use tauri::{AppHandle, Manager, Webview};
 
-#[derive(Default)]
-pub struct FolderLocks(pub crate::window_locks::WindowLocks);
+pub(crate) fn write_lease(
+    app: &AppHandle,
+    generation: &str,
+    request: &Value,
+) -> Result<Option<Arc<File>>, &'static str> {
+    if !matches!(request["action"].as_str(), Some("write" | "remove")) {
+        return Ok(None);
+    }
+    let grant = request["grant"].as_str().ok_or("invalid")?;
+    let workspace = request["path"]
+        .as_str()
+        .and_then(|path| path.strip_prefix("workspaces/"))
+        .and_then(|path| path.split('/').next())
+        .filter(|id| !id.is_empty())
+        .ok_or("invalid")?;
+    let name = format!("tio-sync-folder-{grant}_{workspace}");
+    app.state::<crate::process_lock::ProcessLocks>()
+        .0
+        .lease(generation, &name)
+        .map(Some)
+}
 
 #[tauri::command]
 pub async fn native_folder(
@@ -14,19 +31,23 @@ pub async fn native_folder(
     generation: String,
     request: Value,
 ) -> Result<Value, String> {
-    app.state::<FolderLocks>()
+    app.state::<crate::process_lock::ProcessLocks>()
         .0
         .check(webview.label(), &generation)?;
-    let action = request["action"].as_str().ok_or("invalid")?;
-    if matches!(
-        action,
-        "lock" | "unlock" | "stateRead" | "stateWrite" | "stateEntries" | "stateDelete"
-    ) {
-        return journal(&app, webview.label(), generation, action, &request).map_err(str::to_owned);
-    }
+    let lease = write_lease(&app, &generation, &request)?;
+    tauri::async_runtime::spawn(async move {
+        let _lease = lease;
+        call(&app, request).await
+    })
+    .await
+    .map_err(|_| "unavailable".to_owned())?
+}
+
+async fn call(app: &AppHandle, request: Value) -> Result<Value, String> {
     #[cfg(desktop)]
     {
-        return desktop::call(&app, action, &request).await;
+        let action = request["action"].as_str().ok_or("invalid")?;
+        return desktop::call(app, action, &request).await;
     }
     #[cfg(target_os = "android")]
     {
@@ -43,145 +64,19 @@ pub async fn native_folder(
     }
     #[cfg(target_os = "ios")]
     {
+        let _ = (app, request);
         Err("unsupported".to_owned())
     }
-}
-
-fn journal(
-    app: &AppHandle,
-    label: &str,
-    owner: String,
-    action: &str,
-    request: &Value,
-) -> Result<Value, &'static str> {
-    let grant = request["grant"].as_str().ok_or("invalid")?;
-    let space = request["workspace"].as_str().ok_or("invalid")?;
-    if grant.len() != 64
-        || !grant.bytes().all(|b| b.is_ascii_hexdigit())
-        || space.is_empty()
-        || space.len() > 256
-        || !space
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'-')
-    {
-        return Err("invalid");
-    }
-    let locks = app.state::<FolderLocks>();
-    if action == "lock" {
-        let dir = app
-            .path()
-            .app_data_dir()
-            .map_err(|_| "unavailable")?
-            .join("folder-locks")
-            .join(grant);
-        fs::create_dir_all(&dir).map_err(|_| "unavailable")?;
-        let file = File::options()
-            .create(true)
-            .truncate(false)
-            .write(true)
-            .open(dir.join(space))
-            .map_err(|_| "unavailable")?;
-        match fs2::FileExt::try_lock_exclusive(&file) {
-            Ok(()) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => return Ok(Value::Null),
-            Err(_) => return Err("unavailable"),
-        }
-        return Ok(Value::String(locks.0.hold(label, owner, file)?));
-    }
-    if action == "unlock" {
-        locks
-            .0
-            .release(&owner, request["token"].as_str().ok_or("invalid")?)?;
-        return Ok(Value::Null);
-    }
-    let state = app.state::<Catalog>();
-    let mut db = state.0.lock().map_err(|_| "unavailable")?;
-    let sql = |_: rusqlite::Error| "unavailable";
-    let tx = db.transaction().map_err(sql)?;
-    let result = match action {
-        "stateRead" => {
-            let mut values = Vec::new();
-            for key in request["keys"].as_array().ok_or("invalid")? {
-                let raw: Option<String> = tx
-                    .query_row(
-                        "SELECT value FROM folder_state WHERE grant=?1 AND space=?2 AND key=?3",
-                        params![grant, space, key.as_str().ok_or("invalid")?],
-                        |r| r.get(0),
-                    )
-                    .optional()
-                    .map_err(sql)?;
-                values.push(
-                    serde_json::from_str(raw.as_deref().unwrap_or("null"))
-                        .map_err(|_| "invalid")?,
-                );
-            }
-            Value::Array(values)
-        }
-        "stateEntries" => {
-            let prefix = request["prefix"].as_str().ok_or("invalid")?;
-            let after = request["after"].as_str();
-            let mut stmt=tx.prepare("SELECT key,value FROM folder_state WHERE grant=?1 AND space=?2 AND key>=?3 AND key<?4 AND (?5 IS NULL OR key>?5) ORDER BY key LIMIT ?6").map_err(sql)?;
-            let rows = stmt
-                .query_map(
-                    params![
-                        grant,
-                        space,
-                        prefix,
-                        format!("{prefix}\u{ffff}"),
-                        after,
-                        request["limit"].as_i64().unwrap_or(-1)
-                    ],
-                    |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
-                )
-                .map_err(sql)?;
-            let mut values = Vec::new();
-            for row in rows {
-                let (k, v) = row.map_err(sql)?;
-                values.push(json!({"key":k,"value":serde_json::from_str::<Value>(&v).map_err(|_|"invalid")?}));
-            }
-            Value::Array(values)
-        }
-        "stateWrite" => {
-            for key in request["deletes"].as_array().ok_or("invalid")? {
-                tx.execute(
-                    "DELETE FROM folder_state WHERE grant=?1 AND space=?2 AND key=?3",
-                    params![grant, space, key.as_str().ok_or("invalid")?],
-                )
-                .map_err(sql)?;
-            }
-            for put in request["puts"].as_array().ok_or("invalid")? {
-                tx.execute(
-                    "INSERT OR REPLACE INTO folder_state VALUES(?1,?2,?3,?4)",
-                    params![
-                        grant,
-                        space,
-                        put["key"].as_str().ok_or("invalid")?,
-                        put["value"].to_string()
-                    ],
-                )
-                .map_err(sql)?;
-            }
-            Value::Null
-        }
-        "stateDelete" => {
-            tx.execute(
-                "DELETE FROM folder_state WHERE grant=?1 AND space=?2",
-                params![grant, space],
-            )
-            .map_err(sql)?;
-            Value::Null
-        }
-        _ => return Err("invalid"),
-    };
-    tx.commit().map_err(sql)?;
-    Ok(result)
 }
 
 #[cfg(desktop)]
 mod desktop {
     use super::*;
+    use crate::catalog::Catalog;
     use base64::{engine::general_purpose::STANDARD, Engine};
     use cap_std::{ambient_authority, fs::Dir};
+    use rusqlite::{params, OptionalExtension};
+    use serde_json::json;
     use sha2::{Digest, Sha256};
     use std::{
         io::{self, Write},

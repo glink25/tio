@@ -45,6 +45,7 @@
 :root {
   --tio-screen-height: var(--tio-native-screen-height, 100dvh);
   --tio-safe-top: env(safe-area-inset-top, 0px);
+  --tio-modal-safe-top: max(var(--tio-safe-top), var(--tio-window-chrome-top, 0px));
   --tio-safe-right: env(safe-area-inset-right, 0px);
   --tio-safe-bottom: env(safe-area-inset-bottom, 0px);
   --tio-safe-left: env(safe-area-inset-left, 0px);
@@ -63,7 +64,8 @@
 /* Drawers can also be opened on wide touch screens with nonzero safe areas. */
 .tio-drawer {
   box-sizing: border-box;
-  padding: var(--tio-safe-top) var(--tio-safe-right) var(--tio-safe-bottom) var(--tio-safe-left);
+  padding: var(--tio-modal-safe-top) var(--tio-safe-right) var(--tio-safe-bottom)
+    var(--tio-safe-left);
 }
 [cmdk-list] {
   max-height: 55dvh;
@@ -161,6 +163,7 @@ a[href] {
   bottom: auto;
   height: 100dvh;
   max-height: 100dvh;
+  padding-top: var(--tio-modal-safe-top);
   border-radius: 0;
 }
 .tio-dialog[data-placement='sidebar'] {
@@ -169,6 +172,7 @@ a[href] {
   width: min(320px, 90vw);
   height: 100dvh;
   max-height: 100dvh;
+  padding-top: var(--tio-modal-safe-top);
   border-radius: 0;
   background: var(--color-surface);
 }
@@ -181,7 +185,9 @@ a[href] {
 }
 @media (min-width: 768px) {
   .tio-dialog:not([data-placement='sidebar']) {
-    top: 12dvh;
+    --tio-dialog-inset-top: 12dvh;
+    top: var(--tio-dialog-inset-top);
+    padding-top: max(0px, calc(var(--tio-modal-safe-top) - var(--tio-dialog-inset-top)));
     bottom: auto;
     left: 50%;
     translate: -50% 0;
@@ -190,7 +196,7 @@ a[href] {
     border-radius: 12px;
   }
   .tio-dialog[data-wide='true']:not([data-placement='sidebar']) {
-    top: 6dvh;
+    --tio-dialog-inset-top: 6dvh;
     width: min(1100px, 92vw);
     height: auto;
     max-height: 88dvh;
@@ -199,8 +205,16 @@ a[href] {
     width: min(840px, calc(100% - 24px));
     height: min(560px, 76dvh);
   }
+  .tio-dialog[data-layout='page'].tio-settings {
+    top: calc(50% + var(--tio-window-chrome-top, 0px) / 2);
+    max-height: min(76dvh, calc(100dvh - var(--tio-modal-safe-top) - 24px));
+    padding-top: 0;
+    width: min(600px, calc(100% - 24px));
+    height: auto;
+    translate: -50% -50%;
+  }
   .tio-dialog[data-layout='workspace']:not([data-placement='sidebar']) {
-    top: 3dvh;
+    --tio-dialog-inset-top: 3dvh;
     width: min(1600px, 96vw);
     height: 94dvh;
     max-height: 94dvh;
@@ -240,7 +254,7 @@ a[href] {
     --tio-visible-top: 0px;
     --tio-visible-bottom: 0px;
     --tio-visible-height: var(--tio-screen-height);
-    --tio-panel-top-clearance: max(var(--tio-safe-top), var(--tio-visible-top));
+    --tio-panel-top-clearance: max(var(--tio-modal-safe-top), var(--tio-visible-top));
     --tio-panel-bottom-clearance: max(var(--tio-safe-bottom), var(--tio-visible-bottom));
     position: absolute;
     box-sizing: border-box;
@@ -253,7 +267,7 @@ a[href] {
     pointer-events: auto;
   }
   .tio-dialog[data-placement='center'] {
-    --tio-panel-safe-top: max(0px, var(--tio-safe-top) - var(--tio-visible-top));
+    --tio-panel-safe-top: max(0px, var(--tio-modal-safe-top) - var(--tio-visible-top));
     --tio-panel-safe-bottom: max(0px, var(--tio-safe-bottom) - var(--tio-visible-bottom));
     top: calc(
       var(--tio-visible-top) + var(--tio-panel-safe-top) +
@@ -293,7 +307,10 @@ a[href] {
     top: var(--tio-preview-top);
     height: calc(100% - var(--tio-preview-top));
     max-height: 100%;
-    padding-top: max(0px, var(--tio-visible-top) - var(--tio-preview-top));
+    padding-top: max(
+      0px,
+      max(var(--tio-window-chrome-top, 0px), var(--tio-visible-top)) - var(--tio-preview-top)
+    );
     border-radius: 12px 12px 0 0;
   }
   :is(input, textarea, select):not([type='checkbox']):not([type='radio']):not([type='range']):not(
@@ -309,7 +326,7 @@ a[href] {
 }
 @media (min-width: 768px) {
   .tio-dialog[data-keyboard]:not([data-placement='sidebar']) {
-    --tio-panel-safe-top: max(0px, var(--tio-safe-top) - var(--tio-visible-top));
+    --tio-panel-safe-top: max(0px, var(--tio-modal-safe-top) - var(--tio-visible-top));
     --tio-panel-safe-bottom: max(0px, var(--tio-safe-bottom) - var(--tio-visible-bottom));
     top: calc(var(--tio-visible-top) + var(--tio-panel-safe-top) + 12px);
     max-height: max(
@@ -319,7 +336,7 @@ a[href] {
   }
   .tio-dialog[data-keyboard][data-placement='sidebar'],
   .tio-drawer[data-keyboard] {
-    padding-top: max(var(--tio-safe-top), var(--tio-visible-top));
+    padding-top: max(var(--tio-modal-safe-top), var(--tio-visible-top));
     padding-bottom: max(var(--tio-safe-bottom), var(--tio-visible-bottom));
   }
 }
@@ -332,7 +349,49 @@ a[href] {
 .tio-modal-layer[hidden] {
   display: none;
 }
-.tio-modal-layer[data-covered] > .tio-overlay {
+.tio-modal-layer[data-covered]:not([data-dialog-stack='root']) > .tio-overlay,
+.tio-modal-layer[data-dialog-stack='child'] > .tio-overlay {
   visibility: hidden;
   pointer-events: none;
+}
+
+.tio-modal-layer:has(> .tio-image-viewer) {
+  z-index: 90;
+}
+.tio-dialog[data-layout='image'].tio-image-viewer {
+  inset: 0;
+  z-index: 90;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  translate: none;
+  padding: var(--tio-window-chrome-top, 0px) 0 0;
+  border: 0;
+  border-radius: 0;
+  background: #0a0a0a;
+  color: white;
+}
+.tio-image-viewer > .tio-dialog-body {
+  overflow: hidden;
+}
+.tio-image-viewer .PhotoView-Portal {
+  position: absolute;
+  z-index: 1;
+}
+/* PhotoSlider centers against the window rather than its portal. Align that center to the stage. */
+.tio-image-viewer .PhotoView__PhotoWrap {
+  top: calc(-1 * var(--tio-window-chrome-top, 0px) / 2);
+  height: calc(100% + var(--tio-window-chrome-top, 0px));
+}
+.tio-image-viewer .PhotoView-Portal .PhotoView-Slider__Overlay {
+  opacity: 1;
+}
+.tio-image-viewer .tio-image-control {
+  border: 1px solid #fff3;
+  border-radius: 999px;
+  background: #242424d9;
+  color: white;
+}
+.tio-image-viewer button.tio-image-control:not(:disabled):hover {
+  background: #454545;
 }

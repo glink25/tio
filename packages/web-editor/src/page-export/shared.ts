@@ -13,8 +13,7 @@ export async function prepareReferences(input: PageExportInput) {
   const ids = new Set(
     blockMentions(input.page.blocks ?? [])
       .filter(
-        (reference) =>
-          reference.kind !== 'github-user' && reference.workspaceId === input.page.workspaceId,
+        (reference) => !('login' in reference) && reference.workspaceId === input.page.workspaceId,
       )
       .map((reference) => reference.id),
   );

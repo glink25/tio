@@ -158,6 +158,10 @@ it('roundtrips record and user mentions and removes editor-only default username
       type: 'mention',
       props: { workspaceId: 'w', kind: 'github-user', id: '42', login: 'octocat' },
     },
+    {
+      type: 'mention',
+      props: { workspaceId: 'w', kind: 'gitee-user', id: '42', login: 'gitee_user' },
+    },
   ];
   const blocks = [{ ...textBlock(''), content }, table(content)];
   expect(fromEditor(toEditor(blocks, configured), blocks)).toEqual(blocks);

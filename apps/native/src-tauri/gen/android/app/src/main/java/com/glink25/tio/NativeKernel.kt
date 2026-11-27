@@ -62,6 +62,11 @@ internal object NativeKernel {
             js.asyncFunction<Double, Unit>("tioSleep") { delay(it.toLong().coerceAtLeast(0)) }
             js.evaluate<Unit>(context.assets.open("tio-bootstrap.js").bufferedReader().use { it.readText() } + "\nvoid 0;")
             js.function<String, String>("tioNative") { nativeCall(database.path, it) }
+            val files = FolderFiles(context)
+            js.function<String, String>("tioFolder") { request ->
+                if (cancelled()) JSONObject().put("error", "timeout").toString()
+                else files.call(JSONObject(request)).toString()
+            }
             js.function("tioCredential") { args: Array<Any?> ->
                 try {
                     val value = CredentialStore(context).perform(args[0] as String, args[1] as String)
@@ -83,7 +88,9 @@ internal object NativeKernel {
                 val url = URL(args[0] as String)
                 val origin = JSONObject(nativeCall(database.path, "{\"action\":\"authOrigin\"}")).getString("value").trimEnd('/')
                 require(url.protocol == "https" &&
-                    (url.host == "api.github.com" || url.toString() == origin + "/api/github/refresh"))
+                    (url.host == "api.github.com" ||
+                        (url.host == "gitee.com" && url.path.startsWith("/api/v5/")) ||
+                        url.toString() in listOf(origin + "/api/github/refresh", origin + "/api/gitee/refresh")))
                 check(!cancelled())
                 val fields = JSONObject(args[1] as String)
                 val connection = url.openConnection() as HttpURLConnection

@@ -21,12 +21,21 @@ export class NativeReplica extends ReplicaRepository {
         throw code;
       }
     });
-    void this.loadComplete().catch(() => this.relations.invalidate('ready'));
+    void this.isComplete().catch(() => this.relations.invalidate('ready'));
   }
-  private async loadComplete() {
-    this.storageComplete =
-      (await this.catalog.read('replica-complete/' + this.instanceId)) === true;
-    this.relations.invalidate('ready');
+  async isComplete() {
+    if (
+      !this.storageComplete &&
+      (await this.catalog.read('replica-complete/' + this.instanceId)) === true
+    ) {
+      this.storageComplete = true;
+      this.relations.invalidate('ready');
+    }
+    return this.storageComplete;
+  }
+  override async readChanges(since: number) {
+    await this.isComplete();
+    return super.readChanges(since);
   }
   async setComplete() {
     await this.catalog.write('replica-complete/' + this.instanceId, true);

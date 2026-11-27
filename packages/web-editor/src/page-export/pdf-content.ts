@@ -1,5 +1,5 @@
 import {
-  githubMentionUrl,
+  personMentionUrl,
   isMentionReference,
   codeText,
   plainText,
@@ -20,7 +20,7 @@ export function pdfInline(value: unknown, context: PageExportContext): ContentTe
   if (!value || typeof value !== 'object') return [];
   const node = value as Record<string, any>;
   if (node.type === 'mention') {
-    const url = isMentionReference(node.props) ? githubMentionUrl(node.props) : undefined;
+    const url = isMentionReference(node.props) ? personMentionUrl(node.props) : undefined;
     return [{ text: referenceLabel(node.props, context), ...(url ? { link: url } : {}) }];
   }
   if (node.type === 'tableCell') return pdfInline(node.content, context);

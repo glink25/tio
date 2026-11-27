@@ -18,6 +18,7 @@
     "@tio/file-storage": "workspace:*",
     "@tio/i18n": "workspace:*",
     "@tio/native-core": "workspace:*",
+    "@tio/provider-gitee": "workspace:*",
     "@tio/provider-github": "workspace:*",
     "@tio/storage": "workspace:*",
     "react": "19.3.1",

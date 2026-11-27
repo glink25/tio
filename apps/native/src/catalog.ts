@@ -1,9 +1,7 @@
 import { HostError, type WorkspaceSession } from '@tio/core';
-import {
-  githubConnectionUserId,
-  githubEndpointsKey,
-  type GitHubEndpoint,
-} from '@tio/provider-github';
+import { giteeEndpointsKey } from '@tio/provider-gitee';
+import { githubEndpointsKey, type GitHubEndpoint } from '@tio/provider-github';
+import { gitConnection } from '@tio/provider-github/credentials';
 
 async function request<T>(action: string, args: Record<string, unknown> = {}): Promise<T> {
   const { invoke } = await import('@tauri-apps/api/core');
@@ -46,8 +44,9 @@ export async function restoreNativeBindings() {
   const catalog = new NativeCatalog();
   const connections = new Set((await catalog.sessions()).map((session) => session.connectionId));
   for (const connection of connections) {
-    if (githubConnectionUserId(connection) === undefined) continue;
-    const key = githubEndpointsKey(connection);
+    const account = gitConnection(connection);
+    if (!account) continue;
+    const key = (account.provider === 'gitee' ? giteeEndpointsKey : githubEndpointsKey)(connection);
     const endpoints = await catalog.read<[string, GitHubEndpoint][]>(key);
     if (endpoints) localStorage.setItem(key, JSON.stringify(endpoints));
     else localStorage.removeItem(key);

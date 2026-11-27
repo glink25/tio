@@ -1,5 +1,6 @@
 package com.glink25.tio
 
+import android.content.Intent
 import android.os.Bundle
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
@@ -7,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 
 class MainActivity : TauriActivity() {
   private val startup = StartupOverlay(this)
+  internal val gitAuthentication = GitAuthentication(this)
 
   // Intercept only while Tio has a modal to close. At the root,
   // Android owns Back, including its predictive back-to-home animation.
@@ -50,8 +52,14 @@ class MainActivity : TauriActivity() {
   }
 
   override fun onDestroy() {
+    gitAuthentication.dispose()
     startup.dispose()
     super.onDestroy()
+  }
+
+  override fun onNewIntent(intent: Intent) {
+    val handled = gitAuthentication.onCallback(intent.data)
+    super.onNewIntent(if (handled) Intent(intent).setData(null) else intent)
   }
 
   fun finishStartup(ready: Boolean, dark: Boolean?) = startup.finish(ready, dark)

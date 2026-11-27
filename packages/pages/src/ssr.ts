@@ -1,6 +1,6 @@
 import {
   codeText,
-  githubMentionUrl,
+  personMentionUrl,
   mentionTitle,
   valueText,
   isMentionReference,
@@ -38,7 +38,7 @@ export function renderInline(value: unknown, context: RenderContext): string {
     const target = context.objects.get(node.props.id);
     const label = mentionTitle(node.props, [...context.objects.values()]);
     const url =
-      githubMentionUrl(node.props) ??
+      personMentionUrl(node.props) ??
       (target &&
       !target.deleted &&
       target.workspaceId === node.props.workspaceId &&

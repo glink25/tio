@@ -2,7 +2,7 @@ import type { TioObject } from './index';
 import { HostError } from './repository';
 export interface Connection {
   id: string;
-  kind: 'device' | 'folder' | 'github';
+  kind: 'device' | 'folder' | 'github' | 'gitee';
   name: string;
 }
 export interface WorkspaceDescriptor {

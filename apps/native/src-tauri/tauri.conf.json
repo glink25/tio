@@ -39,7 +39,7 @@
         {
           "scheme": ["tio"],
           "host": "auth",
-          "path": ["/github"],
+          "path": ["/github", "/gitee"],
           "appLink": false
         }
       ]

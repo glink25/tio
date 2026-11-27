@@ -10,9 +10,11 @@ export interface ConnectionEntry {
   iconOnly?: boolean;
   run: () => void | Promise<void>;
 }
+import type { GitProvider } from '@tio/provider-github/credentials';
+
 export interface ConnectionEntryActions {
-  github: () => Promise<void>;
-  token: () => void;
+  git: (provider: GitProvider) => Promise<void>;
+  token: (provider: GitProvider) => void;
   device: () => Promise<void>;
   folder: () => Promise<void>;
 }

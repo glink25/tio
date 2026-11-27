@@ -10,3 +10,6 @@ dist/
 /docs/.local/
 
 /tests/tmp/
+
+# Local OAuth credentials
+.env.local

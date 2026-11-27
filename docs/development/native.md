@@ -11,13 +11,13 @@ macOS 安装 Xcode，Android 安装 Android SDK、NDK 与 JDK。Tauri CLI 会报
 - iOS 模拟器构建运行 `VITE_TIO_CHANNEL=ios-store corepack pnpm --filter @tio/native exec tauri ios build --debug --target aarch64-sim`。
 - Android 调试包构建运行 `VITE_TIO_CHANNEL=android-play corepack pnpm --filter @tio/native exec tauri android build --debug --apk --target aarch64`。
 
-Android 仅保留 Google Play 渠道和 `com.glink25.tio` 应用 ID，授权回调为 `tio://auth/github`。不提供独立 APK 分发或安装权限。前端构建输出按平台存放于 `apps/native/dist`。
+Android 仅保留 Google Play 渠道和 `com.glink25.tio` 应用 ID，授权回调为 `tio://auth/github` 和 `tio://auth/gitee`。不提供独立 APK 分发或安装权限。前端构建输出按平台存放于 `apps/native/dist`。
 
 ## 持久化与快捷指令
 
-设备空间、连接目录、GitHub 编辑副本、同步基线和远端文件缓存使用 SQLite。文件夹空间使用共享文件编解码与恢复日志，端点标识使用授权 ID。Apple 授权通过安全作用域书签恢复，Android 使用持久目录 URI 授权。
+设备空间、连接目录、文件夹、GitHub 与 Gitee 的编辑副本、同步基线和远端文件缓存使用 SQLite。文件夹端点保留共享文件格式，端点标识使用授权 ID。Apple 授权通过安全作用域书签恢复，Android 使用持久目录 URI 授权。
 
-iOS 的读取、创建和追加 App Intent 调用 JavaScriptCore 中的共享无 DOM 内核。调用参数包括连接 ID、空间 ID 和稳定文档 ID。文件夹连接 ID 使用前台选择目录时生成的 `folder-…` 标识。成功结果表示仓库提交已确认。GitHub 空间使用匹配连接、空间和绑定端点的原生编辑副本，不完整的副本返回 `pending`，已关闭的空间返回 `closed`。追加或创建后申请后台同步机会，实际发布仍遵循空间的手动同步策略。
+iOS 的读取、创建和追加 App Intent 调用 JavaScriptCore 中的共享无 DOM 内核。调用参数包括连接 ID、空间 ID 和稳定文档 ID。文件夹连接 ID 使用前台选择目录时生成的 `folder-…` 标识。成功结果表示本地仓库提交已确认。文件夹与 GitHub 空间使用匹配连接、空间和绑定端点的原生编辑副本。文件夹空间已加载的文档可以离线操作，尚未获取的空间返回 `pending`；已关闭的空间返回 `closed`。追加或创建后申请后台同步机会，实际发布仍遵循空间的手动同步策略。
 
 ## 全平台动态更新
 
@@ -34,6 +34,8 @@ iOS 的读取、创建和追加 App Intent 调用 JavaScriptCore 中的共享无
 Android 与 iOS 宿主更新走商店；macOS、Windows、Linux 使用已签名的桌面安装包更新。热更新包的发布仍需遵守对应商店对可下载内容的要求。
 
 ## 当前验收记录
+
+2026-11-26 文件夹副本验证覆盖 Web 的 Chromium OPFS 与 IndexedDB、macOS 原生宿主的真实目录，以及 Android 模拟器的实际 SAF 授权目录。Android 目录恢复后，WorkManager 在没有 WebView 的进程中发布了待同步正文。iPhone 真机使用隔离的 iCloud 云盘目录创建并切换两个工作空间；人为暂停测试书签后，仍可创建工作空间、重启及切换，恢复书签后在 SQLite 验证了同一端点的发布回执。移动 Chromium 使用测试模型响应实际执行助手写入，关闭助手后触摸滚动通过。真实模型调用后的 iOS 正文滚动及 iCloud 跨设备传输仍待验收。
 
 2026-11-21 本地通过 Web 完整检查、Rust 编译检查，以及 iOS 模拟器和 Android 调试包构建。Android 模拟器中验证了 SQLite 副本的重复提交、强制停止后恢复、同步基线和未知字段保留。临时事务验证还覆盖版本冲突和空间隔离。Apple JavaScriptCore 克隆实现验证了附件字节数组、共享缓冲区、循环引用和未知值保留。
 

@@ -1,3 +1,4 @@
+mod assistant_fetch;
 mod catalog;
 mod clear_storage;
 mod credentials;
@@ -5,6 +6,8 @@ mod credentials;
 mod desktop_chrome;
 mod folder;
 mod frontend_update;
+#[cfg(any(target_os = "ios", target_os = "macos", target_os = "android"))]
+mod git_auth;
 #[cfg(mobile)]
 mod headless_io;
 mod host_update;
@@ -35,8 +38,8 @@ pub fn run() {
     let builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
-        .manage(folder::FolderLocks::default())
         .manage(process_lock::ProcessLocks::default())
+        .manage(assistant_fetch::AssistantRequests::default())
         .manage(window_host::Windows::default())
         .manage(updates::ResourceBoot::default());
     #[cfg(target_os = "android")]
@@ -91,6 +94,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             catalog::catalog,
+            assistant_fetch::assistant_fetch,
+            assistant_fetch::cancel_assistant_fetch,
             window_host::window_host,
             #[cfg(desktop)]
             desktop_chrome::desktop_chrome_state,
@@ -104,8 +109,10 @@ pub fn run() {
             clear_storage::clear_host_storage,
             frontend_update::frontend_update,
             process_lock::process_lock,
-            credentials::github_credentials,
-            credentials::open_github_login,
+            credentials::git_credentials,
+            credentials::open_git_login,
+            #[cfg(any(target_os = "ios", target_os = "macos", target_os = "android"))]
+            git_auth::authenticate_git,
             workspace::workspace,
             folder::native_folder,
             updates::resource_update,

@@ -1,5 +1,8 @@
 import {
   object,
+  mentionKey,
+  mentionTitle,
+  personMentionUrl,
   validateValue,
   validateFieldReference,
   type Field,
@@ -25,6 +28,16 @@ const targets = [
 const objects = [object('workspace', 'w', { id: 'w' }), db, row, ...targets];
 
 describe('mention field cardinality', () => {
+  it('keeps provider identity distinct and resolves Gitee people offline', () => {
+    const person = { workspaceId: 'w', kind: 'gitee-user' as const, id: '42', login: 'gitee_user' };
+    expect(() =>
+      validateValue(field, [person, { ...person, kind: 'github-user', login: 'github-user' }]),
+    ).not.toThrow();
+    expect(() => validateValue(field, [person, { ...person, login: 'renamed' }])).toThrow();
+    expect(mentionKey(person)).toBe(mentionKey({ ...person, login: 'renamed' }));
+    expect(mentionTitle(person, [])).toBe('@gitee_user');
+    expect(personMentionUrl(person)).toBe('https://gitee.com/gitee_user');
+  });
   it('validates shape, full identity uniqueness and every workspace', () => {
     for (const value of [[], [first, second], null])
       expect(() => validateValue(field, value)).not.toThrow();

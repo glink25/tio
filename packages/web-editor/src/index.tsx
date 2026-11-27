@@ -1,3 +1,4 @@
+export { latestAppSliceError } from './app-slice/diagnostics';
 export { createMentionService } from './mentions';
 export { runnerDocument as createAppSliceRuntimeDocument } from './app-slice/runner';
 export type {

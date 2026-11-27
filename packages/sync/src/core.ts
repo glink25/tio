@@ -80,7 +80,6 @@ export class SyncCore {
         };
         const pass = new SyncCore(store, content, this.endpoint, this.workspaceId, this.types);
         Object.defineProperty(pass, 'stopped', { get: () => this.stopped });
-        pass.lazyAssets = this.store.assetPolicy === 'on-demand';
         pass.onDirty = this.onDirty;
         pass.onProgress = this.onProgress;
         await pass.run();
@@ -216,7 +215,9 @@ export class SyncCore {
       this.onDirty();
     }
   }
-  private lazyAssets = false;
+  private get lazyAssets() {
+    return this.store.assetPolicy === 'on-demand';
+  }
   private async runDirect() {
     const ids = new Set(await this.content.list());
     const entries = await this.store.entries();
@@ -228,7 +229,9 @@ export class SyncCore {
     for (const id of ids) {
       if (this.stopped) return;
       try {
-        snapshots.set(id, await this.content.read(id));
+        const object = await this.content.read(id);
+        if (this.stopped) return;
+        snapshots.set(id, object);
       } catch (error) {
         this.issue(id, error);
       }
@@ -289,6 +292,7 @@ export class SyncCore {
             await this.store.stageAsset(target.id, blob);
             assetRepaired = true;
           }
+          if (this.stopped) return;
           if (blob && !target.deleted && (!this.lazyAssets || !remote))
             await this.content.writeAsset(target, blob.bytes);
           if (this.lazyAssets && !remote && !target.deleted && !blob)
@@ -323,6 +327,7 @@ export class SyncCore {
             this.onDirty();
             continue;
           }
+          if (this.stopped) return;
           await this.content.write(target);
         }
         if (

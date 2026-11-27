@@ -1,7 +1,7 @@
 use tauri::AppHandle;
 
 #[tauri::command]
-pub async fn github_credentials(
+pub async fn git_credentials(
     app: AppHandle,
     action: String,
     value: Option<String>,
@@ -11,7 +11,7 @@ pub async fn github_credentials(
         let service = app.config().identifier.clone();
         tauri::async_runtime::spawn_blocking(move || {
             use keyring::{Entry, Error};
-            let entry = Entry::new(&service, "github").map_err(|_| "unavailable".to_owned())?;
+            let entry = Entry::new(&service, "git").map_err(|_| "unavailable".to_owned())?;
             match action.as_str() {
                 "read" => match entry.get_password() {
                     Ok(v) => Ok(Some(v)),
@@ -53,15 +53,26 @@ pub async fn github_credentials(
 }
 
 #[tauri::command]
-pub fn open_github_login(app: AppHandle, url: String) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    let parsed = tauri::Url::parse(&url).map_err(|_| "invalid")?;
-    if parsed.origin().ascii_serialization() != "https://tio-api.linkai.work"
-        || parsed.path() != "/api/github/login"
+pub fn open_git_login(app: AppHandle, url: String) -> Result<(), String> {
+    #[cfg(any(target_os = "ios", target_os = "macos", target_os = "android"))]
     {
-        return Err("invalid".into());
+        let _ = (app, url);
+        Err("unavailable".into())
     }
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|_| "unavailable".into())
+    #[cfg(any(target_os = "windows", target_os = "linux"))]
+    {
+        use tauri_plugin_opener::OpenerExt;
+        let parsed = tauri::Url::parse(&url).map_err(|_| "invalid")?;
+        if parsed.origin().ascii_serialization() != "https://tio-api.linkai.work"
+            || !matches!(parsed.path(), "/api/github/login" | "/api/gitee/login")
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err("invalid".into());
+        }
+        app.opener()
+            .open_url(url, None::<&str>)
+            .map_err(|_| "unavailable".into())
+    }
 }

@@ -1,6 +1,6 @@
 # Tio
 
-A local-first document and database editor. Use device storage, a local folder, or a GitHub repository. PAT and local modes need no application server; GitHub App sign-in uses an optional authorization Worker.
+A local-first document and database editor. Use device storage, a local folder, or a GitHub or Gitee repository. Local and personal token modes run independently of the optional OAuth Worker.
 
 [简体中文](README.zh-CN.md) · [Project principles](zen.md)
 
@@ -32,7 +32,7 @@ The detailed documentation is maintained in Chinese.
 - [Data contract](protocols/data-format.md) · [Extensions](protocols/extensions.md)
 - [Development](development/contributing.md) · [Testing](development/testing.md)
 - [Embedding](../packages/web-editor/docs/integration.md) · [App Slice](../packages/web-editor/docs/app-slice.md)
-- [File storage](../packages/file-storage/docs/storage.md) · [GitHub](../packages/provider-github/docs/storage.md)
+- [File storage](../packages/file-storage/docs/storage.md) · [GitHub](../packages/provider-github/docs/storage.md) · [Gitee](../packages/provider-gitee/docs/storage.md)
 - [Database fields](../packages/database/docs/fields.md) · [Code blocks](../packages/editor-blocknote/docs/code-blocks.md)
 - [Security](governance/SECURITY.md) · [Third-party notices](governance/THIRD_PARTY_NOTICES.md) · [Changelog](governance/CHANGELOG.md)
 

@@ -1,5 +1,16 @@
 use sha2::{Digest, Sha256};
 fn main() {
+    if matches!(
+        std::env::var("CARGO_CFG_TARGET_OS").as_deref(),
+        Ok("ios" | "macos")
+    ) {
+        println!("cargo:rerun-if-changed=src/apple/git_auth.m");
+        println!("cargo:rustc-link-lib=framework=AuthenticationServices");
+        cc::Build::new()
+            .file("src/apple/git_auth.m")
+            .flags(["-fobjc-arc", "-fblocks"])
+            .compile("tio_git_auth");
+    }
     println!("cargo:rerun-if-env-changed=TIO_RESOURCE_PUBLIC_KEY");
     println!("cargo:rerun-if-changed=resource-public-key");
     let key = std::env::var("TIO_RESOURCE_PUBLIC_KEY")

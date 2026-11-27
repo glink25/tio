@@ -34,7 +34,7 @@
 
 块包含 `id/type/props/content/children`。普通行内文本形如 `{type: 'text', text: '内容', styles: {bold: true}}`。表格使用当前 BlockNote 兼容结构。未知块、行内类型和样式通过只读不透明块原样往返；编辑已知属性不得丢弃未知属性。
 
-提及形如 `{type: 'mention', props: {workspaceId, kind: 'page' | 'database' | 'record', id}}`，为无标题、无子内容的原子节点，可位于段落、嵌套块或表格单元格。提及字段默认保存有序、不重复的引用数组，空值为 `[]`；`multiple: false` 时保存单个引用或 null。记录标题从所属数据库的标题字段解析；记录不可见时不能被搜索或打开。GitHub 人员提及使用 `{workspaceId, kind: 'github-user', id, login}`，其中 `id` 为 GitHub 用户 ID 的十进制字符串，`login` 为用户名快照；身份比较不依赖用户名。已有人员提及可离线显示，点击打开 GitHub 主页，不发送通知。目标删除后保留引用；不提供跨空间引用关系。
+提及形如 `{type: 'mention', props: {workspaceId, kind: 'page' | 'database' | 'record', id}}`，为无标题、无子内容的原子节点，可位于段落、嵌套块或表格单元格。提及字段默认保存有序、不重复的引用数组，空值为 `[]`；`multiple: false` 时保存单个引用或 null。记录标题从所属数据库的标题字段解析；记录不可见时不能被搜索或打开。GitHub 人员提及使用 `{workspaceId, kind: 'github-user', id, login}`，其中 `id` 为 GitHub 用户 ID 的十进制字符串，`login` 为用户名快照；Gitee 对应 `kind: 'gitee-user'`，采用同样的数字 ID 和用户名快照。身份比较使用提供方和数字 ID。已有人员提及可离线显示，点击打开对应平台主页，不发送通知。目标删除后保留引用；不提供跨空间引用关系。
 
 文本为字符串，数值必须有限，选项使用稳定 ID，关系使用记录 ID。日期采用 `{start, end?, timeZone?}`；公式和汇总已提供受限计算能力。字段、查询与派生值见[数据库字段](../../packages/database/docs/fields.md)。移除字段不会批量清空记录中的旧值。
 
@@ -76,7 +76,7 @@ JSON ZIP 是可恢复备份。当前 Web 导入新建空间 ID，重写对象的
 
 内容目标统一为 `{workspaceId, kind: 'page' | 'database' | 'record', id, anchor?}`。
 `anchor` 为 `{type: 'block', blockId}`（页面或记录正文）或 `{type: 'field', fieldId}`（记录属性）。
-内容提及可以携带同样的 anchor；ID 不随标题或位置变化。GitHub 人员提及不接受 anchor。
+内容提及可以携带同样的 anchor；ID 不随标题或位置变化。人员提及不接受 anchor。
 块链接粘贴为原子提及，普通文本、代码及跨空间链接不转换。失效位置保留引用，并在打开所属文档后提示。
 
 反向引用和全空间图均是 provider 派生数据，不写入业务 JSON、备份或同步。

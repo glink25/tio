@@ -90,6 +90,7 @@ export function Modal({
   skipEnter = false,
   onPanelReady,
   covered = false,
+  stack,
   hidden = false,
   className,
 }: {
@@ -99,7 +100,7 @@ export function Modal({
   dismissOnOutside?: boolean;
   hideClose?: boolean;
   restoreFocus?: () => void;
-  layout?: 'default' | 'page' | 'workspace';
+  layout?: 'default' | 'page' | 'workspace' | 'image';
   hideHeader?: boolean;
   trackHistory?: boolean;
   header?: ReactNode;
@@ -114,6 +115,7 @@ export function Modal({
   skipEnter?: boolean;
   onPanelReady?: () => void;
   covered?: boolean;
+  stack?: 'root' | 'child';
   hidden?: boolean;
   className?: string;
 }) {
@@ -133,7 +135,7 @@ export function Modal({
     skipEnter,
     onPanelReady,
     sidebar: sheet,
-    page: mobilePlacement !== 'center' && (wide || layout !== 'default'),
+    page: mobilePlacement !== 'center' && (wide || layout === 'page' || layout === 'workspace'),
   });
   useMobileDialogPosition(panelMotion.element, open && !covered);
   const interaction = useOverlayInteraction(
@@ -155,6 +157,7 @@ export function Modal({
           data-state={open ? 'open' : 'closed'}
           data-managed-motion={panelMotion.managed ? '' : undefined}
           data-covered={covered ? '' : undefined}
+          data-dialog-stack={stack}
           hidden={hidden}
           data-skip-enter={skipEnter && open ? '' : undefined}
         >
@@ -298,7 +301,7 @@ export function Drawer({
             {...interaction}
             ref={attach}
             data-tio-swipe-panel=""
-            data-motion={panelMotion.motion ?? 'vertical'}
+            data-motion="right"
             aria-describedby={undefined}
             className="tio-drawer fixed inset-y-0 right-0 z-50 flex w-full max-w-2xl flex-col overflow-hidden bg-panel shadow-xl"
           >
@@ -482,7 +485,14 @@ export { ChoiceSelect, SelectInput } from './select';
 
 export { usePagedOptions } from './use-paged-options';
 
-export { SettingsGroup, SettingsRow, SettingsAction, SettingsLink } from './settings';
+export {
+  SettingsGroup,
+  SettingsRow,
+  SettingsAction,
+  SettingsLink,
+  SettingsField,
+  SettingsFormActions,
+} from './settings';
 
 export {
   InteractionBoundary,
@@ -495,3 +505,5 @@ export {
   claimInteraction,
   withinInteraction,
 } from './interaction';
+
+export { ImageViewer, type PreviewImage } from './image-viewer';

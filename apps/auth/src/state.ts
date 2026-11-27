@@ -53,16 +53,18 @@ export interface PendingGitHubToken {
 }
 
 export interface OAuthState {
+  provider: 'github' | 'gitee';
   redirect_uri: string;
   client_state: string;
   client_challenge: string;
-  github_verifier: string;
+  github_verifier?: string;
   exp: number;
   /** Present only while diverting the user through App installation. */
   pending_token?: PendingGitHubToken;
 }
 
 export interface AuthorizationGrant {
+  provider: OAuthState['provider'];
   state: string;
   challenge: string;
   token: PendingGitHubToken;
@@ -84,7 +86,7 @@ export async function decryptState(
     !state.redirect_uri ||
     !state.client_state ||
     !state.client_challenge ||
-    !state.github_verifier ||
+    (state.provider === 'github' && !state.github_verifier) ||
     !Number.isFinite(state.exp)
   )
     throw new Error('Invalid OAuth state');

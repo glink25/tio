@@ -70,7 +70,7 @@ export function HostUpdateSettings({ beforeInstall }: { beforeInstall?: () => Pr
   return (
     <SettingsGroup title={t('settings.update')}>
       {info && (
-        <div className="text-xs break-all text-muted">
+        <div className="py-3 text-xs break-all text-muted">
           Tio {info.runtime.productVersion} · {info.channel} · {info.hostVersion} ({info.hostBuild})
           · r{info.runtime.revision}
           <br />
